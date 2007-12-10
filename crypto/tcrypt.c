@@ -78,7 +78,7 @@ static char *check[] = {
 	"twofish", "serpent", "sha384", "sha512", "md4", "aes", "cast6",
 	"arc4", "michael_mic", "deflate", "crc32c", "tea", "xtea",
 	"khazad", "wp512", "wp384", "wp256", "tnepres", "xeta",  "fcrypt",
-	"camellia", "seed", NULL
+	"camellia", "seed", "lzo", NULL
 };
 
 static void hexdump(unsigned char *buf, unsigned int len)
@@ -1063,6 +1063,8 @@ static void do_test(void)
 		test_comp("deflate", deflate_comp_tv_template,
 			  deflate_decomp_tv_template, DEFLATE_COMP_TEST_VECTORS,
 			  DEFLATE_DECOMP_TEST_VECTORS);
+		test_comp("lzo", lzo_comp_tv_template, lzo_decomp_tv_template,
+			  LZO_COMP_TEST_VECTORS, LZO_DECOMP_TEST_VECTORS);
 		test_hash("crc32c", crc32c_tv_template, CRC32C_TEST_VECTORS);
 		test_hash("hmac(md5)", hmac_md5_tv_template,
 			  HMAC_MD5_TEST_VECTORS);
@@ -1297,6 +1299,11 @@ static void do_test(void)
 		test_cipher("cbc(camellia)", DECRYPT,
 			    camellia_cbc_dec_tv_template,
 			    CAMELLIA_CBC_DEC_TEST_VECTORS);
+		break;
+
+	case 33:
+		test_comp("lzo", lzo_comp_tv_template, lzo_decomp_tv_template,
+			  LZO_COMP_TEST_VECTORS, LZO_DECOMP_TEST_VECTORS);
 		break;
 
 	case 100:
