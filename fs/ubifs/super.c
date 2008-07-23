@@ -1595,7 +1595,7 @@ struct super_operations ubifs_super_operations = {
 
 #ifdef UBIFS_COMPAT_SUPPORT_NFS
 /*
- * Note, since UBIFS does re-use inode numbers at the moment, we do not check
+ * Note, since UBIFS doesn't re-use inode numbers at the moment, we do not check
  * the generation number in this function.
  */
 static struct dentry *ubifs_fh_to_dentry(struct super_block *sb,
