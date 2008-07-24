@@ -811,23 +811,28 @@ struct ubifs_compressor {
  * dirty by the re-name operation.
  */
 struct ubifs_budget_req {
+#ifdef UBIFS_COMPAT_USE_OLD_PREPARE_WRITE
+	unsigned int locked_pg:1;
+#endif
 	unsigned int fast:1;
 	unsigned int recalculate:1;
+#ifndef UBIFS_DEBUG
 	unsigned int new_page:1;
 	unsigned int dirtied_page:1;
 	unsigned int new_dent:1;
 	unsigned int mod_dent:1;
 	unsigned int new_ino:1;
-/* TODO: remove compatibility stuff as late as possible */
-#ifdef UBIFS_COMPAT_USE_OLD_PREPARE_WRITE
-	unsigned int locked_pg:1;
-#endif
 	unsigned int new_ino_d:13;
-#ifndef UBIFS_DEBUG
 	unsigned int dirtied_ino:4;
 	unsigned int dirtied_ino_d:15;
 #else
 	/* Not bit-fields to check for overflows */
+	unsigned int new_page;
+	unsigned int dirtied_page;
+	unsigned int new_dent;
+	unsigned int mod_dent;
+	unsigned int new_ino;
+	unsigned int new_ino_d;
 	unsigned int dirtied_ino;
 	unsigned int dirtied_ino_d;
 #endif
