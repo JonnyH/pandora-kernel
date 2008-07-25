@@ -35,7 +35,9 @@
 #include <linux/parser.h>
 #include <linux/seq_file.h>
 #include <linux/mount.h>
+#ifdef UBIFS_COMPAT_SUPPORT_NFS
 #include <linux/exportfs.h>
+#endif
 #include "ubifs.h"
 
 /* Slab cache for UBIFS inodes */
@@ -1591,6 +1593,7 @@ struct super_operations ubifs_super_operations = {
 	.sync_fs       = ubifs_sync_fs,
 };
 
+#ifdef UBIFS_COMPAT_SUPPORT_NFS
 /*
  * Note, since UBIFS does re-use inode numbers at the moment, we do not check
  * the generation number in this function.
@@ -1635,6 +1638,7 @@ static struct dentry *ubifs_fh_to_dentry(struct super_block *sb,
 static struct export_operations ubifs_export_ops = {
 	.fh_to_dentry = ubifs_fh_to_dentry,
 };
+#endif /* UBIFS_COMPAT_SUPPORT_NFS */
 
 /**
  * open_ubi - parse UBI device name string and open the UBI device.
@@ -1771,7 +1775,9 @@ static int ubifs_fill_super(struct super_block *sb, void *data, int silent)
 	if (c->max_inode_sz > MAX_LFS_FILESIZE)
 		sb->s_maxbytes = c->max_inode_sz = MAX_LFS_FILESIZE;
 	sb->s_op = &ubifs_super_operations;
+#ifdef UBIFS_COMPAT_SUPPORT_NFS
 	sb->s_export_op = &ubifs_export_ops;
+#endif
 
 	mutex_lock(&c->umount_mutex);
 	err = mount_ubifs(c);

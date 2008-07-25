@@ -84,5 +84,8 @@ int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma);
 #define UBIFS_COMPAT_NO_SHARED_MMAP
 #endif
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,24))
+#define UBIFS_COMPAT_SUPPORT_NFS
+#endif
 
 #endif /* !__UBIFS_COMPAT_H__ */
