@@ -472,10 +472,3 @@ int ubifs_make_free_space(struct ubifs_info *c, struct retries_info *ri,
 }
 
 #endif /* UBIFS_COMPAT_USE_OLD_PREPARE_WRITE */
-
-#ifdef UBIFS_COMPAT_NO_SHARED_MMAP
-int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma)
-{
-	return generic_file_readonly_mmap(file, vma);
-}
-#endif /* UBIFS_COMPAT_NO_SHARED_MMAP */

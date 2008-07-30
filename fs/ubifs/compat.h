@@ -75,13 +75,6 @@ int ubifs_make_free_space(struct ubifs_info *c, struct retries_info *ri,
 /* print_hex_dump() did not exist in kernel prior to 2.6.22 */
 #define print_hex_dump(a, b, c, f, e, buf, len, g) ubifs_hexdump(buf, len)
 void ubifs_hexdump(const void *ptr, int size);
-/*
- * Older kernel have no '->page_mkwrite()' call-back in
- * 'struct vm_operations_struct', so we just do not support writeble mmaps. The
- * support can be added if someone needs it badly, though.
- */
-int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma);
-#define UBIFS_COMPAT_NO_SHARED_MMAP
 #endif
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,24))

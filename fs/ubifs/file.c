@@ -1132,8 +1132,6 @@ static int ubifs_releasepage(struct page *page, gfp_t unused_gfp_flags)
 	return 1;
 }
 
-#ifndef UBIFS_COMPAT_NO_SHARED_MMAP
-
 /*
  * mmap()d file has taken write protection fault and is being made
  * writable. UBIFS must ensure page is budgeted for.
@@ -1228,8 +1226,9 @@ out_unlock:
 }
 
 static struct vm_operations_struct ubifs_file_vm_ops = {
-#if (LINUX_VERSION_CODE == KERNEL_VERSION(2,6,22))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23))
 	.nopage       = filemap_nopage,
+	.populate     = filemap_populate,
 #else
 	.fault        = filemap_fault,
 #endif
@@ -1247,12 +1246,10 @@ static int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	vma->vm_ops = &ubifs_file_vm_ops;
 	return 0;
 }
-#endif
 
 struct address_space_operations ubifs_file_address_operations = {
 	.readpage       = ubifs_readpage,
 	.writepage      = ubifs_writepage,
-/* TODO: remove compatibility stuff as late as possible */
 #ifdef UBIFS_COMPAT_USE_OLD_PREPARE_WRITE
 	.prepare_write  = ubifs_prepare_write,
 	.commit_write   = ubifs_commit_write,
