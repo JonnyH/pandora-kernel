@@ -48,8 +48,10 @@
  *		to get the PHY state machine in working state
  */
 #define EXTERNAL_PHY_RESET
-#define	EXT_PHY_RESET_GPIO_PORT1	(57)
-#define	EXT_PHY_RESET_GPIO_PORT2	(61)
+//#define	EXT_PHY_RESET_GPIO_PORT1	(57)
+//#define	EXT_PHY_RESET_GPIO_PORT1	(147)
+#define	EXT_PHY_RESET_GPIO_PORT1	(16)
+//#define	EXT_PHY_RESET_GPIO_PORT2	(61)
 #define	EXT_PHY_RESET_DELAY		(10)
 
 /* ISSUE2:
@@ -57,7 +59,7 @@
  * Use the VBUS from Port1 to power VBUS of Port2 externally
  * So use Port2 as the working ULPI port
  */
-#define VBUS_INTERNAL_CHARGEPUMP_HACK
+//#define VBUS_INTERNAL_CHARGEPUMP_HACK
 
 #endif /* CONFIG_OMAP_EHCI_PHY_MODE */
 
@@ -227,10 +229,10 @@ static int omap_start_ehc(struct platform_device *dev, struct usb_hcd *hcd)
 	/* Refer: ISSUE1 */
 	omap_request_gpio(EXT_PHY_RESET_GPIO_PORT1);
 	omap_set_gpio_direction(EXT_PHY_RESET_GPIO_PORT1, 0);
-	omap_request_gpio(EXT_PHY_RESET_GPIO_PORT2);
-	omap_set_gpio_direction(EXT_PHY_RESET_GPIO_PORT2, 0);
+//	omap_request_gpio(EXT_PHY_RESET_GPIO_PORT2);
+//	omap_set_gpio_direction(EXT_PHY_RESET_GPIO_PORT2, 0);
 	omap_set_gpio_dataout(EXT_PHY_RESET_GPIO_PORT1, 0);
-	omap_set_gpio_dataout(EXT_PHY_RESET_GPIO_PORT2, 0);
+//	omap_set_gpio_dataout(EXT_PHY_RESET_GPIO_PORT2, 0);
 	/* Hold the PHY in RESET for enough time till DIR is high */
 	udelay(EXT_PHY_RESET_DELAY);
 #endif
@@ -310,7 +312,7 @@ static int omap_start_ehc(struct platform_device *dev, struct usb_hcd *hcd)
 	 */
 	udelay(EXT_PHY_RESET_DELAY);
 	omap_set_gpio_dataout(EXT_PHY_RESET_GPIO_PORT1, 1);
-	omap_set_gpio_dataout(EXT_PHY_RESET_GPIO_PORT2, 1);
+//	omap_set_gpio_dataout(EXT_PHY_RESET_GPIO_PORT2, 1);
 #endif
 
 #ifdef VBUS_INTERNAL_CHARGEPUMP_HACK
@@ -396,7 +398,7 @@ static void omap_stop_ehc(struct platform_device *dev, struct usb_hcd *hcd)
 
 #ifdef EXTERNAL_PHY_RESET
 	omap_free_gpio(EXT_PHY_RESET_GPIO_PORT1);
-	omap_free_gpio(EXT_PHY_RESET_GPIO_PORT2);
+//	omap_free_gpio(EXT_PHY_RESET_GPIO_PORT2);
 #endif
 
 	dev_dbg(hcd->self.controller,
