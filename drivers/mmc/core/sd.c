@@ -663,6 +663,9 @@ int mmc_attach_sd(struct mmc_host *host, u32 ocr)
 	 * Can we support the voltage(s) of the card(s)?
 	 */
 	if (!host->ocr) {
+		printk(KERN_WARNING "%s: SD card needs voltage range "
+		       "not supported by host (ocr=%08x).\n",
+		       mmc_hostname(host), ocr);
 		err = -EINVAL;
 		goto err;
 	}

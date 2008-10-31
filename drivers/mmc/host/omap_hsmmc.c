@@ -506,6 +506,7 @@ static void mmc_omap_detect(struct work_struct *work)
 
 	sysfs_notify(&host->mmc->class_dev.kobj, NULL, "cover_switch");
 	if (host->carddetect) {
+#if 0 /* this code kills mmc host on Pandora! */
 		if (!(OMAP_HSMMC_READ(host->base, HCTL) & SDVSDET)) {
 			/*
 			 * Set the VDD back to 3V when the card is removed
@@ -515,6 +516,10 @@ static void mmc_omap_detect(struct work_struct *work)
 			if (omap_mmc_switch_opcond(host, vdd) != 0)
 				host->mmc->ios.vdd = vdd;
 		}
+#else
+		vdd = fls(host->mmc->ocr_avail) - 1;
+		host->mmc->ios.vdd = vdd;
+#endif
 		mmc_detect_change(host->mmc, (HZ * 200) / 1000);
 	} else {
 		OMAP_HSMMC_WRITE(host->base, SYSCTL,
@@ -743,6 +748,12 @@ static void omap_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					dev_dbg(mmc_dev(host->mmc),
 						"Switch operation failed\n");
 		}
+	}
+	else if (host->id == OMAP_MMC2_DEVID && ios->vdd == DUAL_VOLT_OCR_BIT &&
+		ios->power_mode != MMC_POWER_OFF &&
+		ios->power_mode != MMC_POWER_ON) {
+			/* see above comment.. */
+			omap_mmc_switch_opcond(host, ios->vdd);
 	}
 
 	if (ios->clock) {
