@@ -20,6 +20,13 @@
 #ifndef __ASM_ARCH_OMAP3_PANDORA_H
 #define __ASM_ARCH_OMAP3_PANDORA_H
 
+#include <linux/device.h>
+#include <linux/i2c/twl4030.h>
+
+extern struct twl4030_keypad_data omap3pandora_kp_data;
+
+void __init omap3pandora_input_init(void);
+
 #define	OMAP3_PANDORA_TS_GPIO		94
 
 #endif /* __ASM_ARCH_OMAP3_PANDORA_H */

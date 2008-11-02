@@ -79,6 +79,7 @@ obj-$(CONFIG_MACH_OVERO)		+= board-overo.o \
 					   usb-musb.o \
 					   usb-ehci.o
 obj-$(CONFIG_MACH_OMAP3_PANDORA)	+= board-omap3pandora.o \
+					   board-omap3pandora-input.o \
 					   hsmmc.o \
 					   usb-musb.o \
 					   usb-ehci.o

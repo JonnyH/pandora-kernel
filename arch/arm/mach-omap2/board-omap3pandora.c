@@ -24,6 +24,8 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/input.h>
+#include <linux/gpio_keys.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
@@ -159,6 +161,7 @@ static struct twl4030_platform_data omap3pandora_twldata = {
 	.irq_end	= TWL4030_IRQ_END,
 	.gpio		= &omap3pandora_gpio_data,
 	.usb		= &omap3pandora_usb_data,
+	.keypad		= &omap3pandora_kp_data,
 };
 
 static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
@@ -256,6 +259,7 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 static void __init omap3pandora_init(void)
 {
 	omap3pandora_i2c_init();
+	omap3pandora_input_init();
 	platform_add_devices(omap3pandora_devices, ARRAY_SIZE(omap3pandora_devices));
 	omap_board_config = omap3pandora_config;
 	omap_board_config_size = ARRAY_SIZE(omap3pandora_config);
