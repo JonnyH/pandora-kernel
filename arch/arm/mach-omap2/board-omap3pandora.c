@@ -24,12 +24,11 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
-#include <linux/input.h>
-#include <linux/gpio_keys.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 #include <linux/i2c/twl4030.h>
+#include <linux/i2c/vsense.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
@@ -173,12 +172,35 @@ static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
 	},
 };
 
+static struct vsense_platform_data omap3pandora_nub1_data = {
+	.gpio_irq	= 161,
+	.gpio_reset	= 156,
+};
+
+static struct vsense_platform_data omap3pandora_nub2_data = {
+	.gpio_irq	= 126,
+	.gpio_reset	= 156,
+};
+
+static struct i2c_board_info __initdata omap3pandora_i2c_vsense[] = {
+	{
+		I2C_BOARD_INFO("vsense", 0x66),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub1_data,
+	}, {
+		I2C_BOARD_INFO("vsense", 0x67),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub2_data,
+	},
+};
+
 static int __init omap3pandora_i2c_init(void)
 {
 	omap_register_i2c_bus(1, 2600, omap3pandora_i2c_boardinfo,
 			ARRAY_SIZE(omap3pandora_i2c_boardinfo));
 	/* i2c2 pins are not connected */
-	omap_register_i2c_bus(3, 400, NULL, 0);
+	omap_register_i2c_bus(3, 400, omap3pandora_i2c_vsense,
+			ARRAY_SIZE(omap3pandora_i2c_vsense));
 	return 0;
 }
 
