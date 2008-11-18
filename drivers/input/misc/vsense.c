@@ -16,7 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/timer.h>
 #include <linux/i2c/vsense.h>
-#include <asm/gpio.h>
+#include <linux/gpio.h>
 
 /* hack for Pandora: keep track of usage to prevent reset
  * while other nub is in use
@@ -29,6 +29,7 @@ struct vsense_drvdata {
 	struct delayed_work work;
 	int reset_gpio;
 	int irq_gpio;
+	char dev_name[12];
 };
 
 static void vsense_work(struct work_struct *work)
@@ -39,13 +40,8 @@ static void vsense_work(struct work_struct *work)
 
 	ddata = container_of(work, struct vsense_drvdata, work.work);
 
-//	dev_dbg(&ddata->client->dev, "!!! work, gpio val %i\n",
-//		gpio_get_value(ddata->irq_gpio));
-
 	if (unlikely(gpio_get_value(ddata->irq_gpio)))
-	{
 		goto dosync;
-	}
 
 	ret = i2c_master_recv(ddata->client, buff, 8);
 	if (unlikely(ret != 8)) {
@@ -67,8 +63,6 @@ dosync:
 static irqreturn_t vsense_isr(int irq, void *dev_id)
 {
 	struct vsense_drvdata *ddata = dev_id;
-
-//	dev_dbg(dev, "!!! irq %i\n", irq);
 
 	schedule_delayed_work(&ddata->work, 0);
 
@@ -107,7 +101,7 @@ static int vsense_open(struct input_dev *dev)
 
 	if (reference_count++ == 0)
 		vsense_reset(dev, 0);
-	
+
 	return 0;
 }
 
@@ -128,7 +122,7 @@ static int vsense_probe(struct i2c_client *client,
 	struct input_dev *input;
 	int ret;
 
-	if (!pdata) {
+	if (pdata == NULL) {
 		dev_err(&client->dev, "no platform data?\n");
 		return -EINVAL;
 	}
@@ -143,22 +137,23 @@ static int vsense_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	ddata = kzalloc(sizeof(struct vsense_drvdata), GFP_KERNEL);
-	if (ddata == NULL)
-	{
+	if (ddata == NULL) {
 		ret = -ENOMEM;
 		goto fail1;
 	}
+
+	snprintf(ddata->dev_name, sizeof(ddata->dev_name),
+		"vsense%02x", client->addr);
 
 	input->evbit[0] = BIT_MASK(EV_ABS);
 	input_set_abs_params(input, ABS_X, -256, 256, 0, 0);
 	input_set_abs_params(input, ABS_Y, -256, 256, 0, 0);
 
-	input->name = client->name;
+	input->name = ddata->dev_name;
 	input->dev.parent = &client->dev;
 
 	input->id.bustype = BUS_I2C;
-	input->id.product = client->addr;
-	input->id.version = 0x0090;
+	input->id.version = 0x0091;
 
 	input->open = vsense_open;
 	input->close = vsense_close;
@@ -195,7 +190,7 @@ static int vsense_probe(struct i2c_client *client,
 	}
 
 	INIT_DELAYED_WORK(&ddata->work, vsense_work);
-	
+
 	ret = input_register_device(input);
 	if (ret) {
 		dev_err(&client->dev, "failed to register input device, "
