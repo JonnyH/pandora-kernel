@@ -274,8 +274,29 @@ static struct omap_board_config_kernel omap3pandora_config[] __initdata = {
 	{ OMAP_TAG_LCD,		&omap3pandora_lcd_config },
 };
 
+#include <mach/board-nokia.h>
+
+static struct omap_bluetooth_config bt_config = {
+	.chip_type		= BT_CHIP_TI,
+	.bt_wakeup_gpio		= -EINVAL,
+	.host_wakeup_gpio	= -EINVAL,
+	.reset_gpio		= 15,
+	.bt_uart		= 1,
+//	.bd_addr[6],
+//	.bt_sysclk,	/* unused? */
+};
+
+static struct platform_device bt_device = {
+	.name           = "hci_h4p",
+	.id             = -1,
+	.dev		= {
+		.platform_data	= &bt_config,
+	},
+};
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_lcd_device,
+	&bt_device,
 };
 
 static void __init omap3pandora_init(void)

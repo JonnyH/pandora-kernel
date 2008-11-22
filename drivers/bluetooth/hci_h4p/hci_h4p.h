@@ -22,6 +22,7 @@
  */
 
 #include <mach/board.h>
+#include <mach/board-nokia.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -57,20 +58,10 @@
 
 #if 0
 #define NBT_DBG_TRANSFER(fmt, arg...)  printk("%s: " fmt "" , __FUNCTION__ , ## arg)
-#else
-#define NBT_DBG_TRANSFER(...)
-#endif
-
-#if 0
 #define NBT_DBG_TRANSFER_NF(fmt, arg...)  printk(fmt "" , ## arg)
 #else
+#define NBT_DBG_TRANSFER(...)
 #define NBT_DBG_TRANSFER_NF(...)
-#endif
-
-#if 0
-#define NBT_DBG_DMA(fmt, arg...)  printk("%s: " fmt "" , __FUNCTION__ , ## arg)
-#else
-#define NBT_DBG_DMA(...)
 #endif
 
 struct hci_h4p_info {
@@ -95,6 +86,9 @@ struct hci_h4p_info {
 	struct completion fw_completion;
 	int fw_error;
 	int init_error;
+
+	int rx_timed_out;
+	int rx_calls;
 
 	struct sk_buff_head txq;
 	struct tasklet_struct tx_task;
