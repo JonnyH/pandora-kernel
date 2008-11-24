@@ -51,6 +51,7 @@ void hci_h4p_brf6150_parse_fw_event(struct hci_h4p_info *info,
 		goto ret;
 	}
 
+	NBT_DBG("fw_event, opcode %04x\n", ev->cmd.opcode);
 ret:
 	if (unlikely(ev != NULL && ev->cmd.opcode == 0xff36)) {
 		/* speed change command */

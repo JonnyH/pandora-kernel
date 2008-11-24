@@ -49,6 +49,7 @@
 #include "hci_h4p.h"
 
 #define PM_TIMEOUT 200
+#define BAUD_RATE  3686400
 
 /* This should be used in function that cannot release clocks */
 static void hci_h4p_set_clk(struct hci_h4p_info *info, int *clock, int enable)
@@ -207,30 +208,37 @@ static int hci_h4p_send_speed(struct hci_h4p_info *info, int speed)
 {
 	struct speed_change_cmd_t cmd;
 	struct sk_buff *skb;
+	int i;
 
 	NBT_DBG("Sending speed change command..\n");
 
-	skb = bt_skb_alloc(sizeof(cmd), GFP_KERNEL);
-	if (skb == NULL)
-		return -ENOMEM;
+	info->init_error = 0;
+	init_completion(&info->init_completion);
 
 	cmd.uart_prefix = HCI_COMMAND_PKT;
 	cmd.hci_hdr.opcode = 0xff36;
 	cmd.hci_hdr.plen = sizeof(cmd.speed);
 	cmd.speed = speed;
-	memcpy(skb_put(skb, sizeof(cmd)), &cmd, sizeof(cmd));
 
-	info->init_error = 0;
-	init_completion(&info->init_completion);
-	skb_queue_tail(&info->txq, skb);
-	tasklet_schedule(&info->tx_task);
+	for (i = 0; i < 3; i++) {
+		skb = bt_skb_alloc(sizeof(cmd), GFP_KERNEL);
+		if (skb == NULL)
+			return -ENOMEM;
 
-	if (!wait_for_completion_interruptible_timeout(&info->init_completion,
-				msecs_to_jiffies(1000))) 
-		return -ETIMEDOUT;
+		memcpy(skb_put(skb, sizeof(cmd)), &cmd, sizeof(cmd));
 
-	NBT_DBG("Speed change command sent\n");
-	return info->init_error;
+		skb_queue_tail(&info->txq, skb);
+		tasklet_schedule(&info->tx_task);
+
+		if (wait_for_completion_interruptible_timeout(
+			    &info->init_completion, msecs_to_jiffies(100))) {
+			NBT_DBG("Got speed change response after "
+				"%d try(-ies)\n", i+1);
+			return info->init_error;
+		}
+	}
+
+	return -ETIMEDOUT;
 }
 
 /* H4 packet handling functions */
@@ -300,7 +308,6 @@ static inline void hci_h4p_recv_frame(struct hci_h4p_info *info,
 {
 
 	if (unlikely(!test_bit(HCI_RUNNING, &info->hdev->flags))) {
-		NBT_DBG("fw_event\n");
 		hci_h4p_parse_fw_event(info, skb);
 	} else {
 		hci_recv_frame(skb);
@@ -559,24 +566,28 @@ static int hci_h4p_reset(struct hci_h4p_info *info)
 {
 	int err;
 
+	gpio_set_value(info->reset_gpio, 0);
+
+	/* reset needs at least 10ms */
+	msleep(20);
+
 	hci_h4p_init_uart(info);
+	hci_h4p_change_speed(info, 115200);
+	hci_h4p_set_auto_ctsrts(info, 0, UART_EFR_CTS | UART_EFR_RTS);
 	hci_h4p_set_rts(info, 0);
 
-	gpio_set_value(info->reset_gpio, 0);
-	msleep(100);
 #if 0
 	gpio_set_value(info->bt_wakeup_gpio, 1);
 #endif
 	gpio_set_value(info->reset_gpio, 1);
-	msleep(100);
+	msleep(80);
 
-	err = hci_h4p_wait_for_cts(info, 1, 10);
+	err = hci_h4p_wait_for_cts(info, 1, 100);
 	if (err < 0) {
 		dev_err(info->dev, "No cts from bt chip\n");
 		return err;
 	}
-
-	hci_h4p_set_rts(info, 1);
+	msleep(20);	/* just in case response was too early */
 
 	return 0;
 }
@@ -626,24 +637,26 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 	if (err < 0)
 		goto err_clean;
 
-	hci_h4p_change_speed(info, 115200);
+	hci_h4p_set_auto_ctsrts(info, 1, UART_EFR_CTS | UART_EFR_RTS);
 
-	err = hci_h4p_send_speed(info, 921600);
+	err = hci_h4p_send_speed(info, BAUD_RATE);
 	if (err < 0) {
-		dev_err(info->dev, "Failed to set chip baud rate to 921600\n");
+		dev_err(info->dev, "Failed to set chip baud rate "
+			"to %d\n", BAUD_RATE);
 		goto err_clean;
 	}
 
 	/* Change to operational settings */
+	hci_h4p_set_auto_ctsrts(info, 0, UART_EFR_CTS | UART_EFR_RTS);
 	hci_h4p_set_rts(info, 0);
-	hci_h4p_change_speed(info, 921600);
-	hci_h4p_set_rts(info, 1);
+	hci_h4p_change_speed(info, BAUD_RATE);
 
 	err = hci_h4p_wait_for_cts(info, 1, 100);
 	if (err < 0) {
 		dev_err(info->dev, "No CTS after speed change.\n");
 		goto err_clean;
 	}
+	msleep(10);	/* just to be sure both sides changed rate */
 
 	hci_h4p_set_auto_ctsrts(info, 1, UART_EFR_CTS | UART_EFR_RTS);
 
@@ -661,7 +674,7 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 	info->rx_pm_enabled = 0;
 	set_bit(HCI_RUNNING, &hdev->flags);
 
-	NBT_DBG("hci up and running\n");
+	dev_info(info->dev, "BT hci up and running.\n");
 	return 0;
 
 err_clean:
@@ -709,6 +722,7 @@ static int hci_h4p_hci_close(struct hci_dev *hdev)
 	gpio_set_value(info->bt_wakeup_gpio, 0);
 #endif
 	kfree_skb(info->rx_skb);
+	dev_info(info->dev, "BT hci down.\n");
 
 	return 0;
 }
