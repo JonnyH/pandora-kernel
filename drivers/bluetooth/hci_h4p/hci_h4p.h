@@ -24,6 +24,8 @@
 #include <mach/board.h>
 #include <mach/board-nokia.h>
 
+#include <linux/leds.h>
+
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 #include <net/bluetooth/hci.h>
@@ -110,6 +112,12 @@ struct hci_h4p_info {
 	spinlock_t clocks_lock;
 	struct clk *uart_iclk;
 	struct clk *uart_fclk;
+#ifdef CONFIG_LEDS_TRIGGERS
+	struct led_trigger	*led;		/* activity led */
+	struct timer_list led_timer;
+	unsigned long led_next_change;
+	int led_state;
+#endif
 };
 
 #define MAX_BAUD_RATE		921600

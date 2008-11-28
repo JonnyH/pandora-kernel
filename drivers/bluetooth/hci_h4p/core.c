@@ -169,6 +169,26 @@ static void hci_h4p_rx_pm_timer(unsigned long data)
 	spin_unlock_irqrestore(&info->lock, flags);
 }
 
+#ifdef CONFIG_LEDS_TRIGGERS
+static void hci_h4p_led_blink(unsigned long data)
+{
+	struct hci_h4p_info *info = (struct hci_h4p_info *)data;
+
+	if (!time_after(jiffies, info->led_next_change))
+		return;
+
+	info->led_next_change = jiffies + msecs_to_jiffies(250);
+	info->led_state = !info->led_state;
+
+	led_trigger_event(info->led, info->led_state ? LED_FULL : LED_OFF);
+	
+	if (!info->led_state)
+		mod_timer(&info->led_timer, jiffies + msecs_to_jiffies(300));
+}
+#else
+#define hci_h4p_led_blink(x) do {} while(0)
+#endif
+
 /* Negotiation functions */
 int hci_h4p_send_alive_packet(struct hci_h4p_info *info)
 {
@@ -344,6 +364,7 @@ static void hci_h4p_rx_tasklet(unsigned long data)
 
 	while (hci_h4p_inb(info, UART_LSR) & UART_LSR_DR) {
 		if (info->rx_skb == NULL) {
+			hci_h4p_led_blink((unsigned long)info);
 			info->rx_skb = bt_skb_alloc(HCI_MAX_FRAME_SIZE,
 				GFP_ATOMIC | GFP_DMA);
 			if (!info->rx_skb) {
@@ -442,6 +463,7 @@ static void hci_h4p_tx_tasklet(unsigned long data)
 		/* No data in buffer */
 		NBT_DBG_TRANSFER("skb ready\n");
 		hci_h4p_disable_tx(info);
+		hci_h4p_led_blink((unsigned long)info);
 		return;
 	}
 
@@ -673,8 +695,9 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 	info->tx_pm_enabled = 1;
 	info->rx_pm_enabled = 0;
 	set_bit(HCI_RUNNING, &hdev->flags);
-
+	led_trigger_event(info->led, LED_FULL);
 	dev_info(info->dev, "BT hci up and running.\n");
+
 	return 0;
 
 err_clean:
@@ -722,6 +745,10 @@ static int hci_h4p_hci_close(struct hci_dev *hdev)
 	gpio_set_value(info->bt_wakeup_gpio, 0);
 #endif
 	kfree_skb(info->rx_skb);
+#ifdef CONFIG_LEDS_TRIGGERS
+	del_timer_sync(&info->led_timer);
+	led_trigger_event(info->led, LED_OFF);
+#endif
 	dev_info(info->dev, "BT hci down.\n");
 
 	return 0;
@@ -979,6 +1006,15 @@ static int hci_h4p_probe(struct platform_device *pdev)
 		goto cleanup_irq;
 	hci_h4p_set_clk(info, &info->tx_clocks_en, 0);
 
+#ifdef CONFIG_LEDS_TRIGGERS
+	init_timer(&info->led_timer);
+	info->led_timer.function = hci_h4p_led_blink;
+	info->led_timer.data = (unsigned long)info;
+	info->led_state = 1;
+	info->led_next_change = jiffies;
+	led_trigger_register_simple("bluetooth", &info->led);
+#endif
+
 	platform_set_drvdata(pdev, info);
 	err = hci_h4p_sysfs_create_files(info->dev);
 	if (err < 0)
@@ -1027,6 +1063,7 @@ static int hci_h4p_remove(struct platform_device *dev)
 	omap_free_gpio(info->host_wakeup_gpio);
 #endif
 	free_irq(info->irq, (void *) info);
+	led_trigger_unregister_simple(info->led);
 	kfree(info);
 
 	return 0;
