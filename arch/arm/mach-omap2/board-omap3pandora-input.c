@@ -160,6 +160,17 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.gpio			= 99,
 		.active_low		= 1,
 		.desc			= "menu",
+	}, {
+		.code			= KEY_COFFEE,
+		.gpio			= 176,
+		.active_low		= 1,
+		.desc			= "hold",
+	}, {
+		.type			= EV_SW,
+		.code			= SW_LID,
+		.gpio			= 108,
+		.active_low		= 1,
+		.desc			= "lid switch",
 	},
 };
 
