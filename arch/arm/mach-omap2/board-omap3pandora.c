@@ -190,6 +190,11 @@ static struct platform_device omap3pandora_leds_gpio = {
 	},
 };
 
+static struct platform_device omap3pandora_bl_gpio = {
+	.name	= "gpio-backlight",
+	.id	= -1,
+};
+
 static int omap3pandora_twl_gpio_setup(struct device *dev,
 		unsigned gpio, unsigned ngpio)
 {
@@ -200,6 +205,7 @@ static int omap3pandora_twl_gpio_setup(struct device *dev,
 	omap3pandora_gpio_leds[1].gpio = gpio + TWL4030_GPIO_MAX + 1;
 
 	/* gpio + {6,7} is PWM{0,1}, LCD_BACKLIGHT and CHARGER_LED */
+	omap3pandora_bl_gpio.dev.platform_data = (void *) (gpio + 6);
 	omap3pandora_gpio_leds[2].gpio = gpio + 7;
 
 	return 0;
@@ -360,6 +366,7 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_lcd_device,
 	&omap3pandora_leds_gpio,
 	&bt_device,
+	&omap3pandora_bl_gpio,
 };
 
 static void __init omap3pandora_init(void)
