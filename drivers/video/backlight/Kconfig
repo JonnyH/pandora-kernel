@@ -156,6 +156,12 @@ config BACKLIGHT_PWM
 	  If you have a LCD backlight adjustable by PWM, say Y to enable
 	  this driver.
 
+config BACKLIGHT_GPIO
+	tristate "GPIO based Backlight Driver"
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  If you have a GPIO controlled backlight, say Y to enable this driver.
+
 config BACKLIGHT_MBP_NVIDIA
        tristate "MacBook Pro Nvidia Backlight Driver"
        depends on BACKLIGHT_CLASS_DEVICE && X86
