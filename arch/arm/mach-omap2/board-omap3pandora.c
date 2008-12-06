@@ -29,6 +29,7 @@
 #include <linux/spi/ads7846.h>
 #include <linux/i2c/twl4030.h>
 #include <linux/i2c/vsense.h>
+#include <linux/leds.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
@@ -145,10 +146,71 @@ static struct omap_uart_config omap3pandora_uart_config __initdata = {
 	.enabled_uarts	= (1 << 2), /* UART3 */
 };
 
+static struct gpio_led omap3pandora_gpio_leds[] = {
+	{
+		.name			= "pandora::keypad_bl",
+		.gpio			= -EINVAL,	/* gets replaced */
+		.active_low		= true,
+	}, {
+		.name			= "pandora::power",
+		.default_trigger	= "default-on",
+		.gpio			= -EINVAL,
+		.active_low		= true,
+	}, {
+		.name			= "pandora::charger",
+		.gpio			= -EINVAL,
+	}, {
+		.name			= "pandora::sd1",
+		.default_trigger	= "mmc0",
+		.gpio			= 128,
+	}, {
+		.name			= "pandora::sd2",
+		.default_trigger	= "mmc1",
+		.gpio			= 129,
+	}, {
+		.name			= "pandora::bluetooth",
+		.default_trigger	= "bluetooth",
+		.gpio			= 158,
+	}, {
+		.name			= "pandora::wifi",
+		.gpio			= 159,
+	},
+};
+
+static struct gpio_led_platform_data omap3pandora_gpio_led_data = {
+	.leds		= omap3pandora_gpio_leds,
+	.num_leds	= ARRAY_SIZE(omap3pandora_gpio_leds),
+};
+
+static struct platform_device omap3pandora_leds_gpio = {
+	.name	= "leds-gpio",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &omap3pandora_gpio_led_data,
+	},
+};
+
+static int omap3pandora_twl_gpio_setup(struct device *dev,
+		unsigned gpio, unsigned ngpio)
+{
+	/* TWL4030_GPIO_MAX + 0 == ledA, KEYPAD_BACKLIGHT (out, active low) */
+	omap3pandora_gpio_leds[0].gpio = gpio + TWL4030_GPIO_MAX + 0;
+
+	/* TWL4030_GPIO_MAX + 1 == ledB, POWER_LED (out, active low) */
+	omap3pandora_gpio_leds[1].gpio = gpio + TWL4030_GPIO_MAX + 1;
+
+	/* gpio + {6,7} is PWM{0,1}, LCD_BACKLIGHT and CHARGER_LED */
+	omap3pandora_gpio_leds[2].gpio = gpio + 7;
+
+	return 0;
+}
+
 static struct twl4030_gpio_platform_data omap3pandora_gpio_data = {
 	.gpio_base	= OMAP_MAX_GPIO_LINES,
 	.irq_base	= TWL4030_GPIO_IRQ_BASE,
 	.irq_end	= TWL4030_GPIO_IRQ_END,
+	.use_leds	= true,
+	.setup		= omap3pandora_twl_gpio_setup,
 };
 
 static struct twl4030_usb_data omap3pandora_usb_data = {
@@ -296,6 +358,7 @@ static struct platform_device bt_device = {
 
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_lcd_device,
+	&omap3pandora_leds_gpio,
 	&bt_device,
 };
 
