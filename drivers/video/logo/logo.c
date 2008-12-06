@@ -34,6 +34,7 @@ extern const struct linux_logo logo_sun_clut224;
 extern const struct linux_logo logo_superh_mono;
 extern const struct linux_logo logo_superh_vga16;
 extern const struct linux_logo logo_superh_clut224;
+extern const struct linux_logo logo_pandora_clut224;
 extern const struct linux_logo logo_m32r_clut224;
 
 static int nologo;
@@ -110,6 +111,10 @@ const struct linux_logo * __init_refok fb_find_logo(int depth)
 #ifdef CONFIG_LOGO_SUPERH_CLUT224
 		/* SuperH Linux logo */
 		logo = &logo_superh_clut224;
+#endif
+#ifdef CONFIG_LOGO_PANDORA_CLUT224
+		/* M32R Linux logo */
+		logo = &logo_pandora_clut224;
 #endif
 #ifdef CONFIG_LOGO_M32R_CLUT224
 		/* M32R Linux logo */
