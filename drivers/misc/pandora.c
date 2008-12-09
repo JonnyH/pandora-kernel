@@ -152,6 +152,7 @@ static void pnd_vsync_callback(void *data)
 static int pnd_hook_vsync(void)
 {
 	unsigned __iomem *base;
+	struct clk *dss_ick, *dss_fck;
 	u32 val;
 	int ret;
 
@@ -163,18 +164,43 @@ static int pnd_hook_vsync(void)
 
 	base = ioremap(0x48050400, 0x400);
 	if (!base) {
-		omap_dispc_free_irq(2, pnd_vsync_callback, NULL);
 		printk(KERN_ERR "can't ioremap DISPC\n");
-		return -1;
+		goto fail0;
 	}
+
+	dss_ick = clk_get(NULL, "dss_ick");
+	if (IS_ERR(dss_ick)) {
+		printk(KERN_ERR "can't get dss_ick\n");
+		goto fail1;
+	}
+
+	dss_fck = clk_get(NULL, "dss1_alwon_fck");
+	if (IS_ERR(dss_fck)) {
+		printk(KERN_ERR "can't get dss_fck\n");
+		goto fail2;
+	}
+	clk_enable(dss_ick);
+	clk_enable(dss_fck);
 
 	val = __raw_readl(base + 0x1c);
 	//printk("val: %08x\n", val);
 	val |= 2;
 	__raw_writel(val, base + 0x1c);
 
+	clk_disable(dss_fck);
+	clk_disable(dss_ick);
+	clk_put(dss_fck);
+	clk_put(dss_ick);
 	iounmap(base);
 	return 0;
+
+fail2:
+	clk_put(dss_ick);
+fail1:
+	iounmap(base);
+fail0:
+	omap_dispc_free_irq(2, pnd_vsync_callback, NULL);
+	return -1;
 }
 
 static void pnd_unhook_vsync(void)
