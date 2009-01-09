@@ -101,7 +101,7 @@ struct lcd_panel omap3pandora_panel = {
 
 	.hsw		= 1,		/* hsync_len */
 	.hfp		= 40,		/* right_margin */
-	.hbp		= 215,		/* left_margin */
+	.hbp		= 214,		/* left_margin */
 	.vsw		= 1,		/* vsync_len */
 	.vfp		= 10,		/* lower_margin */
 	.vbp		= 34,		/* upper_margin */
