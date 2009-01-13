@@ -373,12 +373,33 @@ static struct omap_mmc_platform_data mmc2_data = {
 
 /* ************************************************************************* */
 
+static int hsmmc3_set_power(struct device *dev, int slot, int power_on,
+		int vdd)
+{
+	/* nothing to do for MMC3 */
+	return 0;
+}
+
+static struct omap_mmc_platform_data mmc3_data = {
+	.nr_slots                       = 1,
+	.dma_mask                       = 0xffffffff,
+	.slots[0] = {
+		.wire4                  = 1,
+		.set_power              = hsmmc3_set_power,
+		.ocr_mask               = MMC_VDD_165_195 | MMC_VDD_20_21,
+		.name                   = "third slot",
+	},
+};
+
+/* ************************************************************************* */
+
 static struct omap_mmc_platform_data *hsmmc_data[OMAP34XX_NR_MMC];
 
 void __init hsmmc_init(void)
 {
 	hsmmc_data[0] = &mmc1_data;
 	hsmmc_data[1] = &mmc2_data;
+	hsmmc_data[2] = &mmc3_data;
 	omap2_init_mmc(hsmmc_data, OMAP34XX_NR_MMC);
 }
 
