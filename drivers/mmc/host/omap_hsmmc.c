@@ -151,6 +151,27 @@ struct mmc_omap_host {
 	struct	omap_mmc_platform_data	*pdata;
 };
 
+
+/*
+ * A hack to have fake detect events on MMC3
+ * (needed for board embedded chip init)
+ */
+static struct mmc_omap_host *mmc3_host;
+
+void omap_mmc_fake_detect_mmc3(int is_in)
+{
+	if (mmc3_host) {
+		printk(KERN_INFO "Sending %s event for MMC3...\n",
+			is_in ? "insert" : "remove");
+		mmc3_host->carddetect = !is_in;
+		schedule_work(&mmc3_host->mmc_carddetect_work);
+	} else
+		printk(KERN_ERR "Can't scan MMC3, host not registered "
+				"with driver.\n");
+}
+
+EXPORT_SYMBOL(omap_mmc_fake_detect_mmc3);
+
 /*
  * Stop clock to the card
  */
@@ -1022,6 +1043,9 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 			goto err_cover_switch;
 	}
 
+	if (host->id == OMAP_MMC2_DEVID + 1)
+		mmc3_host = host;
+
 	return 0;
 
 err_cover_switch:
@@ -1090,6 +1114,9 @@ static int omap_mmc_remove(struct platform_device *pdev)
 			clk_disable(host->dbclk);
 			clk_put(host->dbclk);
 		}
+
+		if (host->id == OMAP_MMC2_DEVID + 1)
+			mmc3_host = NULL;
 
 		mmc_free_host(host->mmc);
 		iounmap(host->base);
