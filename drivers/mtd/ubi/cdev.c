@@ -41,8 +41,8 @@
 #include <linux/capability.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
+#include <linux/math64.h>
 #include <mtd/ubi-user.h>
-#include <asm/div64.h>
 #include "ubi.h"
 
 /**
@@ -200,7 +200,6 @@ static ssize_t vol_cdev_read(struct file *file, __user char *buf, size_t count,
 	int err, lnum, off, len,  tbuf_size;
 	size_t count_save = count;
 	void *tbuf;
-	uint64_t tmp;
 
 	dbg_gen("read %zd bytes from offset %lld of volume %d",
 		count, *offp, vol->vol_id);
@@ -230,10 +229,7 @@ static ssize_t vol_cdev_read(struct file *file, __user char *buf, size_t count,
 		return -ENOMEM;
 
 	len = count > tbuf_size ? tbuf_size : count;
-
-	tmp = *offp;
-	off = do_div(tmp, vol->usable_leb_size);
-	lnum = tmp;
+	lnum = div_u64_rem(*offp, vol->usable_leb_size, &off);
 
 	do {
 		cond_resched();
@@ -284,7 +280,6 @@ static ssize_t vol_cdev_direct_write(struct file *file, const char __user *buf,
 	int lnum, off, len, tbuf_size, err = 0;
 	size_t count_save = count;
 	char *tbuf;
-	uint64_t tmp;
 
 	dbg_gen("requested: write %zd bytes to offset %lld of volume %u",
 		count, *offp, vol->vol_id);
@@ -292,10 +287,7 @@ static ssize_t vol_cdev_direct_write(struct file *file, const char __user *buf,
 	if (vol->vol_type == UBI_STATIC_VOLUME)
 		return -EROFS;
 
-	tmp = *offp;
-	off = do_div(tmp, vol->usable_leb_size);
-	lnum = tmp;
-
+	lnum = div_u64_rem(*offp, vol->usable_leb_size, &off);
 	if (off & (ubi->min_io_size - 1)) {
 		dbg_err("unaligned position");
 		return -EINVAL;
@@ -887,7 +879,6 @@ static long ubi_cdev_ioctl(struct file *file, unsigned int cmd,
 	case UBI_IOCRSVOL:
 	{
 		int pebs;
-		uint64_t tmp;
 		struct ubi_rsvol_req req;
 
 		dbg_gen("re-size volume");
@@ -907,9 +898,8 @@ static long ubi_cdev_ioctl(struct file *file, unsigned int cmd,
 			break;
 		}
 
-		tmp = req.bytes;
-		pebs = !!do_div(tmp, desc->vol->usable_leb_size);
-		pebs += tmp;
+		pebs = div_u64(req.bytes + desc->vol->usable_leb_size - 1,
+			       desc->vol->usable_leb_size);
 
 		mutex_lock(&ubi->volumes_mutex);
 		err = ubi_resize_volume(desc, pebs);
