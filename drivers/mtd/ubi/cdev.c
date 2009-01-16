@@ -490,7 +490,6 @@ static int vol_cdev_ioctl(struct inode *inode, struct file *file,
 		break;
 	}
 
-#ifdef CONFIG_MTD_UBI_DEBUG_USERSPACE_IO
 	/* Logical eraseblock erasure command */
 	case UBI_IOCEBER:
 	{
@@ -563,7 +562,6 @@ static int vol_cdev_ioctl(struct inode *inode, struct file *file,
 		err = ubi_is_mapped(desc, lnum);
 		break;
 	}
-#endif
 
 	default:
 		err = -ENOTTY;
