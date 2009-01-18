@@ -84,6 +84,9 @@
 #define CMD_CRC			(1 << 17)
 #define DATA_CRC		(1 << 21)
 #define CARD_ERR		(1 << 28)
+#define STAT_DEB		(1 << 22)
+#define STAT_CIE		(1 << 19)
+#define STAT_CEB		(1 << 18)
 #define STAT_CLEAR		0xFFFFFFFF
 #define INIT_STREAM_CMD		0x00000000
 #define DUAL_VOLT_OCR_BIT	7
@@ -447,36 +450,39 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 #ifdef CONFIG_MMC_DEBUG
 		mmc_omap_report_irq(host, status);
 #endif
-		if ((status & CMD_TIMEOUT) ||
-			(status & CMD_CRC)) {
+		if (status & CMD_TIMEOUT) {
+			OMAP_HSMMC_WRITE(host->base, SYSCTL,
+				OMAP_HSMMC_READ(host->base, SYSCTL) | SRC);
+			while (OMAP_HSMMC_READ(host->base, SYSCTL) & SRC)
+				;
 			if (host->cmd) {
-				if (status & CMD_TIMEOUT) {
-					OMAP_HSMMC_WRITE(host->base, SYSCTL,
-						OMAP_HSMMC_READ(host->base,
-								SYSCTL) | SRC);
-					while (OMAP_HSMMC_READ(host->base,
-								SYSCTL) & SRC) ;
-					host->cmd->error = -ETIMEDOUT;
-				} else {
-					host->cmd->error = -EILSEQ;
-				}
+				host->cmd->error = -ETIMEDOUT;
 				end_cmd = 1;
 			}
 			if (host->data)
 				mmc_dma_cleanup(host);
 		}
-		if ((status & DATA_TIMEOUT) ||
-			(status & DATA_CRC)) {
+		if (status & (CMD_CRC | STAT_CIE | STAT_CEB)) {
+			if (host->cmd) {
+				host->cmd->error = -EILSEQ;
+				end_cmd = 1;
+			}
+			if (host->data)
+				mmc_dma_cleanup(host);
+		}
+		if (status & DATA_TIMEOUT) {
+			OMAP_HSMMC_WRITE(host->base, SYSCTL,
+				OMAP_HSMMC_READ(host->base, SYSCTL) | SRD);
+			while (OMAP_HSMMC_READ(host->base, SYSCTL) & SRD)
+				;
 			if (host->data) {
-				if (status & DATA_TIMEOUT)
-					mmc_dma_cleanup(host);
-				else
-					host->data->error = -EILSEQ;
-				OMAP_HSMMC_WRITE(host->base, SYSCTL,
-					OMAP_HSMMC_READ(host->base,
-							SYSCTL) | SRD);
-				while (OMAP_HSMMC_READ(host->base,
-							SYSCTL) & SRD) ;
+				mmc_dma_cleanup(host);
+				end_trans = 1;
+			}
+		}
+		if (status & (DATA_CRC | STAT_DEB)) {
+			if (host->data) {
+				host->data->error = -EILSEQ;
 				end_trans = 1;
 			}
 		}
