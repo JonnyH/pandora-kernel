@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.27-omap1
-# Sun Dec  7 01:33:59 2008
+# Wed Jan 21 22:10:45 2009
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -427,8 +427,10 @@ CONFIG_BT_HCIH4P=y
 #
 # Wireless
 #
-# CONFIG_CFG80211 is not set
-# CONFIG_WIRELESS_EXT is not set
+CONFIG_CFG80211=y
+CONFIG_NL80211=y
+CONFIG_WIRELESS_EXT=y
+# CONFIG_WIRELESS_EXT_SYSFS is not set
 # CONFIG_MAC80211 is not set
 # CONFIG_IEEE80211 is not set
 # CONFIG_RFKILL is not set
@@ -1110,6 +1112,7 @@ CONFIG_USB_ETH_RNDIS=y
 CONFIG_MMC=y
 # CONFIG_MMC_DEBUG is not set
 # CONFIG_MMC_UNSAFE_RESUME is not set
+CONFIG_MMC_EMBEDDED_SDIO=y
 
 #
 # MMC/SD Card Drivers
