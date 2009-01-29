@@ -184,9 +184,13 @@ void __init omap34xx_check_revision(void)
 			system_rev = OMAP3430_REV_ES3_0;
 			rev_name = "ES3.0";
 			break;
+		case 4:
+			system_rev = OMAP3430_REV_ES3_1;
+			rev_name = "ES3.1";
+			break;
 		default:
 			/* Use the latest known revision as default */
-			system_rev = OMAP3430_REV_ES3_0;
+			system_rev = OMAP3430_REV_ES3_1;
 			rev_name = "Unknown revision\n";
 		}
 	}
