@@ -26,6 +26,10 @@
 
 #include <mach/hardware.h>
 #include <mach/keypad.h>
+#include <mach/gpio.h>
+
+/* hardware debounce, (value + 1) * 31us */
+#define GPIO_DEBOUNCE_TIME 0x7f
 
 static int omap3pandora_keymap[] = {
 	/* col, row, code */
@@ -189,12 +193,17 @@ static struct platform_device omap3pandora_keys_gpio = {
 
 void __init omap3pandora_input_init(void)
 {
-	int ret;
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(gpio_buttons); i++)
+		omap_set_gpio_debounce(gpio_buttons[i].gpio, 1);
+
+	/* set debounce time for banks 4 and 6 */
+	omap_set_gpio_debounce_time(32 * 3, GPIO_DEBOUNCE_TIME);
+	omap_set_gpio_debounce_time(32 * 5, GPIO_DEBOUNCE_TIME);
 
 	ret = platform_device_register(&omap3pandora_keys_gpio);
 	if (ret != 0)
-	{
 		printk(KERN_ERR "Failed to register gpio-keys\n");
-	}
 }
 
