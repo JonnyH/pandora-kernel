@@ -14,7 +14,7 @@
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 /* HACK */
 #include <../drivers/video/omap/dispc.h>
@@ -23,9 +23,8 @@
 #error need CONFIG_PROC_FS
 #endif
 
-#define PND_PROC_DIR		"pandora"
-#define PND_PROC_CPUMHZ		"cpu_mhz_max"
-#define PND_PROC_VSYNC		"wait_vsync"
+#define PND_PROC_CPUMHZ		"pandora/cpu_mhz_max"
+#define PND_PROC_VSYNC		"pandora/wait_vsync"
 
 /*
  * note:
@@ -178,31 +177,26 @@ static int pnd_vsync_read(char *page, char **start, off_t off, int count,
 
 /* ************************************************************************* */
 
-static struct proc_dir_entry *proc_dir;
-
 static int pndctrl_init(void)
 {
 	struct proc_dir_entry *pret;
 	int ret = -ENOMEM;
 
-	proc_dir = proc_mkdir(PND_PROC_DIR, NULL);
-	if (proc_dir == NULL) {
-		printk(KERN_ERR "can't create proc dir.\n");
-		return -ENOMEM;
-	}
-
-	pret = create_proc_entry(PND_PROC_CPUMHZ,
-			S_IWUSR | S_IRUGO, proc_dir);
+	pret = create_proc_entry(PND_PROC_CPUMHZ, S_IWUSR | S_IRUGO, NULL);
 	if (pret == NULL) {
-		printk(KERN_ERR "can't create proc\n");
-		goto fail0;
+		proc_mkdir("pandora", NULL);
+		pret = create_proc_entry(PND_PROC_CPUMHZ,
+					S_IWUSR | S_IRUGO, NULL);
+		if (pret == NULL) {
+			printk(KERN_ERR "can't create proc entry\n");
+			return ret;
+		}
 	}
 
 	pret->read_proc = cpu_clk_read;
 	pret->write_proc = cpu_clk_write;
 
-	pret = create_proc_entry(PND_PROC_VSYNC,
-			S_IRUGO, proc_dir);
+	pret = create_proc_entry(PND_PROC_VSYNC, S_IRUGO, NULL);
 	if (pret == NULL) {
 		printk(KERN_ERR "can't create proc\n");
 		goto fail1;
@@ -221,11 +215,9 @@ static int pndctrl_init(void)
 	return 0;
 
 fail2:
-	remove_proc_entry(PND_PROC_VSYNC, proc_dir);
+	remove_proc_entry(PND_PROC_VSYNC, NULL);
 fail1:
-	remove_proc_entry(PND_PROC_CPUMHZ, proc_dir);
-fail0:
-	remove_proc_entry(PND_PROC_DIR, NULL);
+	remove_proc_entry(PND_PROC_CPUMHZ, NULL);
 	return ret;
 }
 
@@ -233,10 +225,9 @@ fail0:
 static void pndctrl_cleanup(void)
 {
 	omap_dispc_free_irq(2, pnd_vsync_callback, NULL);
-	remove_proc_entry(PND_PROC_VSYNC, proc_dir);
-	remove_proc_entry(PND_PROC_CPUMHZ, proc_dir);
-	remove_proc_entry(PND_PROC_DIR, NULL);
-	printk("pndctrl unloaded.\n");
+	remove_proc_entry(PND_PROC_VSYNC, NULL);
+	remove_proc_entry(PND_PROC_CPUMHZ, NULL);
+	printk(KERN_INFO "pndctrl unloaded.\n");
 }
 
 
