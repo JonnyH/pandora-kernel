@@ -1408,7 +1408,7 @@ static struct attribute *panel_attrs[] = {
 };
 
 static struct attribute_group panel_attr_grp = {
-	.name  = "panel",
+	.name  = "panel_",
 	.attrs = panel_attrs,
 };
 
