@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.27-omap1
-# Wed Jan 21 22:10:45 2009
+# Mon Feb  9 13:57:10 2009
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -913,7 +913,8 @@ CONFIG_BACKLIGHT_LCD_SUPPORT=y
 # CONFIG_LCD_CLASS_DEVICE is not set
 CONFIG_BACKLIGHT_CLASS_DEVICE=y
 # CONFIG_BACKLIGHT_CORGI is not set
-CONFIG_BACKLIGHT_GPIO=y
+# CONFIG_BACKLIGHT_GPIO is not set
+CONFIG_BACKLIGHT_TWL4030_PWM0=y
 
 #
 # Display device support
