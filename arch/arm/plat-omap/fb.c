@@ -27,6 +27,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/bootmem.h>
+#include <linux/omapfb.h>
 
 #include <mach/hardware.h>
 #include <asm/io.h>
@@ -34,7 +35,6 @@
 
 #include <mach/board.h>
 #include <mach/sram.h>
-#include <mach/omapfb.h>
 
 #if defined(CONFIG_FB_OMAP) || defined(CONFIG_FB_OMAP_MODULE)
 

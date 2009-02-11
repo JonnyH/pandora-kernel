@@ -25,10 +25,10 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/i2c/twl4030.h>
+#include <linux/omapfb.h>
 
 #include <mach/gpio.h>
 #include <mach/mux.h>
-#include <mach/omapfb.h>
 #include <asm/mach-types.h>
 
 #define SDP2430_LCD_PANEL_BACKLIGHT_GPIO	91
