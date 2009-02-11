@@ -863,7 +863,7 @@ psx_del_no_retry:
 	return rc;
 }
 
-static void posix_fill_in_inode(struct inode *tmp_inode,
+void posix_fill_in_inode(struct inode *tmp_inode,
 	FILE_UNIX_BASIC_INFO *pData, int isNewInode)
 {
 	struct cifsInodeInfo *cifsInfo = CIFS_I(tmp_inode);
