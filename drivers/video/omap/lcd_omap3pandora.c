@@ -100,10 +100,10 @@ struct lcd_panel omap3pandora_panel = {
 	.y_res		= LCD_YRES,
 
 	.hsw		= 1,		/* hsync_len */
-	.hfp		= 40,		/* right_margin */
+	.hfp		= 68,		/* right_margin */
 	.hbp		= 214,		/* left_margin */
 	.vsw		= 1,		/* vsync_len */
-	.vfp		= 10,		/* lower_margin */
+	.vfp		= 39,		/* lower_margin */
 	.vbp		= 34,		/* upper_margin */
 
 	.acb		= 0x28,		/* ac-bias pin frequency */
