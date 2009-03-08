@@ -64,7 +64,7 @@ static void vsense_work(struct work_struct *work)
 	ax = (signed int)buff[2];
 	ay = (signed int)buff[3];
 
-	schedule_delayed_work(&ddata->work, msecs_to_jiffies(25));
+	schedule_delayed_work(&ddata->work, msecs_to_jiffies(30));
 
 dosync:
 	switch (ddata->mode) {
