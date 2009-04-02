@@ -2042,6 +2042,7 @@ config XEN_FBDEV_FRONTEND
 	  in another domain.
 
 source "drivers/video/omap/Kconfig"
+source "drivers/video/omap2/Kconfig"
 
 source "drivers/video/backlight/Kconfig"
 source "drivers/video/display/Kconfig"
