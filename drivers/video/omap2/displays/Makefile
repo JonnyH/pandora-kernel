@@ -6,3 +6,4 @@ obj-$(CONFIG_CTRL_BLIZZARD) += ctrl-blizzard.o
 obj-$(CONFIG_PANEL_N800) += panel-n800.o
 
 obj-$(CONFIG_PANEL_ACX565AKM) += panel-acx565akm.o
+obj-$(CONFIG_PANEL_TPO_TD043MTEA1) += panel-tpo-td043mtea1.o
