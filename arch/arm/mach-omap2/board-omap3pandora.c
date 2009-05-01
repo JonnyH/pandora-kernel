@@ -50,6 +50,7 @@
 #include <mach/usb-ehci.h>
 #include <mach/usb-musb.h>
 #include <mach/mcspi.h>
+#include <mach/display.h>
 
 #include "sdram-micron-mt46h32m32lf-6.h"
 
@@ -324,6 +325,11 @@ static struct spi_board_info omap3pandora_spi_board_info[] = {
 		.controller_data	= &ads7846_mcspi_config,
 		.irq			= OMAP_GPIO_IRQ(OMAP3_PANDORA_TS_GPIO),
 		.platform_data		= &ads7846_config,
+	}, {
+		.modalias		= "panel-tpo-td043mtea1",
+		.bus_num		= 1,
+		.chip_select		= 1,
+		.max_speed_hz		= 375000,
 	}
 };
 
@@ -339,6 +345,85 @@ static struct omap_lcd_config omap3pandora_lcd_config __initdata = {
 static struct omap_board_config_kernel omap3pandora_config[] __initdata = {
 	{ OMAP_TAG_UART,	&omap3pandora_uart_config },
 	{ OMAP_TAG_LCD,		&omap3pandora_lcd_config },
+};
+
+/* DSS2 */
+static int pandora_panel_enable_lcd(struct omap_display *display)
+{
+#define ENABLE_VAUX1_DEDICATED           0x04
+#define ENABLE_VAUX1_DEV_GRP             0x20
+
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+			ENABLE_VAUX1_DEDICATED,
+			TWL4030_VAUX1_DEDICATED);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+			ENABLE_VAUX1_DEV_GRP, TWL4030_VAUX1_DEV_GRP);
+
+	return 0;
+}
+
+static void pandora_panel_disable_lcd(struct omap_display *display)
+{
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
+			TWL4030_VAUX1_DEV_GRP);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
+			TWL4030_VAUX1_DEDICATED);
+}
+
+static int pandora_panel_enable_tv(struct omap_display *display)
+{
+#define ENABLE_VDAC_DEDICATED           0x03
+#define ENABLE_VDAC_DEV_GRP             0x20
+
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+			ENABLE_VDAC_DEDICATED,
+			TWL4030_VDAC_DEDICATED);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+			ENABLE_VDAC_DEV_GRP, TWL4030_VDAC_DEV_GRP);
+
+	return 0;
+}
+
+static void pandora_panel_disable_tv(struct omap_display *display)
+{
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
+			TWL4030_VDAC_DEV_GRP);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
+			TWL4030_VDAC_DEDICATED);
+}
+
+static struct omap_dss_display_config omap3pandora_display_data[] = {
+	{
+		.type		= OMAP_DISPLAY_TYPE_DPI,
+		.name		= "lcd",
+		.panel_name	= "tpo-td043mtea1",
+		.panel_reset_gpio = 157,
+		.u.dpi.data_lines = 24,
+		.panel_enable	= pandora_panel_enable_lcd,
+		.panel_disable	= pandora_panel_disable_lcd,
+	}, {
+		.type		= OMAP_DISPLAY_TYPE_VENC,
+		.name		= "tv",
+		.u.venc.type	= OMAP_DSS_VENC_TYPE_SVIDEO,
+		.panel_enable	= pandora_panel_enable_tv,
+		.panel_disable	= pandora_panel_disable_tv,
+	}
+};
+
+static struct omap_dss_board_info omap3pandora_dss_data = {
+	.num_displays = ARRAY_SIZE(omap3pandora_display_data),
+	.displays = {
+		&omap3pandora_display_data[0],
+		&omap3pandora_display_data[1],
+	}
+};
+
+static struct platform_device omap3pandora_dss_device = {
+	.name	= "omapdss",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &omap3pandora_dss_data,
+	},
 };
 
 #include <mach/board-nokia.h>
@@ -366,6 +451,7 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_leds_gpio,
 	&bt_device,
 	&omap3pandora_bl,
+	&omap3pandora_dss_device,
 };
 
 static void __init omap3pandora_init(void)
