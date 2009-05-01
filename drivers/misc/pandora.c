@@ -16,15 +16,11 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 
-/* HACK */
-#include <../drivers/video/omap/dispc.h>
-
 #ifndef CONFIG_PROC_FS
 #error need CONFIG_PROC_FS
 #endif
 
 #define PND_PROC_CPUMHZ		"pandora/cpu_mhz_max"
-#define PND_PROC_VSYNC		"pandora/wait_vsync"
 
 /*
  * note:
@@ -136,47 +132,6 @@ static int cpu_clk_write(struct file *file, const char __user *buffer,
 
 /* ************************************************************************* */
 
-static DECLARE_WAIT_QUEUE_HEAD(pnd_vsync_waitq);
-static u32 pnd_vsync_counter;
-static u32 pnd_vsync_last;
-static u32 pnd_vsync_active;
-
-static void pnd_vsync_callback(void *data)
-{
-	pnd_vsync_counter++;
-	if (pnd_vsync_active)
-		wake_up_interruptible(&pnd_vsync_waitq);
-}
-
-static int pnd_vsync_read(char *page, char **start, off_t off, int count,
-		int *eof, void *data)
-{
-	char *p = page;
-	int len, val = -1, ret, vcount;
-
-	vcount = pnd_vsync_counter;
-	pnd_vsync_active = 1;
-	ret = wait_event_interruptible_timeout(pnd_vsync_waitq,
-			(vcount != pnd_vsync_counter), msecs_to_jiffies(250));
-	pnd_vsync_active = 0;
-	if (ret > 0)
-		val = pnd_vsync_counter - pnd_vsync_last;
-
-	p += sprintf(p, "%d\n", val);
-	pnd_vsync_last = pnd_vsync_counter;
-
-	len = (p - page) - off;
-	if (len < 0)
-		len = 0;
-
-	*eof = (len <= count) ? 1 : 0;
-	*start = page + off;
-
-	return len;
-}
-
-/* ************************************************************************* */
-
 static int pndctrl_init(void)
 {
 	struct proc_dir_entry *pret;
@@ -196,36 +151,14 @@ static int pndctrl_init(void)
 	pret->read_proc = cpu_clk_read;
 	pret->write_proc = cpu_clk_write;
 
-	pret = create_proc_entry(PND_PROC_VSYNC, S_IRUGO, NULL);
-	if (pret == NULL) {
-		printk(KERN_ERR "can't create proc\n");
-		goto fail1;
-	}
-
-	pret->read_proc = pnd_vsync_read;
-
-	ret = omap_dispc_request_irq(2, pnd_vsync_callback, NULL);
-	if (ret) {
-		printk(KERN_ERR "couldn't hook vsync\n");
-		goto fail2;
-	}
-
 	printk(KERN_INFO "pndctrl loaded.\n");
 
 	return 0;
-
-fail2:
-	remove_proc_entry(PND_PROC_VSYNC, NULL);
-fail1:
-	remove_proc_entry(PND_PROC_CPUMHZ, NULL);
-	return ret;
 }
 
 
 static void pndctrl_cleanup(void)
 {
-	omap_dispc_free_irq(2, pnd_vsync_callback, NULL);
-	remove_proc_entry(PND_PROC_VSYNC, NULL);
 	remove_proc_entry(PND_PROC_CPUMHZ, NULL);
 	printk(KERN_INFO "pndctrl unloaded.\n");
 }
