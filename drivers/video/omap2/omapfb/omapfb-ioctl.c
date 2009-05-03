@@ -450,6 +450,7 @@ int omapfb_ioctl(struct fb_info *fbi, unsigned int cmd, unsigned long arg)
 		enum omapfb_update_mode		update_mode;
 		int test_num;
 		struct omapfb_memory_read	memory_read;
+		u_int32_t			crt;
 	} p;
 
 	int r = 0;
@@ -589,6 +590,17 @@ int omapfb_ioctl(struct fb_info *fbi, unsigned int cmd, unsigned long arg)
 				 sizeof(p.color_key)))
 			r = -EFAULT;
 		break;
+
+	case FBIO_WAITFORVSYNC:
+		if (get_user(p.crt, (u_int32_t __user *)arg)) {
+			r = -EFAULT;
+			break;
+		}
+		if (p.crt != 0) {
+			r = -ENODEV;
+			break;
+		}
+		/* FALLTHROUGH */
 
 	case OMAPFB_WAITFORVSYNC:
 		DBG("ioctl WAITFORVSYNC\n");

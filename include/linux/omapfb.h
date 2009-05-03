@@ -53,6 +53,10 @@
 #define OMAPFB_WAITFORVSYNC	OMAP_IO(57)
 #define OMAPFB_MEMORY_READ	OMAP_IOR(58, struct omapfb_memory_read)
 
+#ifndef FBIO_WAITFORVSYNC
+#define FBIO_WAITFORVSYNC	_IOW('F', 0x20, u_int32_t)
+#endif
+
 #define OMAPFB_CAPS_GENERIC_MASK	0x00000fff
 #define OMAPFB_CAPS_LCDC_MASK		0x00fff000
 #define OMAPFB_CAPS_PANEL_MASK		0xff000000
