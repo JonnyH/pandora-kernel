@@ -218,6 +218,9 @@ static struct omap_panel tpo_td043_panel = {
 		.vbp		= 34,
 	},
 
+	/* for now, to have SGX working */
+	.recommended_bpp = 16,
+
 	.config = OMAP_DSS_LCD_TFT | OMAP_DSS_LCD_IHS |
 		OMAP_DSS_LCD_IVS | OMAP_DSS_LCD_IPC,
 };
