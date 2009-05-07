@@ -113,7 +113,8 @@ static int vol_cdev_open(struct inode *inode, struct file *file)
 	else
 		mode = UBI_READONLY;
 
-	dbg_gen("open volume %d, mode %d", vol_id, mode);
+	dbg_gen("open device %d, volume %d, mode %d",
+	        ubi_num, vol_id, mode);
 	
 	const struct ubi_device *ubi = ubi_get_by_major(imajor(inode));
 	if(ubi->ubi_num != ubi_num)
@@ -133,7 +134,8 @@ static int vol_cdev_release(struct inode *inode, struct file *file)
 	struct ubi_volume_desc *desc = file->private_data;
 	struct ubi_volume *vol = desc->vol;
 
-	dbg_gen("release volume %d, mode %d", vol->vol_id, desc->mode);
+	dbg_gen("release device %d, volume %d, mode %d",
+		vol->ubi->ubi_num, vol->vol_id, desc->mode);
 
 	if (vol->updating) {
 		ubi_warn("update of volume %d not finished, volume is damaged",
