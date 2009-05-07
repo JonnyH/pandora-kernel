@@ -995,7 +995,7 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 
 	mutex_init(&ubi->buf_mutex);
 	mutex_init(&ubi->ckvol_mutex);
-	mutex_init(&ubi->volumes_mutex);
+	mutex_init(&ubi->device_mutex);
 	spin_lock_init(&ubi->volumes_lock);
 
 #ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
