@@ -1016,7 +1016,7 @@ void omap2_clk_disable_unused(struct clk *clk)
 	if ((regval32 & (1 << clk->enable_bit)) == v)
 		return;
 
-	printk(KERN_INFO "Disabling unused clock \"%s\"\n", clk->name);
+	printk(KERN_DEBUG "Disabling unused clock \"%s\"\n", clk->name);
 	_omap2_clk_disable(clk);
 }
 #endif
