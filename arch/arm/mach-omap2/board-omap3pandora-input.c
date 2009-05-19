@@ -150,12 +150,12 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.active_low		= 1,
 		.desc			= "shoulder r2",
 	}, {
-		.code			= BTN_START,
+		.code			= KEY_LEFTALT,
 		.gpio			= 100,
 		.active_low		= 1,
 		.desc			= "start",
 	}, {
-		.code			= BTN_SELECT,
+		.code			= KEY_LEFTCTRL,
 		.gpio			= 104,
 		.active_low		= 1,
 		.desc			= "select",
