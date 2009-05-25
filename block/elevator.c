@@ -973,8 +973,9 @@ void elv_register(struct elevator_type *e)
 			(!*chosen_elevator &&
 			 !strcmp(e->elevator_name, CONFIG_DEFAULT_IOSCHED)))
 				def = " (default)";
-
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "io scheduler %s registered%s\n", e->elevator_name, def);
+#endif
 }
 EXPORT_SYMBOL_GPL(elv_register);
 

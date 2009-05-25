@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/mmc/host/sdhci.h - Secure Digital Host Controller Interface driver
+ *  linux/drivers/mmc/sdhci.h - Secure Digital Host Controller Interface driver
  *
- *  Copyright (C) 2005-2007 Pierre Ossman, All Rights Reserved.
+ *  Copyright (C) 2005 Pierre Ossman, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -81,7 +81,7 @@
 
 #define SDHCI_BLOCK_GAP_CONTROL	0x2A
 
-#define SDHCI_WAKE_UP_CONTROL	0x2B
+#define SDHCI_WALK_UP_CONTROL	0x2B
 
 #define SDHCI_CLOCK_CONTROL	0x2C
 #define  SDHCI_DIVIDER_SHIFT	8
@@ -107,7 +107,6 @@
 #define  SDHCI_INT_CARD_INSERT	0x00000040
 #define  SDHCI_INT_CARD_REMOVE	0x00000080
 #define  SDHCI_INT_CARD_INT	0x00000100
-#define  SDHCI_INT_ERROR	0x00008000
 #define  SDHCI_INT_TIMEOUT	0x00010000
 #define  SDHCI_INT_CRC		0x00020000
 #define  SDHCI_INT_END_BIT	0x00040000
@@ -171,8 +170,7 @@ struct sdhci_host {
 	spinlock_t		lock;		/* Mutex */
 
 	int			flags;		/* Host attributes */
-#define SDHCI_USE_DMA		(1<<0)		/* Host is DMA capable */
-#define SDHCI_REQ_USE_DMA	(1<<1)		/* Use DMA for this req. */
+#define SDHCI_USE_DMA		(1<<0)
 
 	unsigned int		max_clk;	/* Max possible freq (MHz) */
 	unsigned int		timeout_clk;	/* Timeout freq (KHz) */
@@ -183,12 +181,13 @@ struct sdhci_host {
 	struct mmc_request	*mrq;		/* Current request */
 	struct mmc_command	*cmd;		/* Current command */
 	struct mmc_data		*data;		/* Current data request */
-	int			data_early:1;	/* Data finished before cmd */
 
 	struct scatterlist	*cur_sg;	/* We're working on this */
 	int			num_sg;		/* Entries left */
 	int			offset;		/* Offset into current sg */
 	int			remain;		/* Bytes left in current */
+
+	int			size;		/* Remaining bytes in transfer */
 
 	char			slot_descr[20];	/* Name for reservations */
 

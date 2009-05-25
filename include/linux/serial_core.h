@@ -149,6 +149,8 @@
 /* Freescale ColdFire */
 #define PORT_MCF	78
 
+#define PORT_POLLUX	79
+
 
 #ifdef __KERNEL__
 

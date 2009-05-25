@@ -55,6 +55,23 @@
 #define IRQF_NOBALANCING	0x00000800
 #define IRQF_IRQPOLL		0x00001000
 
+
+/*
+ * Migration helpers. Scheduled for removal in 1/2007
+ * Do not use for new code !
+ */
+#define SA_INTERRUPT		IRQF_DISABLED
+#define SA_SAMPLE_RANDOM	IRQF_SAMPLE_RANDOM
+#define SA_SHIRQ		    IRQF_SHARED
+#define SA_PROBEIRQ		    IRQF_PROBE_SHARED
+#define SA_PERCPU		    IRQF_PERCPU
+
+#define SA_TRIGGER_LOW		IRQF_TRIGGER_LOW
+#define SA_TRIGGER_HIGH		IRQF_TRIGGER_HIGH
+#define SA_TRIGGER_FALLING	IRQF_TRIGGER_FALLING
+#define SA_TRIGGER_RISING	IRQF_TRIGGER_RISING
+#define SA_TRIGGER_MASK		IRQF_TRIGGER_MASK
+
 typedef irqreturn_t (*irq_handler_t)(int, void *);
 
 struct irqaction {

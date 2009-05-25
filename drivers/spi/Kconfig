@@ -175,6 +175,30 @@ config SPI_S3C24XX_GPIO
 	  the inbuilt hardware cannot provide the transfer mode, or
 	  where the board is using non hardware connected pins.
 
+config SPI_POLLUX
+	tristate "POLLUX SPI Controller"
+	depends on ARCH_POLLUX && (ARCH_POLLUX_GPH_GBOARD = n)
+	---help---
+	  This option enables device driver support for POLLUX SPI Controller
+
+	  If unsure, say Y.
+
+config SPI_POLLUX_CHANNEL
+	int "POLLUX SPI channel"
+	depends on SPI_POLLUX && (ARCH_POLLUX_GPH_GBOARD = n)
+	default 0
+	---help---
+	This option sets the channel for the POLLUX SPI Controller.  If unsure,
+	use the default.
+
+config SPI_POLLUX_DEBUG
+	bool "POLLUX SPI Controller Debugging"
+	depends on ARCH_POLLUX && SPI_POLLUX
+	default n
+	---help---
+	This option enables additional debugging information for the POLLUX SPI
+	Controller.  If unsure, say N.
+
 config SPI_TXX9
 	tristate "Toshiba TXx9 SPI controller"
 	depends on SPI_MASTER && GENERIC_GPIO && CPU_TX49XX

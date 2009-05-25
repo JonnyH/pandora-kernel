@@ -994,10 +994,11 @@ int dev_open(struct net_device *dev)
 	/*
 	 *	Is it already up?
 	 */
-
+//printk("dev_open 1\n");
 	if (dev->flags & IFF_UP)
 		return 0;
 
+//printk("dev_open 2\n");
 	/*
 	 *	Is it even present?
 	 */
@@ -1010,11 +1011,18 @@ int dev_open(struct net_device *dev)
 	set_bit(__LINK_STATE_START, &dev->state);
 
 	if (dev->validate_addr)
+	{
+		//printk("dev_open --> validate_addr = %p 1\n", dev->validate_addr);
 		ret = dev->validate_addr(dev);
+		//printk("dev_open --> ret = %d 2\n", ret);
+	}
 
-	if (!ret && dev->open)
+//printk("dev_open 3: ret = %d, dev->open = %p\n", ret, dev->open);
+
+	if (!ret && dev->open) // ret가 0이고, dev->open이 있을경우
 		ret = dev->open(dev);
 
+//printk("dev_open 4\n");
 	/*
 	 *	If it went open OK then:
 	 */
@@ -1042,7 +1050,7 @@ int dev_open(struct net_device *dev)
 		 */
 		call_netdevice_notifiers(NETDEV_UP, dev);
 	}
-
+//printk("dev_open 5\n");
 	return ret;
 }
 
@@ -3596,7 +3604,7 @@ int register_netdevice(struct net_device *dev)
 	ASSERT_RTNL();
 
 	might_sleep();
-
+//printk("1\n");
 	/* When net_device's are persistent, this will be fatal. */
 	BUG_ON(dev->reg_state != NETREG_UNINITIALIZED);
 	BUG_ON(!dev->nd_net);
@@ -3609,7 +3617,7 @@ int register_netdevice(struct net_device *dev)
 	spin_lock_init(&dev->ingress_lock);
 
 	dev->iflink = -1;
-
+//printk("2\n");
 	/* Init, if this function is available */
 	if (dev->init) {
 		ret = dev->init(dev);
@@ -3624,7 +3632,7 @@ int register_netdevice(struct net_device *dev)
 		ret = -EINVAL;
 		goto err_uninit;
 	}
-
+//printk("3\n");
 	dev->ifindex = dev_new_index(net);
 	if (dev->iflink == -1)
 		dev->iflink = dev->ifindex;
@@ -3655,7 +3663,7 @@ int register_netdevice(struct net_device *dev)
 		dev->features &= ~(NETIF_F_IP_CSUM|NETIF_F_IPV6_CSUM|NETIF_F_HW_CSUM);
 	}
 
-
+//printk("4\n");
 	/* Fix illegal SG+CSUM combinations. */
 	if ((dev->features & NETIF_F_SG) &&
 	    !(dev->features & NETIF_F_ALL_CSUM)) {
@@ -3685,7 +3693,7 @@ int register_netdevice(struct net_device *dev)
 			dev->features &= ~NETIF_F_UFO;
 		}
 	}
-
+//printk("5\n");
 	ret = netdev_register_kobject(dev);
 	if (ret)
 		goto err_uninit;
@@ -3709,7 +3717,7 @@ int register_netdevice(struct net_device *dev)
 		rollback_registered(dev);
 		dev->reg_state = NETREG_UNREGISTERED;
 	}
-
+//printk("6\n");
 out:
 	return ret;
 
@@ -3742,10 +3750,13 @@ int register_netdev(struct net_device *dev)
 	 * If the name is a format string the caller wants us to do a
 	 * name allocation.
 	 */
+	//printk("dev->name = %s\n", dev->name ); 
 	if (strchr(dev->name, '%')) {
+		//printk("dev->name alloc = %s 1\n", dev->name ); 
 		err = dev_alloc_name(dev, dev->name);
 		if (err < 0)
 			goto out;
+		//printk("dev->name alloc = %s 2\n", dev->name ); 
 	}
 
 	err = register_netdevice(dev);

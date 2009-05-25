@@ -2366,12 +2366,15 @@ void build_all_zonelists(void)
 	else
 		page_group_by_mobility_disabled = 0;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk("Built %i zonelists in %s order, mobility grouping %s.  "
 		"Total pages: %ld\n",
 			num_online_nodes(),
 			zonelist_order_name[current_zonelist_order],
 			page_group_by_mobility_disabled ? "off" : "on",
 			vm_total_pages);
+#endif
+
 #ifdef CONFIG_NUMA
 	printk("Policy zone: %s\n", zone_names[policy_zone]);
 #endif
@@ -4351,11 +4354,13 @@ void *__init alloc_large_system_hash(const char *tablename,
 	if (!table)
 		panic("Failed to allocate %s hash table\n", tablename);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "%s hash table entries: %d (order: %d, %lu bytes)\n",
 	       tablename,
 	       (1U << log2qty),
 	       ilog2(size) - PAGE_SHIFT,
 	       size);
+#endif
 
 	if (_hash_shift)
 		*_hash_shift = log2qty;

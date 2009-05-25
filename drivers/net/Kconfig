@@ -1393,8 +1393,20 @@ config CS89x0
 	  <http://www.tldp.org/docs.html#howto> as well as
 	  <file:Documentation/networking/cs89x0.txt>.
 
-	  To compile this driver as a module, choose M here. The module
-	  will be called cs89x0.
+	  To compile this driver as a module, choose M here and read
+	  <file:Documentation/networking/net-modules.txt>.  The module will be
+	  called cs89x0.
+
+# ghcstop add
+config DM9000A
+	tristate "DM9000A support(aesop 3rd board)"
+	depends on ARCH_POLLUX
+	---help---
+      Davicom DM9000A driver for aesop2440 3rd board
+      dm9000a is different from dm9000.	  
+	  
+
+
 
 config TC35815
 	tristate "TOSHIBA TC35815 Ethernet support"

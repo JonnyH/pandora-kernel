@@ -191,8 +191,10 @@ static int __init ic_open_devs(void)
 
 	/* bring loopback device up first */
 	for_each_netdev(&init_net, dev) {
+		//printk("dev->name = %s 1 \n", dev->name);
 		if (!(dev->flags & IFF_LOOPBACK))
 			continue;
+		//printk("dev->name = %s 2, dev->flags = 0x%08x \n", dev->name, dev->flags);	
 		if (dev_change_flags(dev, dev->flags | IFF_UP) < 0)
 			printk(KERN_ERR "IP-Config: Failed to open %s\n", dev->name);
 	}

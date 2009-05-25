@@ -807,7 +807,9 @@ extern char nftlmountrev[];
 
 static int __init init_nftl(void)
 {
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE	
 	printk(KERN_INFO "NFTL driver: nftlcore.c $Revision: 1.98 $, nftlmount.c %s\n", nftlmountrev);
+#endif
 
 	return register_mtd_blktrans(&nftl_tr);
 }

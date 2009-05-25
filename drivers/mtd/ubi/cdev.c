@@ -113,6 +113,11 @@ static int vol_cdev_open(struct inode *inode, struct file *file)
 		mode = UBI_READONLY;
 
 	dbg_gen("open volume %d, mode %d", vol_id, mode);
+	
+	const struct ubi_device *ubi = ubi_get_by_major(imajor(inode));
+	if(ubi->ubi_num != ubi_num)
+		printk("ubiblk: ubi_num not equal!\n");
+	
 
 	desc = ubi_open_volume(ubi_num, vol_id, mode);
 	if (IS_ERR(desc))

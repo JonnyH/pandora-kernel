@@ -2378,7 +2378,7 @@ autoconf_fail:
 	if (!out_ep)
 		goto autoconf_fail;
 	out_ep->driver_data = out_ep;	/* claim */
-
+#if 0
 #if defined(DEV_CONFIG_CDC) || defined(CONFIG_USB_ETH_RNDIS)
 	/* CDC Ethernet control interface doesn't require a status endpoint.
 	 * Since some hosts expect one, try to allocate one anyway.
@@ -2400,6 +2400,7 @@ autoconf_fail:
 #endif
 		}
 	}
+#endif
 #endif
 
 	/* one config:  cdc, else minimal subset */

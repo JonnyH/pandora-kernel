@@ -168,8 +168,10 @@ struct rtc_device *rtc_device_register(const char *name, struct device *dev,
 	rtc_sysfs_add_device(rtc);
 	rtc_proc_add_device(rtc);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	dev_info(dev, "rtc core: registered %s as %s\n",
 			rtc->name, rtc->dev.bus_id);
+#endif
 
 	return rtc;
 

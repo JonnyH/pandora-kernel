@@ -278,6 +278,7 @@ static void __init dump_cpu_info(int cpu)
 {
 	unsigned int info = read_cpuid(CPUID_CACHETYPE);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	if (info != processor_id) {
 		printk("CPU%u: D %s %s cache\n", cpu, cache_is_vivt() ? "VIVT" : "VIPT",
 		       cache_types[CACHE_TYPE(info)]);
@@ -288,6 +289,7 @@ static void __init dump_cpu_info(int cpu)
 			dump_cache("cache", cpu, CACHE_ISIZE(info));
 		}
 	}
+#endif
 
 	if (arch_is_coherent())
 		printk("Cache coherency enabled\n");
@@ -364,9 +366,11 @@ static void __init setup_processor(void)
 	cpu_cache = *list->cache;
 #endif
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk("CPU: %s [%08x] revision %d (ARMv%s), cr=%08lx\n",
 	       cpu_name, processor_id, (int)processor_id & 15,
 	       proc_arch[cpu_architecture()], cr_alignment);
+#endif
 
 	sprintf(init_utsname()->machine, "%s%c", list->arch_name, ENDIANNESS);
 	sprintf(elf_platform, "%s%c", list->elf_name, ENDIANNESS);
@@ -433,9 +437,9 @@ static struct machine_desc * __init setup_machine(unsigned int nr)
 		       "to continue.\n", nr);
 		while (1);
 	}
-
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk("Machine: %s\n", list->name);
-
+#endif
 	return list;
 }
 

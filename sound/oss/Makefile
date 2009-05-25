@@ -45,6 +45,9 @@ obj-$(CONFIG_SOUND_WM97XX)	+= ac97_plugin_wm97xx.o
 
 obj-$(CONFIG_DMASOUND)		+= dmasound/
 
+obj-$(CONFIG_POLLUX_OSS)	+= pollux-audio.o pollux-iis.o
+obj-$(CONFIG_POLLUX_OSS_GPH_MINI)	+= pollux-cs42L51.o pollux-iis.o
+
 # Declare multi-part drivers.
 
 sound-objs	:= 							\

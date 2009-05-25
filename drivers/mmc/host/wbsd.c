@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/mmc/host/wbsd.c - Winbond W83L51xD SD/MMC driver
+ *  linux/drivers/mmc/wbsd.c - Winbond W83L51xD SD/MMC driver
  *
- *  Copyright (C) 2004-2007 Pierre Ossman, All Rights Reserved.
+ *  Copyright (C) 2004-2006 Pierre Ossman, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,10 +33,10 @@
 #include <linux/pnp.h>
 #include <linux/highmem.h>
 #include <linux/mmc/host.h>
-#include <linux/scatterlist.h>
 
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <asm/scatterlist.h>
 
 #include "wbsd.h"
 
@@ -177,8 +177,9 @@ static void wbsd_init_device(struct wbsd_host *host)
 	ier = 0;
 	ier |= WBSD_EINT_CARD;
 	ier |= WBSD_EINT_FIFO_THRE;
-	ier |= WBSD_EINT_CRC;
+	ier |= WBSD_EINT_CCRC;
 	ier |= WBSD_EINT_TIMEOUT;
+	ier |= WBSD_EINT_CRC;
 	ier |= WBSD_EINT_TC;
 
 	outb(ier, host->base + WBSD_EIR);
@@ -206,6 +207,8 @@ static void wbsd_reset(struct wbsd_host *host)
 static void wbsd_request_end(struct wbsd_host *host, struct mmc_request *mrq)
 {
 	unsigned long dmaflags;
+
+	DBGF("Ending request, cmd (%x)\n", mrq->cmd->opcode);
 
 	if (host->dma >= 0) {
 		/*
@@ -269,41 +272,95 @@ static inline int wbsd_next_sg(struct wbsd_host *host)
 
 static inline char *wbsd_sg_to_buffer(struct wbsd_host *host)
 {
-	return sg_virt(host->cur_sg);
+	return page_address(host->cur_sg->page) + host->cur_sg->offset;
 }
 
 static inline void wbsd_sg_to_dma(struct wbsd_host *host, struct mmc_data *data)
 {
-	unsigned int len, i;
+	unsigned int len, i, size;
 	struct scatterlist *sg;
 	char *dmabuf = host->dma_buffer;
 	char *sgbuf;
 
+	size = host->size;
+
 	sg = data->sg;
 	len = data->sg_len;
 
+	/*
+	 * Just loop through all entries. Size might not
+	 * be the entire list though so make sure that
+	 * we do not transfer too much.
+	 */
 	for (i = 0; i < len; i++) {
-		sgbuf = sg_virt(&sg[i]);
-		memcpy(dmabuf, sgbuf, sg[i].length);
+		sgbuf = page_address(sg[i].page) + sg[i].offset;
+		if (size < sg[i].length)
+			memcpy(dmabuf, sgbuf, size);
+		else
+			memcpy(dmabuf, sgbuf, sg[i].length);
 		dmabuf += sg[i].length;
+
+		if (size < sg[i].length)
+			size = 0;
+		else
+			size -= sg[i].length;
+
+		if (size == 0)
+			break;
 	}
+
+	/*
+	 * Check that we didn't get a request to transfer
+	 * more data than can fit into the SG list.
+	 */
+
+	BUG_ON(size != 0);
+
+	host->size -= size;
 }
 
 static inline void wbsd_dma_to_sg(struct wbsd_host *host, struct mmc_data *data)
 {
-	unsigned int len, i;
+	unsigned int len, i, size;
 	struct scatterlist *sg;
 	char *dmabuf = host->dma_buffer;
 	char *sgbuf;
 
+	size = host->size;
+
 	sg = data->sg;
 	len = data->sg_len;
 
+	/*
+	 * Just loop through all entries. Size might not
+	 * be the entire list though so make sure that
+	 * we do not transfer too much.
+	 */
 	for (i = 0; i < len; i++) {
-		sgbuf = sg_virt(&sg[i]);
-		memcpy(sgbuf, dmabuf, sg[i].length);
+		sgbuf = page_address(sg[i].page) + sg[i].offset;
+		if (size < sg[i].length)
+			memcpy(sgbuf, dmabuf, size);
+		else
+			memcpy(sgbuf, dmabuf, sg[i].length);
 		dmabuf += sg[i].length;
+
+		if (size < sg[i].length)
+			size = 0;
+		else
+			size -= sg[i].length;
+
+		if (size == 0)
+			break;
 	}
+
+	/*
+	 * Check that we didn't get a request to transfer
+	 * more data than can fit into the SG list.
+	 */
+
+	BUG_ON(size != 0);
+
+	host->size -= size;
 }
 
 /*
@@ -317,7 +374,7 @@ static inline void wbsd_get_short_reply(struct wbsd_host *host,
 	 * Correct response type?
 	 */
 	if (wbsd_read_index(host, WBSD_IDX_RSPLEN) != WBSD_RSP_SHORT) {
-		cmd->error = -EILSEQ;
+		cmd->error = MMC_ERR_INVALID;
 		return;
 	}
 
@@ -337,7 +394,7 @@ static inline void wbsd_get_long_reply(struct wbsd_host *host,
 	 * Correct response type?
 	 */
 	if (wbsd_read_index(host, WBSD_IDX_RSPLEN) != WBSD_RSP_LONG) {
-		cmd->error = -EILSEQ;
+		cmd->error = MMC_ERR_INVALID;
 		return;
 	}
 
@@ -358,6 +415,8 @@ static void wbsd_send_command(struct wbsd_host *host, struct mmc_command *cmd)
 	int i;
 	u8 status, isr;
 
+	DBGF("Sending cmd (%x)\n", cmd->opcode);
+
 	/*
 	 * Clear accumulated ISR. The interrupt routine
 	 * will fill this one with events that occur during
@@ -372,7 +431,7 @@ static void wbsd_send_command(struct wbsd_host *host, struct mmc_command *cmd)
 	for (i = 3; i >= 0; i--)
 		outb((cmd->arg >> (i * 8)) & 0xff, host->base + WBSD_CMDR);
 
-	cmd->error = 0;
+	cmd->error = MMC_ERR_NONE;
 
 	/*
 	 * Wait for the request to complete.
@@ -392,13 +451,13 @@ static void wbsd_send_command(struct wbsd_host *host, struct mmc_command *cmd)
 
 		/* Card removed? */
 		if (isr & WBSD_INT_CARD)
-			cmd->error = -ENOMEDIUM;
+			cmd->error = MMC_ERR_TIMEOUT;
 		/* Timeout? */
 		else if (isr & WBSD_INT_TIMEOUT)
-			cmd->error = -ETIMEDOUT;
+			cmd->error = MMC_ERR_TIMEOUT;
 		/* CRC? */
 		else if ((cmd->flags & MMC_RSP_CRC) && (isr & WBSD_INT_CRC))
-			cmd->error = -EILSEQ;
+			cmd->error = MMC_ERR_BADCRC;
 		/* All ok */
 		else {
 			if (cmd->flags & MMC_RSP_136)
@@ -407,6 +466,8 @@ static void wbsd_send_command(struct wbsd_host *host, struct mmc_command *cmd)
 				wbsd_get_short_reply(host, cmd);
 		}
 	}
+
+	DBGF("Sent cmd (%x), res %d\n", cmd->opcode, cmd->error);
 }
 
 /*
@@ -422,7 +483,7 @@ static void wbsd_empty_fifo(struct wbsd_host *host)
 	/*
 	 * Handle excessive data.
 	 */
-	if (host->num_sg == 0)
+	if (data->bytes_xfered == host->size)
 		return;
 
 	buffer = wbsd_sg_to_buffer(host) + host->offset;
@@ -452,14 +513,31 @@ static void wbsd_empty_fifo(struct wbsd_host *host)
 			data->bytes_xfered++;
 
 			/*
+			 * Transfer done?
+			 */
+			if (data->bytes_xfered == host->size)
+				return;
+
+			/*
 			 * End of scatter list entry?
 			 */
 			if (host->remain == 0) {
 				/*
 				 * Get next entry. Check if last.
 				 */
-				if (!wbsd_next_sg(host))
+				if (!wbsd_next_sg(host)) {
+					/*
+					 * We should never reach this point.
+					 * It means that we're trying to
+					 * transfer more blocks than can fit
+					 * into the scatter list.
+					 */
+					BUG_ON(1);
+
+					host->size = data->bytes_xfered;
+
 					return;
+				}
 
 				buffer = wbsd_sg_to_buffer(host);
 			}
@@ -471,7 +549,7 @@ static void wbsd_empty_fifo(struct wbsd_host *host)
 	 * hardware problem. The chip doesn't trigger
 	 * FIFO threshold interrupts properly.
 	 */
-	if ((data->blocks * data->blksz - data->bytes_xfered) < 16)
+	if ((host->size - data->bytes_xfered) < 16)
 		tasklet_schedule(&host->fifo_tasklet);
 }
 
@@ -485,7 +563,7 @@ static void wbsd_fill_fifo(struct wbsd_host *host)
 	 * Check that we aren't being called after the
 	 * entire buffer has been transfered.
 	 */
-	if (host->num_sg == 0)
+	if (data->bytes_xfered == host->size)
 		return;
 
 	buffer = wbsd_sg_to_buffer(host) + host->offset;
@@ -515,14 +593,31 @@ static void wbsd_fill_fifo(struct wbsd_host *host)
 			data->bytes_xfered++;
 
 			/*
+			 * Transfer done?
+			 */
+			if (data->bytes_xfered == host->size)
+				return;
+
+			/*
 			 * End of scatter list entry?
 			 */
 			if (host->remain == 0) {
 				/*
 				 * Get next entry. Check if last.
 				 */
-				if (!wbsd_next_sg(host))
+				if (!wbsd_next_sg(host)) {
+					/*
+					 * We should never reach this point.
+					 * It means that we're trying to
+					 * transfer more blocks than can fit
+					 * into the scatter list.
+					 */
+					BUG_ON(1);
+
+					host->size = data->bytes_xfered;
+
 					return;
+				}
 
 				buffer = wbsd_sg_to_buffer(host);
 			}
@@ -542,12 +637,16 @@ static void wbsd_prepare_data(struct wbsd_host *host, struct mmc_data *data)
 	u16 blksize;
 	u8 setup;
 	unsigned long dmaflags;
-	unsigned int size;
+
+	DBGF("blksz %04x blks %04x flags %08x\n",
+		data->blksz, data->blocks, data->flags);
+	DBGF("tsac %d ms nsac %d clk\n",
+		data->timeout_ns / 1000000, data->timeout_clks);
 
 	/*
 	 * Calculate size.
 	 */
-	size = data->blocks * data->blksz;
+	host->size = data->blocks * data->blksz;
 
 	/*
 	 * Check timeout values for overflow.
@@ -585,7 +684,7 @@ static void wbsd_prepare_data(struct wbsd_host *host, struct mmc_data *data)
 			((blksize >> 4) & 0xF0) | WBSD_DATA_WIDTH);
 		wbsd_write_index(host, WBSD_IDX_PBSLSB, blksize & 0xFF);
 	} else {
-		data->error = -EINVAL;
+		data->error = MMC_ERR_INVALID;
 		return;
 	}
 
@@ -605,9 +704,9 @@ static void wbsd_prepare_data(struct wbsd_host *host, struct mmc_data *data)
 		/*
 		 * The buffer for DMA is only 64 kB.
 		 */
-		BUG_ON(size > 0x10000);
-		if (size > 0x10000) {
-			data->error = -EINVAL;
+		BUG_ON(host->size > 0x10000);
+		if (host->size > 0x10000) {
+			data->error = MMC_ERR_INVALID;
 			return;
 		}
 
@@ -629,7 +728,7 @@ static void wbsd_prepare_data(struct wbsd_host *host, struct mmc_data *data)
 		else
 			set_dma_mode(host->dma, DMA_MODE_WRITE & ~0x40);
 		set_dma_addr(host->dma, host->dma_addr);
-		set_dma_count(host->dma, size);
+		set_dma_count(host->dma, host->size);
 
 		enable_dma(host->dma);
 		release_dma_lock(dmaflags);
@@ -669,7 +768,7 @@ static void wbsd_prepare_data(struct wbsd_host *host, struct mmc_data *data)
 		}
 	}
 
-	data->error = 0;
+	data->error = MMC_ERR_NONE;
 }
 
 static void wbsd_finish_data(struct wbsd_host *host, struct mmc_data *data)
@@ -712,10 +811,6 @@ static void wbsd_finish_data(struct wbsd_host *host, struct mmc_data *data)
 		count = get_dma_residue(host->dma);
 		release_dma_lock(dmaflags);
 
-		data->bytes_xfered = host->mrq->data->blocks *
-			host->mrq->data->blksz - count;
-		data->bytes_xfered -= data->bytes_xfered % data->blksz;
-
 		/*
 		 * Any leftover data?
 		 */
@@ -724,8 +819,7 @@ static void wbsd_finish_data(struct wbsd_host *host, struct mmc_data *data)
 				"%d bytes left.\n",
 				mmc_hostname(host->mmc), count);
 
-			if (!data->error)
-				data->error = -EIO;
+			data->error = MMC_ERR_FAILED;
 		} else {
 			/*
 			 * Transfer data from DMA buffer to
@@ -733,13 +827,12 @@ static void wbsd_finish_data(struct wbsd_host *host, struct mmc_data *data)
 			 */
 			if (data->flags & MMC_DATA_READ)
 				wbsd_dma_to_sg(host, data);
-		}
 
-		if (data->error) {
-			if (data->bytes_xfered)
-				data->bytes_xfered -= data->blksz;
+			data->bytes_xfered = host->size;
 		}
 	}
+
+	DBGF("Ending data transfer (%d bytes)\n", data->bytes_xfered);
 
 	wbsd_request_end(host, host->mrq);
 }
@@ -767,14 +860,32 @@ static void wbsd_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	host->mrq = mrq;
 
 	/*
-	 * Check that there is actually a card in the slot.
+	 * If there is no card in the slot then
+	 * timeout immediatly.
 	 */
 	if (!(host->flags & WBSD_FCARD_PRESENT)) {
-		cmd->error = -ENOMEDIUM;
+		cmd->error = MMC_ERR_TIMEOUT;
 		goto done;
 	}
 
+	/*
+	 * Does the request include data?
+	 */
 	if (cmd->data) {
+		wbsd_prepare_data(host, cmd->data);
+
+		if (cmd->data->error != MMC_ERR_NONE)
+			goto done;
+	}
+
+	wbsd_send_command(host, cmd);
+
+	/*
+	 * If this is a data transfer the request
+	 * will be finished after the data has
+	 * transfered.
+	 */
+	if (cmd->data && (cmd->error == MMC_ERR_NONE)) {
 		/*
 		 * The hardware is so delightfully stupid that it has a list
 		 * of "data" commands. If a command isn't on this list, it'll
@@ -806,30 +917,14 @@ static void wbsd_request(struct mmc_host *mmc, struct mmc_request *mrq)
 				"supported by this controller.\n",
 				mmc_hostname(host->mmc), cmd->opcode);
 #endif
-			cmd->error = -EINVAL;
+			cmd->data->error = MMC_ERR_INVALID;
+
+			if (cmd->data->stop)
+				wbsd_send_command(host, cmd->data->stop);
 
 			goto done;
 		};
-	}
 
-	/*
-	 * Does the request include data?
-	 */
-	if (cmd->data) {
-		wbsd_prepare_data(host, cmd->data);
-
-		if (cmd->data->error)
-			goto done;
-	}
-
-	wbsd_send_command(host, cmd);
-
-	/*
-	 * If this is a data transfer the request
-	 * will be finished after the data has
-	 * transfered.
-	 */
-	if (cmd->data && !cmd->error) {
 		/*
 		 * Dirty fix for hardware bug.
 		 */
@@ -1032,7 +1127,7 @@ static void wbsd_tasklet_card(unsigned long param)
 				mmc_hostname(host->mmc));
 			wbsd_reset(host);
 
-			host->mrq->cmd->error = -ENOMEDIUM;
+			host->mrq->cmd->error = MMC_ERR_FAILED;
 			tasklet_schedule(&host->finish_tasklet);
 		}
 
@@ -1071,7 +1166,7 @@ static void wbsd_tasklet_fifo(unsigned long param)
 	/*
 	 * Done?
 	 */
-	if (host->num_sg == 0) {
+	if (host->size == data->bytes_xfered) {
 		wbsd_write_index(host, WBSD_IDX_FIFOEN, 0);
 		tasklet_schedule(&host->finish_tasklet);
 	}
@@ -1096,7 +1191,7 @@ static void wbsd_tasklet_crc(unsigned long param)
 
 	DBGF("CRC error\n");
 
-	data->error = -EILSEQ;
+	data->error = MMC_ERR_BADCRC;
 
 	tasklet_schedule(&host->finish_tasklet);
 
@@ -1120,7 +1215,7 @@ static void wbsd_tasklet_timeout(unsigned long param)
 
 	DBGF("Timeout\n");
 
-	data->error = -ETIMEDOUT;
+	data->error = MMC_ERR_TIMEOUT;
 
 	tasklet_schedule(&host->finish_tasklet);
 
@@ -1144,6 +1239,30 @@ static void wbsd_tasklet_finish(unsigned long param)
 		goto end;
 
 	wbsd_finish_data(host, data);
+
+end:
+	spin_unlock(&host->lock);
+}
+
+static void wbsd_tasklet_block(unsigned long param)
+{
+	struct wbsd_host *host = (struct wbsd_host *)param;
+	struct mmc_data *data;
+
+	spin_lock(&host->lock);
+
+	if ((wbsd_read_index(host, WBSD_IDX_CRCSTATUS) & WBSD_CRC_MASK) !=
+		WBSD_CRC_OK) {
+		data = wbsd_get_data(host);
+		if (!data)
+			goto end;
+
+		DBGF("CRC error\n");
+
+		data->error = MMC_ERR_BADCRC;
+
+		tasklet_schedule(&host->finish_tasklet);
+	}
 
 end:
 	spin_unlock(&host->lock);
@@ -1179,6 +1298,8 @@ static irqreturn_t wbsd_irq(int irq, void *dev_id)
 		tasklet_hi_schedule(&host->crc_tasklet);
 	if (isr & WBSD_INT_TIMEOUT)
 		tasklet_hi_schedule(&host->timeout_tasklet);
+	if (isr & WBSD_INT_BUSYEND)
+		tasklet_hi_schedule(&host->block_tasklet);
 	if (isr & WBSD_INT_TC)
 		tasklet_schedule(&host->finish_tasklet);
 
@@ -1219,7 +1340,7 @@ static int __devinit wbsd_alloc_mmc(struct device *dev)
 	mmc->f_min = 375000;
 	mmc->f_max = 24000000;
 	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
-	mmc->caps = MMC_CAP_4_BIT_DATA | MMC_CAP_MULTIWRITE;
+	mmc->caps = MMC_CAP_4_BIT_DATA | MMC_CAP_MULTIWRITE | MMC_CAP_BYTEBLOCK;
 
 	spin_lock_init(&host->lock);
 
@@ -1265,7 +1386,7 @@ static int __devinit wbsd_alloc_mmc(struct device *dev)
 	return 0;
 }
 
-static void wbsd_free_mmc(struct device *dev)
+static void __devexit wbsd_free_mmc(struct device *dev)
 {
 	struct mmc_host *mmc;
 	struct wbsd_host *host;
@@ -1357,7 +1478,7 @@ static int __devinit wbsd_request_region(struct wbsd_host *host, int base)
 	return 0;
 }
 
-static void wbsd_release_regions(struct wbsd_host *host)
+static void __devexit wbsd_release_regions(struct wbsd_host *host)
 {
 	if (host->base)
 		release_region(host->base, 8);
@@ -1433,7 +1554,7 @@ err:
 		"Falling back on FIFO.\n", dma);
 }
 
-static void wbsd_release_dma(struct wbsd_host *host)
+static void __devexit wbsd_release_dma(struct wbsd_host *host)
 {
 	if (host->dma_addr) {
 		dma_unmap_single(mmc_dev(host->mmc), host->dma_addr,
@@ -1479,11 +1600,13 @@ static int __devinit wbsd_request_irq(struct wbsd_host *host, int irq)
 			(unsigned long)host);
 	tasklet_init(&host->finish_tasklet, wbsd_tasklet_finish,
 			(unsigned long)host);
+	tasklet_init(&host->block_tasklet, wbsd_tasklet_block,
+			(unsigned long)host);
 
 	return 0;
 }
 
-static void  wbsd_release_irq(struct wbsd_host *host)
+static void __devexit wbsd_release_irq(struct wbsd_host *host)
 {
 	if (!host->irq)
 		return;
@@ -1497,6 +1620,7 @@ static void  wbsd_release_irq(struct wbsd_host *host)
 	tasklet_kill(&host->crc_tasklet);
 	tasklet_kill(&host->timeout_tasklet);
 	tasklet_kill(&host->finish_tasklet);
+	tasklet_kill(&host->block_tasklet);
 }
 
 /*
@@ -1534,7 +1658,7 @@ static int __devinit wbsd_request_resources(struct wbsd_host *host,
  * Release all resources for the host.
  */
 
-static void wbsd_release_resources(struct wbsd_host *host)
+static void __devexit wbsd_release_resources(struct wbsd_host *host)
 {
 	wbsd_release_dma(host);
 	wbsd_release_irq(host);

@@ -21,6 +21,7 @@
 
 int soft_cursor(struct fb_info *info, struct fb_cursor *cursor)
 {
+#if 0	
 	struct fbcon_ops *ops = info->fbcon_par;
 	unsigned int scan_align = info->pixmap.scan_align - 1;
 	unsigned int buf_align = info->pixmap.buf_align - 1;
@@ -73,6 +74,8 @@ int soft_cursor(struct fb_info *info, struct fb_cursor *cursor)
 	fb_pad_aligned_buffer(dst, d_pitch, src, s_pitch, image->height);
 	image->data = dst;
 	info->fbops->fb_imageblit(info, image);
+	
+#endif	
 	return 0;
 }
 

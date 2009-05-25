@@ -52,6 +52,15 @@
 #include <linux/mtd/partitions.h>
 #endif
 
+
+//#define GDEBUG
+#ifdef GDEBUG
+	#define gprintk(fmt, x... ) printk( "%s: " fmt, __FUNCTION__ , ## x)
+#else
+	#define gprintk(x...) do { } while (0)
+#endif
+
+
 /* Define default oob placement schemes for large and small page devices */
 static struct nand_ecclayout nand_oob_8 = {
 	.eccbytes = 3,
@@ -1879,12 +1888,18 @@ static int nand_write_oob(struct mtd_info *mtd, loff_t to,
  *
  * Standard erase command for NAND chips
  */
+extern void pollux_clear_RnB(void); // ghcstop add
+ 
 static void single_erase_cmd(struct mtd_info *mtd, int page)
 {
 	struct nand_chip *chip = mtd->priv;
+	
+	pollux_clear_RnB();
 	/* Send commands to erase a block */
 	chip->cmdfunc(mtd, NAND_CMD_ERASE1, -1, page);
 	chip->cmdfunc(mtd, NAND_CMD_ERASE2, -1, -1);
+	
+	gprintk("single.....erase\n");
 }
 
 /**
@@ -1904,6 +1919,8 @@ static void multi_erase_cmd(struct mtd_info *mtd, int page)
 	chip->cmdfunc(mtd, NAND_CMD_ERASE1, -1, page++);
 	chip->cmdfunc(mtd, NAND_CMD_ERASE1, -1, page);
 	chip->cmdfunc(mtd, NAND_CMD_ERASE2, -1, -1);
+	
+	gprintk("multi.....erase\n");
 }
 
 /**
@@ -1917,6 +1934,8 @@ static int nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 {
 	return nand_erase_nand(mtd, instr, 0);
 }
+
+
 
 #define BBT_PAGE_MASK	0xffffff3f
 /**
@@ -1938,16 +1957,20 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 	DEBUG(MTD_DEBUG_LEVEL3, "nand_erase: start = 0x%08x, len = %i\n",
 	      (unsigned int)instr->addr, (unsigned int)instr->len);
 
+	gprintk("nand_erase: start = 0x%08x, len = %i\n",  (unsigned int)instr->addr, (unsigned int)instr->len);
+	
+
 	/* Start address must align on block boundary */
 	if (instr->addr & ((1 << chip->phys_erase_shift) - 1)) {
 		DEBUG(MTD_DEBUG_LEVEL0, "nand_erase: Unaligned address\n");
+		gprintk("nand_erase: Unaligned address\n");
 		return -EINVAL;
 	}
 
 	/* Length must align on block boundary */
 	if (instr->len & ((1 << chip->phys_erase_shift) - 1)) {
-		DEBUG(MTD_DEBUG_LEVEL0, "nand_erase: "
-		      "Length not block aligned\n");
+		DEBUG(MTD_DEBUG_LEVEL0, "nand_erase: " "Length not block aligned\n");
+		gprintk("nand_erase: " "Length not block aligned\n");
 		return -EINVAL;
 	}
 
@@ -1955,6 +1978,7 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 	if ((instr->len + instr->addr) > mtd->size) {
 		DEBUG(MTD_DEBUG_LEVEL0, "nand_erase: "
 		      "Erase past end of device\n");
+		gprintk("nand_erase: "  "Erase past end of device\n");
 		return -EINVAL;
 	}
 
@@ -2031,6 +2055,9 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 		if (status & NAND_STATUS_FAIL) {
 			DEBUG(MTD_DEBUG_LEVEL0, "nand_erase: "
 			      "Failed erase, page 0x%08x\n", page);
+
+			gprintk("nand_erase: ""Failed erase, page 0x%08x\n", page);
+			
 			instr->state = MTD_ERASE_FAILED;
 			instr->fail_addr = (page << chip->page_shift);
 			goto erase_exit;
@@ -2343,9 +2370,11 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	if (mtd->writesize > 512 && chip->cmdfunc == nand_command)
 		chip->cmdfunc = nand_command_lp;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "NAND device: Manufacturer ID:"
 	       " 0x%02x, Chip ID: 0x%02x (%s %s)\n", *maf_id, dev_id,
 	       nand_manuf_ids[maf_idx].name, type->name);
+#endif
 
 	return type;
 }

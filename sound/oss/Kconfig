@@ -5,6 +5,20 @@
 #
 # Prompt user for primary drivers.
 
+config POLLUX_OSS
+	tristate "POLLUX Device driver for CS42L52 audio codecs using OSS"
+	depends on SOUND && ARCH_POLLUX && I2C_POLLUX && (ARCH_POLLUX_GPH_GBOARD = n)
+	---help---
+	This option enables device driver support for the CS42L52 audio 
+	codecs.  If unsure, say Y.
+
+config POLLUX_OSS_GPH_MINI
+	tristate "POLLUX Device driver for CS42L51 audio codecs using OSS"
+	depends on SOUND && ARCH_POLLUX && I2C_POLLUX && ARCH_POLLUX_GPH_GBOARD
+	---help---
+	This option enables device driver support for the CS42L52 audio 
+	codecs.  If unsure, say Y.
+	
 config SOUND_BCM_CS4297A
 	tristate "Crystal Sound CS4297a (for Swarm)"
 	depends on SOUND_PRIME && SIBYTE_SWARM

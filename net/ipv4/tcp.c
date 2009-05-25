@@ -2517,9 +2517,11 @@ void __init tcp_init(void)
 	sysctl_tcp_rmem[1] = 87380;
 	sysctl_tcp_rmem[2] = max(87380, max_share);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "TCP: Hash tables configured "
 	       "(established %d bind %d)\n",
 	       tcp_hashinfo.ehash_size, tcp_hashinfo.bhash_size);
+#endif
 
 	tcp_register_congestion_control(&tcp_reno);
 }

@@ -269,7 +269,10 @@ int ubifs_bg_thread(void *info)
 		cond_resched();
 	}
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	dbg_msg("background thread \"%s\" stops", c->bgt_name);
+#endif
+	
 	return 0;
 }
 

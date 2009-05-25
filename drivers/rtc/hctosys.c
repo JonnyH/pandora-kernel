@@ -24,6 +24,7 @@
 
 static int __init rtc_hctosys(void)
 {
+	
 	int err;
 	struct rtc_time tm;
 	struct rtc_device *rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
@@ -33,6 +34,7 @@ static int __init rtc_hctosys(void)
 			__FILE__, CONFIG_RTC_HCTOSYS_DEVICE);
 		return -ENODEV;
 	}
+
 
 	err = rtc_read_time(rtc, &tm);
 	if (err == 0) {
@@ -46,22 +48,30 @@ static int __init rtc_hctosys(void)
 
 			do_settimeofday(&tv);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 			dev_info(rtc->dev.parent,
 				"setting system clock to "
 				"%d-%02d-%02d %02d:%02d:%02d UTC (%u)\n",
 				tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 				tm.tm_hour, tm.tm_min, tm.tm_sec,
 				(unsigned int) tv.tv_sec);
+#endif
+
 		}
-		else
+		else{
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE			
 			dev_err(rtc->dev.parent,
 				"hctosys: invalid date/time\n");
+#endif	    
+	    }
 	}
 	else
 		dev_err(rtc->dev.parent,
 			"hctosys: unable to read the hardware clock\n");
 
 	rtc_class_close(rtc);
+
+
 
 	return 0;
 }

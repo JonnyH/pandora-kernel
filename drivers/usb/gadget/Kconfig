@@ -324,6 +324,19 @@ config USB_AT91
 	depends on USB_GADGET_AT91
 	default USB_GADGET
 
+config USB_GADGET_LF1000
+	boolean "LF1000 USB Device Controller"
+	depends on ARCH_POLLUX
+	select USB_GADGET_DUALSPEED
+	help
+		USB Gadget support for LF1000
+
+config USB_LF1000
+	tristate
+	depends on USB_GADGET_LF1000
+	default USB_GADGET
+	select USB_GADGET_SELECTED
+
 config USB_GADGET_DUMMY_HCD
 	boolean "Dummy HCD (DEVELOPMENT)"
 	depends on (USB=y || (USB=m && USB_GADGET=m)) && EXPERIMENTAL

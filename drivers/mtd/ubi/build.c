@@ -43,8 +43,177 @@
 #include <linux/kthread.h>
 #include "ubi.h"
 
+#if 0
+	#define gprintk(fmt, x... ) printk( "%s: " fmt, __FUNCTION__ , ## x)
+#else
+	#define gprintk(x...) do { } while (0)
+#endif
+
+
 /* Maximum length of the 'mtd=' parameter */
 #define MTD_PARAM_LEN_MAX 64
+
+
+/* add by Nancy begin */
+
+/* These are exported solely for the purpose of mtd_blkdevs.c. You
+   should not use them for _anything_ else */
+DEFINE_MUTEX(vol_table_mutex);
+struct ubi_volume *vol_table[UBI_MAX_VOLUMES];
+
+EXPORT_SYMBOL_GPL(vol_table_mutex);
+EXPORT_SYMBOL_GPL(vol_table);
+
+static LIST_HEAD(vol_notifiers);
+
+/**
+ *	add_mtd_device - register an MTD device
+ *	@mtd: pointer to new MTD device info structure
+ *
+ *	Add a device to the list of MTD devices present in the system, and
+ *	notify each currently active MTD 'user' of its arrival. Returns
+ *	zero on success or 1 on failure, which currently will only happen
+ *	if the number of present devices exceeds MAX_MTD_DEVICES (i.e. 16)
+ */
+
+int add_vol_device(struct ubi_volume *vol)
+{
+	int i;
+
+gprintk("1 vol->vol_id = %d, vol->ubi->ubi_num = %d\n", vol->vol_id, vol->ubi->ubi_num);
+
+	if( vol->ubi->ubi_num != 1 )
+		return 0; // just return
+
+	mutex_lock(&vol_table_mutex);
+	if( !vol_table[vol->vol_id] )  // vol->vol_id가 0인 녀석이 NULL인 경우
+	{
+		struct list_head *this;
+
+		vol_table[vol->vol_id] = vol;
+		gprintk("val_table add\n");			
+
+		/* No need to get a refcount on the module containing
+		   the notifier, since we hold the mtd_table_mutex */
+		list_for_each(this, &vol_notifiers) {
+			struct vol_notifier *not = list_entry(this, struct vol_notifier, list);
+			not->add(vol);
+		}
+
+		mutex_unlock(&vol_table_mutex);
+		/* We _know_ we aren't being removed, because
+		   our caller is still holding us here. So none
+		   of this try_ nonsense, and no bitching about it
+		   either. :) */
+		__module_get(THIS_MODULE);
+		return 0;
+	}
+	mutex_unlock(&vol_table_mutex);
+	return 1;
+}
+
+/**
+ *	del_mtd_device - unregister an MTD device
+ *	@mtd: pointer to MTD device info structure
+ *
+ *	Remove a device from the list of MTD devices present in the system,
+ *	and notify each currently active MTD 'user' of its departure.
+ *	Returns zero on success or 1 on failure, which currently will happen
+ *	if the requested device does not appear to be present in the list.
+ */
+
+int del_vol_device (struct ubi_volume *vol)
+{
+	int ret;
+
+	mutex_lock(&vol_table_mutex);
+	if (vol_table[vol->vol_id] != vol) {
+		ret = -ENODEV;
+	} else if (vol->readers ||vol->writers || vol->exclusive) {
+		printk(KERN_NOTICE "Removing MTD device #%d (%s) with use count 0\n",
+		       vol->vol_id, vol->name);
+		ret = -EBUSY;
+	} else {
+		struct list_head *this;
+
+		/* No need to get a refcount on the module containing
+		   the notifier, since we hold the mtd_table_mutex */
+		list_for_each(this, &vol_notifiers) {
+			struct vol_notifier *not = list_entry(this, struct vol_notifier, list);
+			not->remove(vol);
+		}
+
+		vol_table[vol->vol_id] = NULL;
+
+		module_put(THIS_MODULE);
+		ret = 0;
+	}
+	mutex_unlock(&vol_table_mutex);
+	return ret;
+}
+
+/**
+ *	register_mtd_user - register a 'user' of MTD devices.
+ *	@new: pointer to notifier info structure
+ *
+ *	Registers a pair of callbacks function to be called upon addition
+ *	or removal of MTD devices. Causes the 'add' callback to be immediately
+ *	invoked for each MTD device currently present in the system.
+ */
+
+void register_vol_user(struct vol_notifier *new)
+{
+	int i;
+gprintk("1\n");
+	mutex_lock(&vol_table_mutex);
+
+	list_add(&new->list, &vol_notifiers);
+
+ 	__module_get(THIS_MODULE);
+
+	for (i=0; i< UBI_MAX_VOLUMES;  i++)
+		if (vol_table[i])
+			new->add(vol_table[i]);
+
+	mutex_unlock(&vol_table_mutex);
+}
+
+/**
+ *	unregister_mtd_user - unregister a 'user' of MTD devices.
+ *	@old: pointer to notifier info structure
+ *
+ *	Removes a callback function pair from the list of 'users' to be
+ *	notified upon addition or removal of MTD devices. Causes the
+ *	'remove' callback to be immediately invoked for each MTD device
+ *	currently present in the system.
+ */
+
+int unregister_vol_user(struct vol_notifier *old)
+{
+	int i;
+
+gprintk("1\n");
+	mutex_lock(&vol_table_mutex);
+
+	module_put(THIS_MODULE);
+
+	for (i=0; i< UBI_MAX_VOLUMES; i++)
+		if (vol_table[i])
+			old->remove(vol_table[i]);
+
+	list_del(&old->list);
+	mutex_unlock(&vol_table_mutex);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(add_vol_device);
+EXPORT_SYMBOL_GPL(del_vol_device);
+EXPORT_SYMBOL_GPL(register_vol_user);
+EXPORT_SYMBOL_GPL(unregister_vol_user);
+
+/* add by Nancy end*/
+
+
+
 
 /**
  * struct mtd_dev_param - MTD device parameter description data structure.
@@ -83,6 +252,7 @@ DEFINE_MUTEX(ubi_devices_mutex);
 
 /* Protects @ubi_devices and @ubi->ref_count */
 static DEFINE_SPINLOCK(ubi_devices_lock);
+EXPORT_SYMBOL_GPL(ubi_devices_lock);
 
 /* "Show" method for files in '/<sysfs>/class/ubi/' */
 static ssize_t ubi_version_show(struct class *class, char *buf)
@@ -139,6 +309,7 @@ struct ubi_device *ubi_get_device(int ubi_num)
 	if (ubi) {
 		ubi_assert(ubi->ref_count >= 0);
 		ubi->ref_count += 1;
+		gprintk("ubi_num = %d, refcount = %d\n", ubi_num, ubi->ref_count);
 		get_device(&ubi->dev);
 	}
 	spin_unlock(&ubi_devices_lock);
@@ -201,8 +372,10 @@ int ubi_major2num(int major)
 	spin_lock(&ubi_devices_lock);
 	for (i = 0; i < UBI_MAX_DEVICES; i++) {
 		struct ubi_device *ubi = ubi_devices[i];
-
-		if (ubi && MAJOR(ubi->cdev.dev) == major) {
+gprintk("major = %d, i = %d, ubi->ubi_num = %d\n", major, i, ubi->ubi_num);
+		if ( (ubi && MAJOR(ubi->cdev.dev) == major) ||
+			(ubi && ubi->bdev_major == major)) {
+			
 			ubi_num = ubi->ubi_num;
 			break;
 		}
@@ -211,6 +384,8 @@ int ubi_major2num(int major)
 
 	return ubi_num;
 }
+EXPORT_SYMBOL_GPL(ubi_major2num);
+
 
 /* "Show" method for files in '/<sysfs>/class/ubi/ubiX/' */
 static ssize_t dev_attribute_show(struct device *dev,
@@ -650,6 +825,7 @@ static int io_init(struct ubi_device *ubi)
 		ubi->ro_mode = 1;
 	}
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	ubi_msg("physical eraseblock size:   %d bytes (%d KiB)",
 		ubi->peb_size, ubi->peb_size >> 10);
 	ubi_msg("logical eraseblock size:    %d bytes", ubi->leb_size);
@@ -660,6 +836,7 @@ static int io_init(struct ubi_device *ubi)
 	ubi_msg("VID header offset:          %d (aligned %d)",
 		ubi->vid_hdr_offset, ubi->vid_hdr_aloffset);
 	ubi_msg("data offset:                %d", ubi->leb_start);
+#endif
 
 	/*
 	 * Note, ideally, we have to initialize ubi->bad_peb_count here. But
@@ -723,6 +900,18 @@ static int autoresize(struct ubi_device *ubi, int vol_id)
 		vol->name, old_reserved_pebs, vol->reserved_pebs);
 	return 0;
 }
+
+
+/* add by Nancy */
+static int bdev_init(struct ubi_device *ubi){
+	int i;
+	for(i=0; i<ubi->vtbl_slots; i++)
+		if(ubi->volumes[i])
+			add_vol_device(ubi->volumes[i]);
+	return 0;
+}
+
+
 
 /**
  * ubi_attach_mtd_dev - attach an MTD device.
@@ -809,7 +998,9 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 	mutex_init(&ubi->volumes_mutex);
 	spin_lock_init(&ubi->volumes_lock);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	ubi_msg("attaching mtd%d to ubi%d", mtd->index, ubi_num);
+#endif
 
 	err = io_init(ubi);
 	if (err)
@@ -846,6 +1037,14 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 	if (err)
 		goto out_nofree;
 
+	if( ubi_num == 1 )
+	{
+		gprintk("..............aaaaaaaaaaaa...........\n");
+		err = bdev_init(ubi);
+		if(err)
+			goto out_nofree; // ghcstop: change out_detach ==> out_nofree
+	}
+
 	ubi->bgt_thread = kthread_create(ubi_thread, ubi, ubi->bgt_name);
 	if (IS_ERR(ubi->bgt_thread)) {
 		err = PTR_ERR(ubi->bgt_thread);
@@ -854,6 +1053,7 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 		goto out_uif;
 	}
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	ubi_msg("attached mtd%d to ubi%d", mtd->index, ubi_num);
 	ubi_msg("MTD device name:            \"%s\"", mtd->name);
 	ubi_msg("MTD device size:            %llu MiB", ubi->flash_size >> 20);
@@ -869,6 +1069,8 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 	ubi_msg("number of PEBs reserved for bad PEB handling: %d",
 		ubi->beb_rsvd_pebs);
 	ubi_msg("max/mean erase counter: %d/%d", ubi->max_ec, ubi->mean_ec);
+#endif
+
 
 	if (!DBG_DISABLE_BGT)
 		ubi->thread_enabled = 1;

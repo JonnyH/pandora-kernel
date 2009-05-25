@@ -59,7 +59,8 @@
 #define DEFAULT_MAX_RP_SIZE (5*1024*1024)
 
 /* Default UBIFS compressor */
-#define DEFAULT_COMPRESSOR UBIFS_COMPR_LZO
+//#define DEFAULT_COMPRESSOR UBIFS_COMPR_LZO
+#define DEFAULT_COMPRESSOR UBIFS_COMPR_NONE // ghcstop fix ==> default to non compress
 
 /* Default time granularity in nanoseconds */
 #define DEFAULT_TIME_GRAN 1000000000

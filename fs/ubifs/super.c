@@ -1057,7 +1057,9 @@ static int mount_ubifs(struct ubifs_info *c)
 		goto out_master;
 
 	if ((c->mst_node->flags & cpu_to_le32(UBIFS_MST_DIRTY)) != 0) {
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE		
 		ubifs_msg("recovery needed");
+#endif
 		c->need_recovery = 1;
 		if (!mounted_read_only) {
 			err = ubifs_recover_inl_heads(c, c->sbuf);
@@ -1139,7 +1141,9 @@ static int mount_ubifs(struct ubifs_info *c)
 			ubifs_msg("recovery deferred");
 		else {
 			c->need_recovery = 0;
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE			
 			ubifs_msg("recovery completed");
+#endif
 		}
 	}
 
@@ -1147,10 +1151,14 @@ static int mount_ubifs(struct ubifs_info *c)
 	if (err)
 		goto out_infos;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	ubifs_msg("mounted UBI device %d, volume %d, name \"%s\"",
 		  c->vi.ubi_num, c->vi.vol_id, c->vi.name);
+
+
 	if (mounted_read_only)
 		ubifs_msg("mounted read-only");
+	
 	x = (long long)c->main_lebs * c->leb_size;
 	ubifs_msg("file system size: %lld bytes (%lld KiB, %lld MiB, %d LEBs)",
 		  x, x >> 10, x >> 20, c->main_lebs);
@@ -1160,6 +1168,7 @@ static int mount_ubifs(struct ubifs_info *c)
 	ubifs_msg("default compressor: %s", ubifs_compr_name(c->default_compr));
 	ubifs_msg("media format %d, latest format %d",
 		  c->fmt_version, UBIFS_FORMAT_VERSION);
+#endif
 
 	dbg_msg("compiled on:         " __DATE__ " at " __TIME__);
 	dbg_msg("min. I/O unit size:  %d bytes", c->min_io_size);

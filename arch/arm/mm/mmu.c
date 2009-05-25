@@ -372,8 +372,11 @@ static void __init build_mem_type_table(void)
 		mem_types[MT_CACHECLEAN].prot_sect |= PMD_SECT_WB;
 		break;
 	}
+
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE	
 	printk("Memory policy: ECC %sabled, Data cache %s\n",
 		ecc_mask ? "en" : "dis", cp->policy);
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(mem_types); i++) {
 		struct mem_type *t = &mem_types[i];
@@ -510,9 +513,11 @@ void __init create_mapping(struct map_desc *md)
 	pgd_t *pgd;
 
 	if (md->virtual != vectors_base() && md->virtual < TASK_SIZE) {
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 		printk(KERN_WARNING "BUG: not creating mapping for "
 		       "0x%08llx at 0x%08lx in user region\n",
 		       __pfn_to_phys((u64)md->pfn), md->virtual);
+#endif		
 		return;
 	}
 

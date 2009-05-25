@@ -165,8 +165,10 @@ struct net *copy_net_ns(unsigned long flags, struct net *old_net)
 static int __init net_ns_init(void)
 {
 	int err;
-
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "net_namespace: %zd bytes\n", sizeof(struct net));
+#endif
+	
 #ifdef CONFIG_NET_NS
 	net_cachep = kmem_cache_create("net_namespace", sizeof(struct net),
 					SMP_CACHE_BYTES,

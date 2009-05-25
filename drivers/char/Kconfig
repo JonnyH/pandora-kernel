@@ -1032,6 +1032,26 @@ config TELCLOCK
 	  /sys/devices/platform/telco_clock, with a number of files for
 	  controlling the behavior of this hardware.
 
+config POLLUX_GA3D
+    tristate "Device driver for pollux Graphics Accelerator 3D"
+    depends on ARCH_POLLUX
+    help
+        This option enables ddvice driver support fo POLLUX Graphics Accelerator 3D.
+        
+config POLLUX_KEY_TO_GPIO
+	tristate "Pollux Key Interfcae driver"
+	depends on ARCH_POLLUX				
+	default y
+	help
+		POLLUX Development kit 4Port Joy Stick Interface Driver"
+
+config POLLUX_POWER_BUTTON_CHECK
+	tristate "Pollux Power button driver"
+	depends on ARCH_POLLUX && ARCH_POLLUX_GPH_GBOARD			
+	default y
+	help
+		Game park Holdings Main Power Off Check Driver"
+
 config DEVPORT
 	bool
 	depends on !M68K

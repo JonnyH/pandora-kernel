@@ -1523,7 +1523,9 @@ static int __init loop_init(void)
 	blk_register_region(MKDEV(LOOP_MAJOR, 0), range,
 				  THIS_MODULE, loop_probe, NULL, NULL);
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "loop: module loaded\n");
+#endif
 	return 0;
 
 Enomem:

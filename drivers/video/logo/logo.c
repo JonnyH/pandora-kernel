@@ -33,6 +33,8 @@ extern const struct linux_logo logo_superh_mono;
 extern const struct linux_logo logo_superh_vga16;
 extern const struct linux_logo logo_superh_clut224;
 extern const struct linux_logo logo_m32r_clut224;
+extern const struct linux_logo logo_gph_clut224;
+extern const struct linux_logo logo_gph240320_clut224;
 
 static int nologo;
 module_param(nologo, bool, 0);
@@ -76,10 +78,20 @@ const struct linux_logo * __init_refok fb_find_logo(int depth)
 		/* Generic Linux logo */
 		logo = &logo_linux_clut224;
 #endif
+
+#ifdef CONFIG_LOGO_LINUX_GPH
+		logo = &logo_gph_clut224;
+#endif		
+
+#ifdef CONFIG_LOGO_LINUX_GPH240320
+		logo = &logo_gph240320_clut224;
+#endif
+
 #ifdef CONFIG_LOGO_DEC_CLUT224
 		/* DEC Linux logo on MIPS/MIPS64 or ALPHA */
 		logo = &logo_dec_clut224;
 #endif
+
 #ifdef CONFIG_LOGO_MAC_CLUT224
 		/* Macintosh Linux logo on m68k */
 		if (MACH_IS_MAC)

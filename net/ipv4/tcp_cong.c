@@ -51,7 +51,9 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 		ret = -EEXIST;
 	} else {
 		list_add_tail_rcu(&ca->list, &tcp_cong_list);
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE		
 		printk(KERN_INFO "TCP %s registered\n", ca->name);
+#endif	
 	}
 	spin_unlock(&tcp_cong_list_lock);
 

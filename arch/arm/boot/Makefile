@@ -27,7 +27,7 @@ INITRD_PHYS := $(initrd_phys-y)
 
 export ZRELADDR INITRD_PHYS PARAMS_PHYS
 
-targets := Image zImage xipImage bootpImage uImage
+targets := Image zImage xipImage bootpImage uImage gk
 
 ifeq ($(CONFIG_XIP_KERNEL),y)
 
@@ -64,9 +64,25 @@ quiet_cmd_uimage = UIMAGE  $@
 		   -C none -a $(ZRELADDR) -e $(ZRELADDR) \
 		   -n 'Linux-$(KERNELRELEASE)' -d $< $@
 
-$(obj)/uImage:	$(obj)/zImage FORCE
+#quiet_cmd_uimage = UIMAGE  $@
+#      cmd_uimage = $(CONFIG_SHELL) $(MKIMAGE) -A arm -O linux -T kernel \
+#		   -C gzip -a $(ZRELADDR) -e $(ZRELADDR) \
+#		   -n 'Linux-$(KERNELRELEASE)' -d $< $@
+
+#$(obj)/uImage:	$(obj)/zImage FORCE
+#	$(call if_changed,uimage)
+#	@echo '  Image $@ is ready'
+
+#$(obj)/Image.gz:        $(obj)/Image FORCE
+#	$(call if_changed,gzip)
+#	@echo '  Compressed image $@ is ready'
+
+$(obj)/gk:      $(obj)/Image FORCE
 	$(call if_changed,uimage)
-	@echo '  Image $@ is ready'
+	#cp -f arch/arm/boot/gk /korea-dokdo/tftpboot/uImage
+	cp -f arch/arm/boot/gk /tftpboot/uImage
+	@echo '  Image for u-boot $@ is ready'
+
 
 $(obj)/bootp/bootp: $(obj)/zImage initrd FORCE
 	$(Q)$(MAKE) $(build)=$(obj)/bootp $@

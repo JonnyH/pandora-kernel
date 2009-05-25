@@ -182,7 +182,9 @@ void __init check_writebuffer_bugs(void)
 	const char *reason;
 	unsigned long v = 1;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "CPU: Testing write buffer coherency: ");
+#endif
 
 	page = alloc_page(GFP_KERNEL);
 	if (page) {
@@ -212,6 +214,8 @@ void __init check_writebuffer_bugs(void)
 		printk("failed, %s\n", reason);
 		shared_pte_mask |= L_PTE_BUFFERABLE;
 	} else {
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE		
 		printk("ok\n");
+#endif		
 	}
 }

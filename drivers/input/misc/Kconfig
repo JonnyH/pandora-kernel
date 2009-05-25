@@ -183,4 +183,10 @@ config HP_SDC_RTC
 	  Say Y here if you want to support the built-in real time clock
 	  of the HP SDC controller.
 
+config POLLUX_BATTRY_CHECK
+	depends on ARCH_POLLUX && ARCH_POLLUX_GPH_GBOARD
+	tristate "Magic Eyes POLLUX Battry Volatage"
+	help
+	  This enables support for the Magic eyes pollux battry volatage cpu interface.
+
 endif

@@ -190,8 +190,8 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Default value for CROSS_COMPILE is not to prefix executables
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 
-ARCH		?= $(SUBARCH)
-CROSS_COMPILE	?=
+ARCH		?= arm
+CROSS_COMPILE	?= arm-linux-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -574,6 +574,11 @@ export	INSTALL_PATH ?= /boot
 # relocations required by build roots.  This is not defined in the
 # makefile but the argument can be passed to make if needed.
 #
+# ghcstop add
+INSTALL_MOD_PATH := $(shell \
+	if [ -f .insignal_module_installdir ]; then \
+	echo -n "`cat .insignal_module_installdir`"; \
+	fi)
 
 MODLIB	= $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 export MODLIB

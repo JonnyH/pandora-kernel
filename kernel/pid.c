@@ -674,10 +674,11 @@ void __init pidhash_init(void)
 	pidhash_shift = max(4, fls(megabytes * 4));
 	pidhash_shift = min(12, pidhash_shift);
 	pidhash_size = 1 << pidhash_shift;
-
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk("PID hash table entries: %d (order: %d, %Zd bytes)\n",
 		pidhash_size, pidhash_shift,
 		pidhash_size * sizeof(struct hlist_head));
+#endif
 
 	pid_hash = alloc_bootmem(pidhash_size *	sizeof(*(pid_hash)));
 	if (!pid_hash)

@@ -377,6 +377,13 @@ config ARCH_S3C2410
 	  BAST (<http://www.simtec.co.uk/products/EB110ITX/>), the IPAQ 1940 or
 	  the Samsung SMDK2410 development board (and derivatives).
 
+config ARCH_POLLUX
+    bool "Magiceyes POLLUX(VR3520F)"
+	select ISA
+    help
+	  Magiceyes Inc. POLLUX(VR3520F) linux port(http://www.aesop-embedded.org)
+	  
+
 config ARCH_SHARK
 	bool "Shark"
 	select ISA
@@ -452,6 +459,8 @@ source "arch/arm/mach-s3c2440/Kconfig"
 source "arch/arm/mach-s3c2442/Kconfig"
 source "arch/arm/mach-s3c2443/Kconfig"
 endif
+
+source "arch/arm/mach-pollux/Kconfig"
 
 source "arch/arm/mach-lh7a40x/Kconfig"
 
@@ -1010,7 +1019,7 @@ source "drivers/misc/Kconfig"
 if PCMCIA || ARCH_CLPS7500 || ARCH_IOP32X || ARCH_IOP33X || ARCH_IXP4XX \
 	|| ARCH_L7200 || ARCH_LH7A40X || ARCH_PXA || ARCH_RPC \
 	|| ARCH_S3C2410 || ARCH_SA1100 || ARCH_SHARK || FOOTBRIDGE \
-	|| ARCH_IXP23XX
+	|| ARCH_IXP23XX || ARCH_POLLUX
 source "drivers/ide/Kconfig"
 endif
 

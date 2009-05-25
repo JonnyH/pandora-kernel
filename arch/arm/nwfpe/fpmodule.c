@@ -96,9 +96,11 @@ static int __init fpe_init(void)
 	if (fpe_type[0] && strcmp(fpe_type, "nwfpe"))
 		return 0;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	/* Display title, version and copyright information. */
 	printk(KERN_WARNING "NetWinder Floating Point Emulator V0.97 ("
 	       NWFPE_BITS " precision)\n");
+#endif
 
 	thread_register_notifier(&nwfpe_notifier_block);
 

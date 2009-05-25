@@ -306,4 +306,28 @@ config MTD_ALAUDA
 	  These two (and possibly other) Alauda-based cardreaders for
 	  SmartMedia and xD allow raw flash access.
 
+config MTD_NAND_POLLUX
+	bool "NAND Flash device on POLLUX board(SLC)"
+	depends on ARCH_POLLUX
+	help
+	  Support for NAND flash on Pollux based platform.
+
+choice
+        prompt "Pollux NAND Map setting"
+        depends on ARCH_POLLUX
+        help
+           Pollux NAND map setting(SLC/MLC)
+
+config MTD_NAND_SLCMAP_POLLUX
+        bool "SLC-K9F1208:64M"
+        help
+          SLC nand map(K9F1208 64MiB)
+
+config MTD_NAND_MLCMAP_POLLUX
+        bool "MLC-K9G8G08U0A:1024MiB)"
+        help
+          MLC nand map(K9G8G08U0A 1024M)
+
+endchoice
+
 endif # MTD_NAND

@@ -1143,8 +1143,10 @@ void register_console(struct console *console)
 		unregister_console(bootconsole);
 		console->flags &= ~CON_PRINTBUFFER;
 	} else {
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE		
 		printk(KERN_INFO "console [%s%d] enabled\n",
 		       console->name, console->index);
+#endif		       
 	}
 
 	/*

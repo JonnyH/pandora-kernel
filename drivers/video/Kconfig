@@ -1848,6 +1848,45 @@ config FB_IBM_GXT4500
 	  Say Y here to enable support for the IBM GXT4500P display
 	  adaptor, found on some IBM System P (pSeries) machines.
 
+config FB_POLLUX
+	tristate "MagicEyes POLLUX framebuffer support"
+	depends on FB && ARCH_POLLUX
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	---help---
+	  Frame buffer driver for the built-in LCD controller in the Magiceyes Inc.
+	  POLLUX processor.
+	  Say Y here to enable support for the POLLUX display adaptor. 
+
+config FB_POLLUX_LCD43
+	bool "4.3 inch  480 x 272 Samsung TFT-lcd(LTE430WQ) support"
+	depends on FB_POLLUX && (ARCH_POLLUX_GPH_GBOARD = n)
+	default y 	
+	---help---
+		The timing POLLUX lcd controller setting to samsung tft-lcd.
+		
+config FB_POLLUX_LCD43_24BIT
+	bool "Samsung lcd 24bit mode support"
+	depends on FB_POLLUX_LCD43
+	default n
+	---help---
+		This is a 24bit mode, the output when using the lcd.
+		
+config FB_POLLUX_LCD28
+	bool "2.8 inch  240x320 OLED-lcd support"
+	depends on FB_POLLUX && ARCH_POLLUX_GPH_GBOARD
+	default y
+	---help---
+		The timing POLLUX lcd controller setting to 2.8 inches.
+
+config FB_POLLUX_LCD28240x320
+    bool "Vertical No Directiron"
+    depends on FB_POLLUX && ARCH_POLLUX_GPH_GBOARD && FB_POLLUX_LCD28 && (ARCH_ADD_GPH_F300 = n)
+    default y
+    ---help---
+		This is check OLED-LCD directirin check mode  
+		
 config FB_PS3
 	tristate "PS3 GPU framebuffer driver"
 	depends on FB && PS3_PS3AV

@@ -1361,8 +1361,11 @@ int ubi_thread(void *u)
 	int failures = 0;
 	struct ubi_device *ubi = u;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	ubi_msg("background thread \"%s\" started, PID %d",
 		ubi->bgt_name, task_pid_nr(current));
+#endif
+
 
 	set_freezable();
 	for (;;) {

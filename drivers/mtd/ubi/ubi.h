@@ -154,6 +154,13 @@ struct ubi_rename_entry {
 
 struct ubi_volume_desc;
 
+struct vol_notifier {
+	void (*add)(struct ubi_volume *vol);
+	void (*remove)(struct ubi_volume *vol);
+	struct list_head list;
+};
+
+
 /**
  * struct ubi_volume - UBI volume description data structure.
  * @dev: device object to make use of the the Linux device model
@@ -253,6 +260,7 @@ struct ubi_volume {
 	int gluebi_refcount;
 	struct mtd_info gluebi_mtd;
 #endif
+	int  bdev_mode;  //add by Nancy
 };
 
 /**
@@ -359,6 +367,7 @@ struct ubi_wl_entry;
  */
 struct ubi_device {
 	struct cdev cdev;
+	int bdev_major;  //add by Nancy	
 	struct device dev;
 	int ubi_num;
 	char ubi_name[sizeof(UBI_NAME_STR)+5];

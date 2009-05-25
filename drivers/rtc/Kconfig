@@ -461,4 +461,17 @@ config RTC_DRV_RS5C313
 	help
 	  If you say yes here you get support for the Ricoh RS5C313 RTC chips.
 
+
+config RTC_DRV_POLLUX
+        tristate "Pollux RTC"
+        depends on RTC_CLASS && ARCH_POLLUX && (ARCH_POLLUX_GPH_GBOARD = n)
+        help
+          RTC driver for Magic Eyes POLLUX	  
+
+config RTC_DRV_POLLUX_M41T80
+        tristate "M41T80 RTC"
+        depends on RTC_CLASS && ARCH_POLLUX && ARCH_POLLUX_GPH_GBOARD
+        help
+	      If you say yes here you get support for the ST M41T80 RTC chip.
+
 endif # RTC_CLASS

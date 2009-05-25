@@ -417,7 +417,7 @@ int msdos_partition(struct parsed_partitions *state, struct block_device *bdev)
 {
 	int sector_size = bdev_hardsect_size(bdev) / 512;
 	Sector sect;
-	unsigned char *data;
+	unsigned char *data,*ptr;
 	struct partition *p;
 	int slot;
 
@@ -434,6 +434,36 @@ int msdos_partition(struct parsed_partitions *state, struct block_device *bdev)
 		printk( " [AIX]");
 		return 0;
 	}
+
+
+#if 1 /* HYUN_DEBUG */
+/*  
+        some media hasn't partition table(or MBR)
+        in this case, asume boot record is located in address 0 
+*/        
+    
+    /* PRB only for FAT16 */
+    ptr =  data + 0x36;
+    if( strncmp(ptr, "FAT", 3) == 0) {
+        ptr = data + 0x20;
+        state->next = 5;
+        put_partition(state, 1, 0, le32_to_cpu(*(unsigned long*)ptr)*sector_size);
+        put_dev_sector(sect);
+        return 1;
+    }
+        
+    /* PRB only for FAT32 */
+    ptr = data + 0x52;
+    if( strncmp(ptr, "FAT", 3) == 0) {
+        ptr = data + 0x20;
+        state->next = 5;
+        put_partition(state, 1, 0, le32_to_cpu(*(unsigned long*)ptr)*sector_size);
+        put_dev_sector(sect);
+        return 1;
+    }
+
+#endif
+
 
 	/*
 	 * Now that the 55aa signature is present, this is probably

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/mmc/host/omap.c
+ *  linux/drivers/media/mmc/omap.c
  *
  *  Copyright (C) 2004 Nokia Corporation
  *  Written by Tuukka Tikkanen and Juha Yrjölä<juha.yrjola@nokia.com>
@@ -24,10 +24,10 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 #include <linux/clk.h>
-#include <linux/scatterlist.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/scatterlist.h>
 #include <asm/mach-types.h>
 
 #include <asm/arch/board.h>
@@ -263,7 +263,7 @@ mmc_omap_xfer_done(struct mmc_omap_host *host, struct mmc_data *data)
 		enum dma_data_direction dma_data_dir;
 
 		BUG_ON(host->dma_ch < 0);
-		if (data->error)
+		if (data->error != MMC_ERR_NONE)
 			omap_stop_dma(host->dma_ch);
 		/* Release DMA channel lazily */
 		mod_timer(&host->dma_timer, jiffies + HZ);
@@ -368,7 +368,7 @@ mmc_omap_cmd_done(struct mmc_omap_host *host, struct mmc_command *cmd)
 		}
 	}
 
-	if (host->data == NULL || cmd->error) {
+	if (host->data == NULL || cmd->error != MMC_ERR_NONE) {
 		host->mrq = NULL;
 		clk_disable(host->fclk);
 		mmc_request_done(host->mmc, cmd->mrq);
@@ -383,7 +383,7 @@ mmc_omap_sg_to_buf(struct mmc_omap_host *host)
 
 	sg = host->data->sg + host->sg_idx;
 	host->buffer_bytes_left = sg->length;
-	host->buffer = sg_virt(sg);
+	host->buffer = page_address(sg->page) + sg->offset;
 	if (host->buffer_bytes_left > host->total_bytes_left)
 		host->buffer_bytes_left = host->total_bytes_left;
 }
@@ -475,14 +475,14 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 		if (status & OMAP_MMC_STAT_DATA_TOUT) {
 			dev_dbg(mmc_dev(host->mmc), "data timeout\n");
 			if (host->data) {
-				host->data->error = -ETIMEDOUT;
+				host->data->error |= MMC_ERR_TIMEOUT;
 				transfer_error = 1;
 			}
 		}
 
 		if (status & OMAP_MMC_STAT_DATA_CRC) {
 			if (host->data) {
-				host->data->error = -EILSEQ;
+				host->data->error |= MMC_ERR_BADCRC;
 				dev_dbg(mmc_dev(host->mmc),
 					 "data CRC error, bytes left %d\n",
 					host->total_bytes_left);
@@ -504,7 +504,7 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 					dev_err(mmc_dev(host->mmc),
 						"command timeout, CMD %d\n",
 						host->cmd->opcode);
-				host->cmd->error = -ETIMEDOUT;
+				host->cmd->error = MMC_ERR_TIMEOUT;
 				end_command = 1;
 			}
 		}
@@ -514,7 +514,7 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 				dev_err(mmc_dev(host->mmc),
 					"command CRC error (CMD%d, arg 0x%08x)\n",
 					host->cmd->opcode, host->cmd->arg);
-				host->cmd->error = -EILSEQ;
+				host->cmd->error = MMC_ERR_BADCRC;
 				end_command = 1;
 			} else
 				dev_err(mmc_dev(host->mmc),
@@ -522,10 +522,28 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 		}
 
 		if (status & OMAP_MMC_STAT_CARD_ERR) {
-			dev_dbg(mmc_dev(host->mmc),
-				"ignoring card status error (CMD%d)\n",
+			if (host->cmd && host->cmd->opcode == MMC_STOP_TRANSMISSION) {
+				u32 response = OMAP_MMC_READ(host, RSP6)
+					| (OMAP_MMC_READ(host, RSP7) << 16);
+				/* STOP sometimes sets must-ignore bits */
+				if (!(response & (R1_CC_ERROR
+								| R1_ILLEGAL_COMMAND
+								| R1_COM_CRC_ERROR))) {
+					end_command = 1;
+					continue;
+				}
+			}
+
+			dev_dbg(mmc_dev(host->mmc), "card status error (CMD%d)\n",
 				host->cmd->opcode);
-			end_command = 1;
+			if (host->cmd) {
+				host->cmd->error = MMC_ERR_FAILED;
+				end_command = 1;
+			}
+			if (host->data) {
+				host->data->error = MMC_ERR_FAILED;
+				transfer_error = 1;
+			}
 		}
 
 		/*
@@ -586,7 +604,7 @@ static void mmc_omap_switch_handler(struct work_struct *work)
 	}
 	if (mmc_omap_cover_is_open(host)) {
 		if (!complained) {
-			dev_info(mmc_dev(host->mmc), "cover is open\n");
+			dev_info(mmc_dev(host->mmc), "cover is open");
 			complained = 1;
 		}
 		if (mmc_omap_enable_poll)
@@ -918,54 +936,47 @@ static void mmc_omap_power(struct mmc_omap_host *host, int on)
 	}
 }
 
-static int mmc_omap_calc_divisor(struct mmc_host *mmc, struct mmc_ios *ios)
-{
-	struct mmc_omap_host *host = mmc_priv(mmc);
-	int func_clk_rate = clk_get_rate(host->fclk);
-	int dsor;
-
-	if (ios->clock == 0)
-		return 0;
-
-	dsor = func_clk_rate / ios->clock;
-	if (dsor < 1)
-		dsor = 1;
-
-	if (func_clk_rate / dsor > ios->clock)
-		dsor++;
-
-	if (dsor > 250)
-		dsor = 250;
-	dsor++;
-
-	if (ios->bus_width == MMC_BUS_WIDTH_4)
-		dsor |= 1 << 15;
-
-	return dsor;
-}
-
 static void mmc_omap_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct mmc_omap_host *host = mmc_priv(mmc);
 	int dsor;
-	int i;
+	int realclock, i;
 
-	dsor = mmc_omap_calc_divisor(mmc, ios);
-	host->bus_mode = ios->bus_mode;
-	host->hw_bus_mode = host->bus_mode;
+	realclock = ios->clock;
+
+	if (ios->clock == 0)
+		dsor = 0;
+	else {
+		int func_clk_rate = clk_get_rate(host->fclk);
+
+		dsor = func_clk_rate / realclock;
+		if (dsor < 1)
+			dsor = 1;
+
+		if (func_clk_rate / dsor > realclock)
+			dsor++;
+
+		if (dsor > 250)
+			dsor = 250;
+		dsor++;
+
+		if (ios->bus_width == MMC_BUS_WIDTH_4)
+			dsor |= 1 << 15;
+	}
 
 	switch (ios->power_mode) {
 	case MMC_POWER_OFF:
 		mmc_omap_power(host, 0);
 		break;
 	case MMC_POWER_UP:
-		/* Cannot touch dsor yet, just power up MMC */
-		mmc_omap_power(host, 1);
-		return;
 	case MMC_POWER_ON:
+		mmc_omap_power(host, 1);
 		dsor |= 1 << 11;
 		break;
 	}
+
+	host->bus_mode = ios->bus_mode;
+	host->hw_bus_mode = host->bus_mode;
 
 	clk_enable(host->fclk);
 
@@ -975,7 +986,7 @@ static void mmc_omap_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	 * Writing to the CON register twice seems to do the trick. */
 	for (i = 0; i < 2; i++)
 		OMAP_MMC_WRITE(host, CON, dsor);
-	if (ios->power_mode == MMC_POWER_ON) {
+	if (ios->power_mode == MMC_POWER_UP) {
 		/* Send clock cycles, poll completion */
 		OMAP_MMC_WRITE(host, IE, 0);
 		OMAP_MMC_WRITE(host, STAT, 0xffff);

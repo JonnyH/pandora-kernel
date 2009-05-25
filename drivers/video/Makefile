@@ -105,6 +105,7 @@ obj-$(CONFIG_FB_PMAGB_B)	  += pmagb-b-fb.o
 obj-$(CONFIG_FB_MAXINE)		  += maxinefb.o
 obj-$(CONFIG_FB_S1D13XXX)	  += s1d13xxxfb.o
 obj-$(CONFIG_FB_IMX)              += imxfb.o
+obj-$(CONFIG_FB_POLLUX)	  	  	  += pollux_fb.o pollux_fb_ioctl.o pollux_mlc.o pollux_dpc.o pollux_idct.o pollux_pwm.o
 obj-$(CONFIG_FB_S3C2410)	  += s3c2410fb.o
 obj-$(CONFIG_FB_PNX4008_DUM)	  += pnx4008/
 obj-$(CONFIG_FB_PNX4008_DUM_RGB)  += pnx4008/

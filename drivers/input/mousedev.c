@@ -1083,9 +1083,9 @@ static int __init mousedev_init(void)
 	else
 		psaux_registered = 1;
 #endif
-
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "mice: PS/2 mouse device common for all mice\n");
-
+#endif
 	return 0;
 }
 

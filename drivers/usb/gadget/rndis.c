@@ -1410,7 +1410,7 @@ static struct proc_dir_entry *rndis_connect_state [RNDIS_MAX_CONFIGS];
 int __devinit rndis_init (void)
 {
 	u8 i;
-
+    
 	for (i = 0; i < RNDIS_MAX_CONFIGS; i++) {
 #ifdef	CONFIG_USB_GADGET_DEBUG_FILES
 		char name [20];

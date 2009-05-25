@@ -60,6 +60,10 @@ obj-$(CONFIG_HVCS)		+= hvcs.o
 obj-$(CONFIG_SGI_MBCS)		+= mbcs.o
 obj-$(CONFIG_BRIQ_PANEL)	+= briq_panel.o
 
+obj-$(CONFIG_POLLUX_GA3D)	+= pollux_3d.o
+obj-$(CONFIG_POLLUX_KEY_TO_GPIO)	+= pollux_key.o
+obj-$(CONFIG_POLLUX_POWER_BUTTON_CHECK)	+= pollux_pwrbtn.o
+
 obj-$(CONFIG_PRINTER)		+= lp.o
 obj-$(CONFIG_TIPAR)		+= tipar.o
 

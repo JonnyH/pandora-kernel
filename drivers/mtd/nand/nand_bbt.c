@@ -377,7 +377,10 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 	loff_t from;
 	size_t readlen;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE	
 	printk(KERN_INFO "Scanning device for bad blocks\n");
+#endif
+
 
 	if (bd->options & NAND_BBT_SCANALLPAGES)
 		len = 1 << (this->bbt_erase_shift - this->page_shift);
@@ -430,8 +433,10 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 
 		if (ret) {
 			this->bbt[i >> 3] |= 0x03 << (i & 0x6);
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE			
 			printk(KERN_WARNING "Bad eraseblock %d at 0x%08x\n",
 			       i >> 1, (unsigned int)from);
+#endif			
 			mtd->ecc_stats.badblocks++;
 		}
 

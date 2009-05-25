@@ -1032,6 +1032,10 @@ MODULE_LICENSE ("GPL");
 #define PLATFORM_DRIVER		usb_hcd_pnx4008_driver
 #endif
 
+#ifdef CONFIG_ARCH_POLLUX
+#include "ohci-pollux.c"
+#define PLATFORM_DRIVER		ohci_hcd_pollux_driver
+#endif
 
 #ifdef CONFIG_USB_OHCI_HCD_PPC_OF
 #include "ohci-ppc-of.c"

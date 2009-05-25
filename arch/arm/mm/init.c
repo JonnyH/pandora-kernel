@@ -451,20 +451,24 @@ void __init mem_init(void)
 	 * Since our memory may not be contiguous, calculate the
 	 * real number of pages we have in this system
 	 */
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(KERN_INFO "Memory:");
+#endif
 
 	num_physpages = 0;
 	for (i = 0; i < meminfo.nr_banks; i++) {
 		num_physpages += meminfo.bank[i].size >> PAGE_SHIFT;
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 		printk(" %ldMB", meminfo.bank[i].size >> 20);
+#endif	
 	}
-
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk(" = %luMB total\n", num_physpages >> (20 - PAGE_SHIFT));
 	printk(KERN_NOTICE "Memory: %luKB available (%dK code, "
 		"%dK data, %dK init)\n",
 		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
 		codepages >> 10, datapages >> 10, initpages >> 10);
-
+#endif
 	if (PAGE_SIZE >= 16384 && num_physpages <= 128) {
 		extern int sysctl_overcommit_memory;
 		/*

@@ -110,6 +110,11 @@ struct usb_ep_ops {
 		gfp_t gfp_flags);
 	void (*free_request) (struct usb_ep *ep, struct usb_request *req);
 
+    void *(*alloc_buffer) (struct usb_ep *ep, unsigned bytes,
+		dma_addr_t *dma, gfp_t gfp_flags);
+	void (*free_buffer) (struct usb_ep *ep, void *buf, dma_addr_t dma,
+		unsigned bytes);
+		
 	int (*queue) (struct usb_ep *ep, struct usb_request *req,
 		gfp_t gfp_flags);
 	int (*dequeue) (struct usb_ep *ep, struct usb_request *req);
@@ -755,10 +760,10 @@ usb_gadget_disconnect (struct usb_gadget *gadget)
  */
 struct usb_gadget_driver {
 	char			*function;
-	enum usb_device_speed	speed;
-	int			(*bind)(struct usb_gadget *);
+	enum            usb_device_speed	speed;
+	int			    (*bind)(struct usb_gadget *);
 	void			(*unbind)(struct usb_gadget *);
-	int			(*setup)(struct usb_gadget *,
+	int			    (*setup)(struct usb_gadget *,
 					const struct usb_ctrlrequest *);
 	void			(*disconnect)(struct usb_gadget *);
 	void			(*suspend)(struct usb_gadget *);
@@ -766,6 +771,10 @@ struct usb_gadget_driver {
 
 	// FIXME support safe rmmod
 	struct device_driver	driver;
+	/* These functions are here for supporting obscure features required by
+	 * leapfrog.: ghcstop add to insignal kernel */
+	void		(*vbus_session)(struct usb_gadget *, int is_active);
+	int			(*is_enabled)(struct usb_gadget *);
 };
 
 

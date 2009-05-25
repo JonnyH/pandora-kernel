@@ -1,0 +1,28 @@
+#ifndef _POLLUX_KEYIF_H
+#define _POLLUX_KEYIF_H
+
+#ifndef CONFIG_ARCH_ADD_GPH_F300
+#define FW_VERSION_WIZ      100
+#else
+#define FW_VERSION_VOCA     100
+#endif
+ 
+
+
+/* pollux_key ioctl command */
+enum _pollux_keyif_ioctl {
+	IOCTL_GET_TIME,
+	IOCTL_SET_TIME,
+    IOCTL_SET_POWER_OFF,
+    IOCTL_GET_INFO_LSB,
+    IOCTL_GET_INFO_MSB,
+    IOCTL_GET_USB_CHECK,
+    IOCTL_SET_SOFT_DISCONNECT,
+    IOCTL_SET_SOFT_CONNECT,
+    IOCTL_GET_FW_VERSION,
+    IOCTL_GET_INSERT_SDMMC
+};
+
+
+
+#endif // _POLLUX_KEYIF_H

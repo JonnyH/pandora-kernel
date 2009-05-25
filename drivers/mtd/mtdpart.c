@@ -323,7 +323,10 @@ int add_mtd_partitions(struct mtd_info *master,
 	u_int32_t cur_offset = 0;
 	int i;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk (KERN_NOTICE "Creating %d MTD partitions on \"%s\":\n", nbparts, master->name);
+#endif
+
 
 	for (i = 0; i < nbparts; i++) {
 
@@ -410,8 +413,10 @@ int add_mtd_partitions(struct mtd_info *master,
 			slave->mtd.size = master->size - slave->offset;
 		cur_offset = slave->offset + slave->mtd.size;
 
+#ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 		printk (KERN_NOTICE "0x%08x-0x%08x : \"%s\"\n", slave->offset,
 			slave->offset + slave->mtd.size, slave->mtd.name);
+#endif
 
 		/* let's do some sanity checks */
 		if (slave->offset >= master->size) {

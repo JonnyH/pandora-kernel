@@ -263,4 +263,10 @@ config TOUCHSCREEN_USB_GOTOP
 	bool "GoTop Super_Q2/GogoPen/PenPower tablet device support" if EMBEDDED
 	depends on TOUCHSCREEN_USB_COMPOSITE
 
+config TOUCHSCREEN_POLLUX
+	depends on ARCH_POLLUX
+	tristate "Pollux(Magic-eyes) touchscreen"
+	help
+	   This enables support for the Magic eyes pollux touchscreen cpu interface.
+	   
 endif

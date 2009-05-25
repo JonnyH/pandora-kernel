@@ -399,6 +399,7 @@ static void fbcon_update_softback(struct vc_data *vc)
 
 static void fb_flashcursor(struct work_struct *work)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH /* HYUN */	
 	struct fb_info *info = container_of(work, struct fb_info, queue);
 	struct fbcon_ops *ops = info->fbcon_par;
 	struct display *p;
@@ -424,33 +425,42 @@ static void fb_flashcursor(struct work_struct *work)
 	ops->cursor(vc, info, mode, softback_lines, get_color(vc, info, c, 1),
 		    get_color(vc, info, c, 0));
 	release_console_sem();
+
+#endif
+	
+	
 }
 
 #if defined(CONFIG_ATARI) || defined(CONFIG_MAC)
 static int cursor_blink_rate;
 static irqreturn_t fb_vbl_handler(int irq, void *dev_id)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH		
 	struct fb_info *info = dev_id;
 
 	if (vbl_cursor_cnt && --vbl_cursor_cnt == 0) {
 		schedule_work(&info->queue);	
 		vbl_cursor_cnt = cursor_blink_rate; 
 	}
+#endif	
 	return IRQ_HANDLED;
 }
 #endif
 	
 static void cursor_timer_handler(unsigned long dev_addr)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH	
 	struct fb_info *info = (struct fb_info *) dev_addr;
 	struct fbcon_ops *ops = info->fbcon_par;
 
 	schedule_work(&info->queue);
 	mod_timer(&ops->cursor_timer, jiffies + HZ/5);
+#endif
 }
 
 static void fbcon_add_cursor_timer(struct fb_info *info)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH /* HYUN */	
 	struct fbcon_ops *ops = info->fbcon_par;
 
 	if ((!info->queue.func || info->queue.func == fb_flashcursor) &&
@@ -466,10 +476,13 @@ static void fbcon_add_cursor_timer(struct fb_info *info)
 		add_timer(&ops->cursor_timer);
 		ops->flags |= FBCON_FLAGS_CURSOR_TIMER;
 	}
+#endif
+
 }
 
 static void fbcon_del_cursor_timer(struct fb_info *info)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH /* HYUN */	
 	struct fbcon_ops *ops = info->fbcon_par;
 
 	if (info->queue.func == fb_flashcursor &&
@@ -477,6 +490,8 @@ static void fbcon_del_cursor_timer(struct fb_info *info)
 		del_timer_sync(&ops->cursor_timer);
 		ops->flags &= ~FBCON_FLAGS_CURSOR_TIMER;
 	}
+#endif
+
 }
 
 #ifndef MODULE
@@ -1304,6 +1319,7 @@ finished:
 static void fbcon_clear(struct vc_data *vc, int sy, int sx, int height,
 			int width)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH	
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
 	struct fbcon_ops *ops = info->fbcon_par;
 
@@ -1326,11 +1342,13 @@ static void fbcon_clear(struct vc_data *vc, int sy, int sx, int height,
 				 width);
 	} else
 		ops->clear(vc, info, real_y(p, sy), sx, height, width);
+#endif
 }
 
 static void fbcon_putcs(struct vc_data *vc, const unsigned short *s,
 			int count, int ypos, int xpos)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH		
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
 	struct display *p = &fb_display[vc->vc_num];
 	struct fbcon_ops *ops = info->fbcon_par;
@@ -1339,27 +1357,33 @@ static void fbcon_putcs(struct vc_data *vc, const unsigned short *s,
 		ops->putcs(vc, info, s, count, real_y(p, ypos), xpos,
 			   get_color(vc, info, scr_readw(s), 1),
 			   get_color(vc, info, scr_readw(s), 0));
+#endif
 }
 
 static void fbcon_putc(struct vc_data *vc, int c, int ypos, int xpos)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH
 	unsigned short chr;
 
 	scr_writew(c, &chr);
 	fbcon_putcs(vc, &chr, 1, ypos, xpos);
+#endif
 }
 
 static void fbcon_clear_margins(struct vc_data *vc, int bottom_only)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH	
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
 	struct fbcon_ops *ops = info->fbcon_par;
 
 	if (!fbcon_is_inactive(vc, info))
 		ops->clear_margins(vc, info, bottom_only);
+#endif
 }
 
 static void fbcon_cursor(struct vc_data *vc, int mode)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH	
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
 	struct fbcon_ops *ops = info->fbcon_par;
 	int y;
@@ -1386,6 +1410,7 @@ static void fbcon_cursor(struct vc_data *vc, int mode)
 	ops->cursor(vc, info, mode, y, get_color(vc, info, c, 1),
 		    get_color(vc, info, c, 0));
 	vbl_cursor_cnt = CURSOR_DRAW_DELAY;
+#endif
 }
 
 static int scrollback_phys_max = 0;
@@ -1395,6 +1420,7 @@ static int scrollback_current = 0;
 static void fbcon_set_disp(struct fb_info *info, struct fb_var_screeninfo *var,
 			   int unit)
 {
+#ifndef CONFIG_LOGO_LINUX_GPH	
 	struct display *p, *t;
 	struct vc_data **default_mode, *vc;
 	struct vc_data *svc;
@@ -1458,6 +1484,7 @@ static void fbcon_set_disp(struct fb_info *info, struct fb_var_screeninfo *var,
 		if (softback_buf)
 			fbcon_update_softback(vc);
 	}
+#endif
 }
 
 static __inline__ void ywrap_up(struct vc_data *vc, int count)
@@ -3320,8 +3347,8 @@ static const struct consw fb_con = {
 	.con_set_origin 	= fbcon_set_origin,
 	.con_invert_region 	= fbcon_invert_region,
 	.con_screen_pos 	= fbcon_screen_pos,
-	.con_getxy 		= fbcon_getxy,
-	.con_resize             = fbcon_resize,
+	.con_getxy 		    = fbcon_getxy,
+	.con_resize          = fbcon_resize,
 };
 
 static struct notifier_block fbcon_event_notifier = {

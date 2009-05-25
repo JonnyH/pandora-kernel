@@ -19,6 +19,16 @@ config LOGO_LINUX_MONO
 	bool "Standard black and white Linux logo"
 	default y
 
+config LOGO_LINUX_GPH
+	bool "Game park holdings logo"
+	depends on LOGO && (FB_POLLUX_LCD28240x320 = n)
+	default y
+
+config LOGO_LINUX_GPH240320
+	bool "Game park holdings logo(240x320)"
+	depends on LOGO && FB_POLLUX_LCD28240x320
+	default y
+
 config LOGO_LINUX_VGA16
 	bool "Standard 16-color Linux logo"
 	default y
