@@ -8,6 +8,7 @@ usage() {
 
 cd "${1:-.}" || usage
 
+exit 0
 # Check for git and a git repo.
 if head=`git rev-parse --verify HEAD 2>/dev/null`; then
 	# Do we have an untagged version?

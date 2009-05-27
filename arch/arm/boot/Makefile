@@ -69,9 +69,9 @@ quiet_cmd_uimage = UIMAGE  $@
 #		   -C gzip -a $(ZRELADDR) -e $(ZRELADDR) \
 #		   -n 'Linux-$(KERNELRELEASE)' -d $< $@
 
-#$(obj)/uImage:	$(obj)/zImage FORCE
-#	$(call if_changed,uimage)
-#	@echo '  Image $@ is ready'
+$(obj)/uImage:	$(obj)/zImage FORCE
+	$(call if_changed,uimage)
+	@echo '  Image $@ is ready'
 
 #$(obj)/Image.gz:        $(obj)/Image FORCE
 #	$(call if_changed,gzip)
