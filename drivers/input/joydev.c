@@ -72,6 +72,16 @@ struct joydev_client {
 static struct joydev *joydev_table[JOYDEV_MINORS];
 static DEFINE_MUTEX(joydev_table_mutex);
 
+/* pandora hack: convert some normal keys to joystick keys */
+static const struct {
+	__u16 from;
+	__u16 to;
+} converted_keys[] = {
+	{ KEY_LEFTCTRL,	BTN_SELECT },
+	{ KEY_LEFTALT,	BTN_START },
+	{ KEY_MENU,	BTN_MODE },
+};
+
 static int joydev_correct(int value, struct js_corr *corr)
 {
 	switch (corr->type) {
@@ -122,10 +132,17 @@ static void joydev_event(struct input_handle *handle,
 	struct joydev *joydev = handle->private;
 	struct joydev_client *client;
 	struct js_event event;
+	int i;
 
 	switch (type) {
 
 	case EV_KEY:
+		for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
+			if (code == converted_keys[i].from) {
+				code = converted_keys[i].to;
+				break;
+			}
+
 		if (code < BTN_MISC || value == 2)
 			return;
 		event.type = JS_EVENT_BUTTON;
@@ -774,6 +791,13 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 		if (test_bit(i + BTN_MISC, dev->keybit)) {
 			joydev->keymap[i] = joydev->nkey;
 			joydev->keypam[joydev->nkey] = i + BTN_MISC;
+			joydev->nkey++;
+		}
+
+	for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
+		if (test_bit(converted_keys[i].from, dev->keybit)) {
+			joydev->keymap[converted_keys[i].to - BTN_MISC] = joydev->nkey;
+			joydev->keypam[joydev->nkey] = converted_keys[i].to;
 			joydev->nkey++;
 		}
 
