@@ -380,9 +380,43 @@ static int hsmmc3_set_power(struct device *dev, int slot, int power_on,
 	return 0;
 }
 
+/*
+ * Hack: Hardcoded WL1251 embedded data for Pandora
+ * - passed up via a dirty hack to the MMC platform data.
+ */
+
+#include <linux/mmc/host.h>
+#include <linux/mmc/card.h>
+#include <linux/mmc/sdio_func.h>
+#include <linux/mmc/sdio_ids.h>
+
+static struct sdio_embedded_func wifi_func = {
+	.f_class	= SDIO_CLASS_WLAN,
+	.f_maxblksize	= 512,
+};
+
+static struct embedded_sdio_data pandora_wifi_emb_data = {
+	.cis	= {
+		.vendor		= 0x104c,
+		.device		= 0x9066,
+		.blksize	= 512,
+		.max_dtr	= 20000000,
+	},
+	.cccr	= {
+		.multi_block	= 0,
+		.low_speed	= 0,
+		.wide_bus	= 1,
+		.high_power	= 0,
+		.high_speed	= 0,
+	},
+	.funcs	= &wifi_func,
+	.num_funcs = 1,
+};
+
 static struct omap_mmc_platform_data mmc3_data = {
 	.nr_slots                       = 1,
 	.dma_mask                       = 0xffffffff,
+	.embedded_sdio                  = &pandora_wifi_emb_data,
 	.slots[0] = {
 		.wire4                  = 1,
 		.set_power              = hsmmc3_set_power,

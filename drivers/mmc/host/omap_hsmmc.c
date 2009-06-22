@@ -160,35 +160,6 @@ struct mmc_omap_host {
 	struct	omap_mmc_platform_data	*pdata;
 };
 
-
-/*
- * Hack: hardcoded WL1251 embedded data
- */
-#include <linux/mmc/card.h>
-#include <linux/mmc/sdio_func.h>
-#include <linux/mmc/sdio_ids.h>
-
-static struct sdio_cis wifi_cis = {
-	.vendor         = 0x104c,
-	.device         = 0x9066,
-	.blksize        = 512,
-	/*.max_dtr      = 24000000,  Max of chip - no worky on Trout */
-	.max_dtr        = 20000000,
-};
-
-static struct sdio_cccr wifi_cccr = {
-	.multi_block    = 0,
-	.low_speed      = 0,
-	.wide_bus       = 1,
-	.high_power     = 0,
-	.high_speed     = 0,
-};
-
-static struct sdio_embedded_func wifi_func = {
-	.f_class        = SDIO_CLASS_WLAN,
-	.f_maxblksize   = 512,
-};
-
 /*
  * A hack to have fake detect events on MMC3
  * (needed for board embedded chip init)
@@ -198,9 +169,6 @@ static struct mmc_omap_host *mmc3_host;
 void omap_mmc_fake_detect_mmc3(int is_in)
 {
 	if (mmc3_host) {
-		mmc_set_embedded_sdio_data(mmc3_host->mmc, &wifi_cis,
-					&wifi_cccr, &wifi_func, 1);
-
 		printk(KERN_INFO "Sending %s event for MMC3...\n",
 			is_in ? "insert" : "remove");
 		mmc3_host->carddetect = !is_in;
@@ -993,6 +961,15 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	mmc->f_max	= 52000000;
 
 	sema_init(&host->sem, 1);
+
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	if (pdata->embedded_sdio)
+		mmc_set_embedded_sdio_data(mmc,
+					   &pdata->embedded_sdio->cis,
+					   &pdata->embedded_sdio->cccr,
+					   pdata->embedded_sdio->funcs,
+					   pdata->embedded_sdio->num_funcs);
+#endif
 
 	host->iclk = clk_get(&pdev->dev, "mmchs_ick");
 	if (IS_ERR(host->iclk)) {

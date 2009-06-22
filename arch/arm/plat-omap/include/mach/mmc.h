@@ -33,6 +33,16 @@
 
 #define OMAP_MMC_MAX_SLOTS	2
 
+#include <linux/mmc/card.h>
+#include <linux/mmc/sdio_func.h>
+
+struct embedded_sdio_data {
+        struct sdio_cis cis;
+        struct sdio_cccr cccr;
+        struct sdio_embedded_func *funcs;
+        int num_funcs;
+};
+
 struct omap_mmc_platform_data {
 
 	/* number of slots per controller */
@@ -55,6 +65,8 @@ struct omap_mmc_platform_data {
 	int (*resume)(struct device *dev, int slot);
 
 	u64 dma_mask;
+
+	struct embedded_sdio_data *embedded_sdio;
 
 	struct omap_mmc_slot_data {
 
