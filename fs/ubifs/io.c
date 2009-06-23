@@ -852,7 +852,7 @@ int ubifs_wbuf_init(struct ubifs_info *c, struct ubifs_wbuf *wbuf)
 
 	hrtimer_init(&wbuf->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	wbuf->timer.function = wbuf_timer_callback_nolock;
-	wbuf->hardlimit = ktime_set(DEFAULT_WBUF_TIMEOUT_SECS, 0);
+	wbuf->hardlimit = ktime_set(WBUF_TIMEOUT_HARDLIMIT, 0);
 	wbuf->timer.expires = wbuf->hardlimit;
 	return 0;
 }
