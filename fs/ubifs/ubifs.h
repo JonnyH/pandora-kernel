@@ -652,7 +652,8 @@ typedef int (*ubifs_lpt_scan_callback)(struct ubifs_info *c,
  *        fields
  * @hardlimit: hard write-buffer timeout interval
  * @timer: write-buffer timer
- * @need_sync: it is set if its timer expired and needs sync
+ * @no_timer: non-zero if this write-buffer does not timer
+ * @need_sync: non-zero if its timer expired and needs sync
  * @next_ino: points to the next position of the following inode number
  * @inodes: stores the inode numbers of the nodes which are in wbuf
  *
@@ -680,7 +681,8 @@ struct ubifs_wbuf {
 	spinlock_t lock;
 	ktime_t hardlimit;
 	struct hrtimer timer;
-	int need_sync;
+	unsigned int no_timer:1;
+	unsigned int need_sync:1;
 	int next_ino;
 	ino_t *inodes;
 };

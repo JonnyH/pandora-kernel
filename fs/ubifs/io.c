@@ -326,11 +326,8 @@ static void new_wbuf_timer_nolock(struct ubifs_wbuf *wbuf)
  */
 static void cancel_wbuf_timer_nolock(struct ubifs_wbuf *wbuf)
 {
-	/*
-	 * If the syncer is waiting for the lock (from the background thread's
-	 * context) and another task is changing write-buffer then the syncing
-	 * should be canceled.
-	 */
+	if (wbuf->no_timer)
+		return;
 	wbuf->need_sync = 0;
 	hrtimer_cancel(&wbuf->timer);
 }
