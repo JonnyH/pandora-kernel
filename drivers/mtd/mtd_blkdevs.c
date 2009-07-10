@@ -130,7 +130,7 @@ static int blktrans_open(struct inode *i, struct file *f)
 	dev = i->i_bdev->bd_disk->private_data;
 	tr = dev->tr;
 
-	if (!try_module_get(dev->mtd->owner))
+	if (!get_mtd_device(NULL, dev->mtd->index))
 		goto out;
 
 	if (!try_module_get(tr->owner))
@@ -144,7 +144,7 @@ static int blktrans_open(struct inode *i, struct file *f)
 	ret = 0;
 	if (tr->open && (ret = tr->open(dev))) {
 		dev->mtd->usecount--;
-		module_put(dev->mtd->owner);
+		put_mtd_device(dev->mtd);
 	out_tr:
 		module_put(tr->owner);
 	}
@@ -166,7 +166,7 @@ static int blktrans_release(struct inode *i, struct file *f)
 
 	if (!ret) {
 		dev->mtd->usecount--;
-		module_put(dev->mtd->owner);
+		put_mtd_device(dev->mtd);
 		module_put(tr->owner);
 	}
 
