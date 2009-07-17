@@ -140,8 +140,7 @@ static int do_cached_read (struct ubiblk_dev *ubiblk, unsigned long sector,
 		// In a Flash Memory device, there might be a logical block that is
 		// not allcated to a physical block due to the block not being used.
 		// All data returned should be set to 0xFF when accessing this logical 
-		// block.
-		//	dprintk("address translate fail\n");
+		// block.	
 		memset(buf, 0xFF, 512);
 	} else {
 
@@ -173,12 +172,12 @@ static int ubiblk_init_vol(int dev, struct ubi_volume_desc *uv)
 {
 	struct ubiblk_dev *ubiblk;
 	int ret;
-			
-	ubiblk = kmalloc(sizeof(struct ubiblk_dev), GFP_KERNEL);
+    
+    ubiblk = kmalloc(sizeof(struct ubiblk_dev), GFP_KERNEL);
 	if (!ubiblk)
 		return -ENOMEM;
 
-gprintk("1\n");
+
 
 	memset(ubiblk, 0, sizeof(*ubiblk));
 
@@ -193,12 +192,12 @@ gprintk("1\n");
 		!ubiblk->read_cache )
 		return -ENOMEM;
 
-gprintk("2\n");
+
 	ubiblk->write_cache_state = STATE_UNUSED;
 	ubiblk->read_cache_state = STATE_UNUSED;
 
 	ubiblks[dev] = ubiblk;
-gprintk("3\n");	
+
 	DEBUG(MTD_DEBUG_LEVEL1, "ok\n");
 	return 0;
 }
@@ -208,7 +207,7 @@ static int ubiblk_open(struct ubi_blktrans_dev *ubd)
 	int dev = ubd->devnum;
 	int res = 0;
 
-gprintk("1\n");
+
 	DEBUG(MTD_DEBUG_LEVEL1,"ubiblock_open\n");
 
 	if (ubiblks[dev]) {
@@ -216,7 +215,7 @@ gprintk("1\n");
 		printk("%s: increase use count\n",__FUNCTION__);
 		return 0;
 	}
-gprintk("2\n");
+
 	/* OK, it's not open. Create cache info for it */
 	res = ubiblk_init_vol(dev, ubd->uv);
 	return res;
@@ -228,7 +227,7 @@ static int ubiblk_release(struct ubi_blktrans_dev *ubd)
 	struct ubiblk_dev *ubiblk = ubiblks[dev];
 	struct ubi_device *ubi = ubiblk->uv->vol->ubi;
 
-gprintk("1\n");	
+
 	mutex_lock(&ubiblk->cache_mutex);
 	ubiblk_flush_writecache(ubiblk);
 	mutex_unlock(&ubiblk->cache_mutex);
@@ -267,7 +266,7 @@ static void ubiblk_add_vol_dev(struct ubi_blktrans_ops *tr, struct ubi_volume *v
 	if (!dev)
 		return;
 
-gprintk("1, vol->vol_id    = %d, tr->major = %d\n", vol->vol_id, tr->major);
+
 
 	dev->devnum = vol->vol_id;
 	dev->size = vol->used_bytes >> 9;
@@ -283,7 +282,6 @@ gprintk("1, vol->vol_id    = %d, tr->major = %d\n", vol->vol_id, tr->major);
 
 static void ubiblk_remove_vol_dev(struct ubi_blktrans_dev *dev)
 {
-gprintk("1\n");
 	del_ubi_blktrans_dev(dev);
 	kfree(dev);
 }
@@ -315,8 +313,7 @@ static struct ubi_blktrans_ops ubiblk_tr = {
 
 static int __init init_ubiblock(void)
 {
-	gprintk("1\n");
-	return register_ubi_blktrans(&ubiblk_tr);
+    return register_ubi_blktrans(&ubiblk_tr);
 }
 
 static void __exit cleanup_ubiblock(void)

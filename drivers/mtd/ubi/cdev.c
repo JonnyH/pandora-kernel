@@ -41,7 +41,11 @@
 #include <linux/capability.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
+#if 0 /* hyun */
 #include <linux/math64.h>
+#else
+#include <asm/div64.h>
+#endif
 #include <mtd/ubi-user.h>
 #include "ubi.h"
 
@@ -115,11 +119,6 @@ static int vol_cdev_open(struct inode *inode, struct file *file)
 
 	dbg_gen("open device %d, volume %d, mode %d",
 	        ubi_num, vol_id, mode);
-	
-	const struct ubi_device *ubi = ubi_get_by_major(imajor(inode));
-	if(ubi->ubi_num != ubi_num)
-		printk("ubiblk: ubi_num not equal!\n");
-	
 
 	desc = ubi_open_volume(ubi_num, vol_id, mode);
 	if (IS_ERR(desc))
@@ -817,9 +816,7 @@ static int rename_volumes(struct ubi_device *ubi,
 			re->desc->vol->vol_id, re->desc->vol->name);
 	}
 
-	mutex_lock(&ubi->device_mutex);
 	err = ubi_rename_volumes(ubi, &rename_list);
-	mutex_unlock(&ubi->device_mutex);
 
 out_free:
 	list_for_each_entry_safe(re, re1, &rename_list, list) {
@@ -959,7 +956,9 @@ static long ubi_cdev_ioctl(struct file *file, unsigned int cmd,
 			break;
 		}
 
+		mutex_lock(&ubi->device_mutex);
 		err = rename_volumes(ubi, req);
+		mutex_unlock(&ubi->device_mutex);
 		kfree(req);
 		break;
 	}

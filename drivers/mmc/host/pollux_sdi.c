@@ -541,7 +541,7 @@ static void pollux_sdi_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	p->CMDARG  = host->mrq->cmd->arg;
 	p->CMD     = (host->mrq->cmd->opcode & 0xff)|(host->cmdflags);
 
-    timeout = 2000; // 3000ms = 3sec
+    timeout = 3000; // 2000ms = 2sec
     ret = wait_for_completion_timeout(&host->complete_request, msecs_to_jiffies(timeout));
     if(!ret) 
 	{

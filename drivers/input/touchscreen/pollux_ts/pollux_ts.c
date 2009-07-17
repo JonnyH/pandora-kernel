@@ -100,6 +100,9 @@
 #include "pollux_ts.h"
 
 int pendown;
+unsigned int old_x,old_y;
+unsigned long delta_t;
+
 static struct task_struct *kidle_task;
 
 struct input_dev *pollux_input;
@@ -215,12 +218,14 @@ CBOOL GetXYValue(int *x, int *y)
 	TouchPY(CFALSE);
 	mdelay(1);// for stable delay
 	while(!adc_getvalue(&Value[0],  ADC_TOUCH_XP, 0xff));
-	while(!adc_getvalue(&Value[1],  ADC_TOUCH_XP, 0xff));
-	while(!adc_getvalue(&Value[2],  ADC_TOUCH_XP, 0xff));
+	//while(!adc_getvalue(&Value[1],  ADC_TOUCH_XP, 0xff));
+	//while(!adc_getvalue(&Value[2],  ADC_TOUCH_XP, 0xff));
 	if(TOUCH_ADC_CH_CHANGE)
-		*y = (Value[0]+Value[1]+Value[2])/3;
+		//*y = (Value[0]+Value[1]+Value[2])/3;
+		*y = Value[0];
 	else
-		*x = (Value[0]+Value[1]+Value[2])/3;
+		//*x = (Value[0]+Value[1]+Value[2])/3;
+		*x = Value[0];
 
 	TouchMX(CFALSE);
 	TouchPX(CFALSE);
@@ -228,12 +233,14 @@ CBOOL GetXYValue(int *x, int *y)
 	TouchPY(CTRUE);
 	mdelay(1);// for stable delay
 	while(!adc_getvalue(&Value[0],  ADC_TOUCH_YP, 0xff));
-	while(!adc_getvalue(&Value[1],  ADC_TOUCH_YP, 0xff));
-	while(!adc_getvalue(&Value[2],  ADC_TOUCH_YP, 0xff));
+	//while(!adc_getvalue(&Value[1],  ADC_TOUCH_YP, 0xff));
+	//while(!adc_getvalue(&Value[2],  ADC_TOUCH_YP, 0xff));
 	if(TOUCH_ADC_CH_CHANGE)
-		*x = (Value[0]+Value[1]+Value[2])/3;
+		//*x = (Value[0]+Value[1]+Value[2])/3;
+		*x = Value[0];
 	else
-		*y = (Value[0]+Value[1]+Value[2])/3;
+		//*y = (Value[0]+Value[1]+Value[2])/3;
+		*y = Value[0];
 
 	if(TOUCH_REV_X_VALUE)
 		*x = ((1<<10) - *x);		// adc is 10 bits
@@ -291,7 +298,7 @@ int pollux_ts_thread(void *kthread)
 	int check=0;
 
     
-    x = y = 0;
+    //x = y = 0;
 	do 
 	{
 		if( pendown == 0 ) 
@@ -339,6 +346,16 @@ int pollux_ts_thread(void *kthread)
 					    else
 					    {
 					        //printk("0x%x , 0x%x\n", x, y);
+#if 0 // 2009.05.07
+                            if (jiffies - delta_t < 5)
+                                if ((abs(old_x-x) > 0x70) || (abs(old_y-y) > 0x70))
+                                    { x = old_x; y = old_y; }
+                                else
+                                    { old_x = x; old_y = y; }
+                            else
+                                { old_x = x; old_y = y; }
+                            delta_t = jiffies;
+#endif
 					        input_report_abs(pollux_input, ABS_X, x);
  					        input_report_abs(pollux_input, ABS_Y, y);
  					        input_report_key(pollux_input, BTN_TOUCH, 1);

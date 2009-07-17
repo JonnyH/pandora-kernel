@@ -247,7 +247,7 @@
 
 /*-------------------------------------------------------------------------*/
 
-#define DRIVER_DESC		"GP2X Storage Driver"
+#define DRIVER_DESC		"File-backed Storage Gadget"
 #define DRIVER_NAME		"g_file_storage"
 #define DRIVER_VERSION		"7 August 2007"
 
@@ -2015,15 +2015,10 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
 	u8	*buf = (u8 *) bh->buf;
 
-#if 0
-	static char vendor_id[] = "Linux   ";
-	static char product_id[] = "File-Stor Gadget";
-#else
-    static char vendor_id[] = "GP2XF100";
+	static char vendor_id[] = "GP2X Wiz ";
 	static char product_id[] = "USB Storage Disk";
-#endif
 
-    if (!fsg->curlun) {		// Unsupported LUNs are okay
+	if (!fsg->curlun) {		// Unsupported LUNs are okay
 		fsg->bad_lun_okay = 1;
 		memset(buf, 0, 36);
 		buf[0] = 0x7f;		// Unsupported, no device-type

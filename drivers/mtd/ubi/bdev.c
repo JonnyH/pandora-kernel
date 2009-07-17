@@ -27,7 +27,7 @@
 #include "ubi.h"
 
 
-#if 0
+#if 1
 	#define gprintk(fmt, x... ) printk( "%s: " fmt, __FUNCTION__ , ## x)
 #else
 	#define gprintk(x...) do { } while (0)
@@ -55,6 +55,7 @@ static int do_blktrans_request(struct ubi_blktrans_ops *tr,
 	unsigned long block, nsect;
 	char *buf;
 
+	
 	block = req->sector << 9 >> tr->blkshift;
 	nsect = req->current_nr_sectors << 9 >> tr->blkshift;
 
@@ -156,7 +157,7 @@ static int blktrans_open(struct inode *i, struct file *f)
 	else
 		mode = UBI_READONLY;
 
-gprintk("ubi_num = %d, vol_id = %d\n", ubi_num, vol_id);
+
 	desc = ubi_open_volume(ubi_num, vol_id, mode);
 	if (IS_ERR(desc))
 		return PTR_ERR(desc);
@@ -168,7 +169,6 @@ gprintk("ubi_num = %d, vol_id = %d\n", ubi_num, vol_id);
 
 	if (!try_module_get(tr->owner))
 	{
-		gprintk("module....get fail\n");
 		goto out_tr;
 	}
 	
@@ -248,14 +248,14 @@ int add_ubi_blktrans_dev(struct ubi_blktrans_dev *new)
 	int last_devnum = -1;
 	struct gendisk *gd;
 	
-gprintk("1\n");
+
 
 	if (mutex_trylock(&vol_table_mutex)) {
 		mutex_unlock(&vol_table_mutex);
 		BUG();
 	}
 	
-gprintk("2\n");
+
 	list_for_each(this, &tr->devs) {
 		struct ubi_blktrans_dev *d = list_entry(this, struct ubi_blktrans_dev, list);
 		if (new->devnum == -1) {
@@ -276,18 +276,17 @@ gprintk("2\n");
 		}
 		last_devnum = d->devnum;
 	}
-gprintk("3 devnum = %d\n", new->devnum);	
+
 	if (new->devnum == -1)
 		new->devnum = last_devnum+1;
 
-gprintk("4 devnum = %d\n", new->devnum);	
+
 	if ((new->devnum << tr->part_bits) > 256) 
 	{
-		gprintk("busy?\n");
 		return -EBUSY;
 	}
 
-gprintk("5\n");	
+
 	mutex_init(&new->lock);
 	list_add_tail(&new->list, &tr->devs);
  added:
@@ -299,10 +298,11 @@ gprintk("5\n");
 		list_del(&new->list);
 		return -ENOMEM;
 	}
+
 	gd->major = tr->major;
 	gd->first_minor = (new->devnum) << tr->part_bits;
 	gd->fops = &ubi_blktrans_ops;
-gprintk("6: gd->major = %d\n", gd->major);	
+
 	if (tr->part_bits)
 		if (new->devnum < 26)
 			snprintf(gd->disk_name, sizeof(gd->disk_name),
@@ -324,11 +324,12 @@ gprintk("6: gd->major = %d\n", gd->major);
 	new->blkcore_priv = gd;
 	gd->queue = tr->blkcore_priv->rq;
 
-gprintk("7\n");	
+
 	if (new->readonly)
 		set_disk_ro(gd, 1);
 
-gprintk("8\n");	
+
+	
 	add_disk(gd);
 
 	return 0;
@@ -376,7 +377,7 @@ static void blktrans_notify_add(struct ubi_volume *vol)
 	list_for_each(this, &blktrans_majors) {
 		struct ubi_blktrans_ops *tr = list_entry(this, struct ubi_blktrans_ops, list);
 
-gprintk("1\n");
+
 		tr->add_vol(tr,vol);
 	}
 
@@ -395,19 +396,20 @@ int register_ubi_blktrans(struct ubi_blktrans_ops *tr)
 	/* Register the notifier if/when the first device type is
 	   registered, to prevent the link/init ordering from fucking
 	   us over. */
+	
 	if (!blktrans_notifier.list.next)
 		register_vol_user(&blktrans_notifier);
 
-gprintk("1\n");
+
 	tr->blkcore_priv = kzalloc(sizeof(*tr->blkcore_priv), GFP_KERNEL);
 	if (!tr->blkcore_priv)
 		return -ENOMEM;
-
+    
 	mutex_lock(&vol_table_mutex);  
 	tr->major = register_blkdev(0, tr->name);
 	spin_lock_init(&tr->blkcore_priv->queue_lock);
 
-gprintk("2, tr->major = %d\n", tr->major);
+
 	tr->blkcore_priv->rq = blk_init_queue(ubi_blktrans_request, &tr->blkcore_priv->queue_lock);
 	if (!tr->blkcore_priv->rq) {
 		unregister_blkdev(tr->major, tr->name);
@@ -420,7 +422,7 @@ gprintk("2, tr->major = %d\n", tr->major);
 	blk_queue_hardsect_size(tr->blkcore_priv->rq, tr->blksize);
 	tr->blkshift = ffs(tr->blksize) - 1;
 
-gprintk("3: %s\n", tr->name);
+
 	tr->blkcore_priv->thread = kthread_run(ubi_blktrans_thread, tr, "%sd", tr->name);
 	if (IS_ERR(tr->blkcore_priv->thread)) 
 	{
@@ -437,8 +439,7 @@ gprintk("3: %s\n", tr->name);
 	for (i=0; i<UBI_MAX_VOLUMES; i++) 
 	{
 		if (vol_table[i] )
-		{
-			gprintk("4 %d call..add_vol->\n", i);
+		{		
 			tr->add_vol(tr, vol_table[i]);
 		}
 	}

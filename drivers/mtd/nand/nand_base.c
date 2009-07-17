@@ -91,6 +91,24 @@ static struct nand_ecclayout nand_oob_64 = {
 		 .length = 38}}
 };
 
+#if 1
+//add by bnjang[2008.12.15]
+static struct nand_ecclayout nand_oob_128 = {
+	.eccbytes = 48,
+	.eccpos = {
+		    80,  81,  82,  83,  84,  85,  86,  87,
+		    88,  89,  90,  91,  92,  93,  94,  95,
+		    96,  97,  98,  99, 100, 101, 102, 103,
+		   104, 105, 106, 107, 108, 109, 110, 111,
+		   112, 113, 114, 115, 116, 117, 118, 119,
+		   120, 121, 122, 123, 124, 125, 126, 127},
+	.oobfree = {
+		{.offset = 2,
+		 .length = 78}}
+};
+#endif
+
+
 static int nand_get_device(struct nand_chip *chip, struct mtd_info *mtd,
 			   int new_state);
 
@@ -2302,6 +2320,11 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 		/* Get buswidth information */
 		busw = (extid & 0x01) ? NAND_BUSWIDTH_16 : 0;
 
+printk(KERN_INFO "[JB]>> %d : mtd->writesizetype \n", mtd->writesize );
+printk(KERN_INFO "[JB]>> %d : mtd->oobsize \n", mtd->oobsize );
+printk(KERN_INFO "[JB]>> %d : mtd->erasesize \n", mtd->erasesize );
+
+
 	} else {
 		/*
 		 * Old devices have chip data hardcoded in the device id table
@@ -2466,6 +2489,10 @@ int nand_scan_tail(struct mtd_info *mtd)
 		case 64:
 			chip->ecc.layout = &nand_oob_64;
 			break;
+		case 128:
+			chip->ecc.layout = &nand_oob_128;
+			break;
+			
 		default:
 			printk(KERN_WARNING "No oob scheme defined for "
 			       "oobsize %d\n", mtd->oobsize);

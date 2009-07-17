@@ -40,7 +40,12 @@
 
 #include <linux/err.h>
 #include <linux/uaccess.h>
+#if 0 /* hyun */
 #include <linux/math64.h>
+#else
+#include <asm/div64.h>
+#endif
+
 #include "ubi.h"
 
 /**

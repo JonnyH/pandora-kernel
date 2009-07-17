@@ -1847,7 +1847,7 @@ void __init mnt_init(void)
 	nr_hash = 1UL << hash_bits;
 	hash_mask = nr_hash - 1;
 #ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
-	printk("Mount-cache hash table entries: %d\n", nr_hash);
+//	printk("Mount-cache hash table entries: %d\n", nr_hash);
 #endif
 	/* And initialize the newly allocated array */
 	d = mount_hashtable;

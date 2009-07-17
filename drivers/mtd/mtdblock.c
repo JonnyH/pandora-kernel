@@ -67,6 +67,9 @@ static int erase_write (struct mtd_info *mtd, unsigned long pos,
 	erase.len = len;
 	erase.priv = (u_long)&wait_q;
 
+	//printk("erase.addr : %x \n",erase.addr);
+	//printk("erase.len : %x \n",erase.len); 
+
 	set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(&wait_q, &wait);
 

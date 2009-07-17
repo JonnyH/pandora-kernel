@@ -59,6 +59,7 @@ static struct pollux_disp_info *disp_info;
 static u32    pollux_fb_vaddr = 0;
 static u32    pollux_fb_paddr = 0;
 static int nocursor = 0;
+static int tv_active = 0;
 
 #ifndef CONFIG_ARCH_ADD_GPH_F300	       
 static unsigned char board_num = BOARD_WIZ;
@@ -990,6 +991,10 @@ static int pollux_ioctl(struct fb_info *info, unsigned int cmd, unsigned long ar
             Height  = tv_config->SecScreenHeight;
             
             result = ioctl_ops.tv_configuration(command, mode, width, Height);
+	    
+            if( command == COMMAND_RETURN_LCD) tv_active = 0;
+            else tv_active = 1;
+
 	    }
 	    else
 			result = -EFAULT;
@@ -1009,7 +1014,9 @@ static int pollux_ioctl(struct fb_info *info, unsigned int cmd, unsigned long ar
 	        value	= *((u32 *)pdata + 1);
 	        
 	        result = ioctl_ops.lcd_change_set(cmd, value);
-
+                
+                if(tv_active) break;
+ 
 #ifndef CONFIG_ARCH_ADD_GPH_F300	        
 	        if ( cmd == 5 ){
                 struct pollux_fb_info *fbi;
@@ -1058,6 +1065,14 @@ static int pollux_ioctl(struct fb_info *info, unsigned int cmd, unsigned long ar
 	        result = 0;
 	    }
 	    break;
+    case FBIO_SET_BOARD_NUMBER:
+        {
+            if(copy_from_user((void *)pdata, (const void *)arg, size))
+                return -EFAULT;
+            board_num = *(unsigned char *)pdata;
+            result = 0;
+        }
+        break;   
     default:
 		result = -EINVAL;
 	}

@@ -80,7 +80,7 @@ quiet_cmd_uimage = UIMAGE  $@
 $(obj)/gk:      $(obj)/Image FORCE
 	$(call if_changed,uimage)
 	#cp -f arch/arm/boot/gk /korea-dokdo/tftpboot/uImage
-	cp -f arch/arm/boot/gk /tftpboot/uImage
+	cp -f arch/arm/boot/gk uImage
 	@echo '  Image for u-boot $@ is ready'
 
 

@@ -217,7 +217,7 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x20;
 	else if (gadget_is_m66592(gadget))
 		return 0x21;
-	else if (gadget_is_pollux(gadget))
-	    return 0x22;
+    else if (gadget_is_pollux(gadget))
+	    return 0x22;		
 	return -ENOENT;
 }

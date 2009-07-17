@@ -90,9 +90,13 @@
 #define POLLUX_BATT_MINOR       159
 
 #define CHECK_BATTRY_TIME       3000 //1000
+#define CHECK_BATTRY_TIME_LOW   700
 
 #define GPIO_POWER_OFF			POLLUX_GPA18
 #define GPIO_LCD_AVDD			POLLUX_GPB14
+#define USB_VBUS_DECT	        POLLUX_GPC15
+#define BD_VER_LSB              POLLUX_GPC18
+#define BD_VER_MSB              POLLUX_GPC17
 
 
 struct batt_timer {
@@ -110,20 +114,28 @@ extern asmlinkage long sys_umount(char* name, int flags);
 
 struct batt_timer *bTimer; 
 
-#define     LIMIT3_7V       0x1b5        
-#define     LIMIT3_5V       0x1A0      
-#define     LIMIT3_3V       0x185      
-#define     LIMIT3_1V       0x170
+#define     LIMIT3_9V_NEW       0x390
+#define     LIMIT3_7V_NEW       0x365        
+
+#ifdef CONFIG_ARCH_ADD_GPH_F300
+#define     LIMIT3_5V_NEW       0x345      
+#else
+#define     LIMIT3_5V_NEW       0x342
+#endif
 
 
-#define     BATTRY_OFF_TIME     0x1A0  //0x19a
+#define     LIMIT3_9V_OLD       0x1D5
+#define     LIMIT3_7V_OLD       0x1C0        
+#define     LIMIT3_5V_OLD       0x1A9      
 
-/*
-#define     LIMIT3_7V       0x1C5        
-#define     LIMIT3_5V       0x1B0      
-#define     LIMIT3_3V       0x195      
-#define     LIMIT3_1V       0x180
-*/
+
+#define     BATTRY_OFF_TIME_OLD_BOARD     0x19b  
+#ifdef CONFIG_ARCH_ADD_GPH_F300
+#define     BATTRY_OFF_TIME_NEW_BOARD     0x335  
+#else
+#define     BATTRY_OFF_TIME_NEW_BOARD     0x33A  
+#endif
+#define     BATTRY_READ_CNT     5
 
 enum {
     BATT_LEVEL_HIGH,
@@ -131,6 +143,13 @@ enum {
     BATT_LEVEL_LOW,
     BATT_LEVEL_EMPTY,
 }BATT_LEVEL_STATUS;    
+
+unsigned short old_adc = 0;
+static int bd_rev;
+static unsigned short batt_off_time;
+static unsigned short limit_39V;
+static unsigned short limit_37V;
+static unsigned short limit_35V;
 
 static int get_battADC(unsigned short* adc)
 {
@@ -154,21 +173,16 @@ static void batt_level_chk_timer(unsigned long data)
 	get_battADC(&read_adc);
 	//printk("TIME: adcVal:0x%x \n",read_adc);
 
-#if 0	
-	if(read_adc <= BATTRY_OFF_TIME)
-	    schedule_work(&btimer->work);
-	else
-	    mod_timer(&bTimer->batt_chkTimer, jiffies + CHECK_BATTRY_TIME);
-#else
-
     if(bTimer->offCnt >= 2)
 	    schedule_work(&btimer->work);
 	else{
-        if(read_adc <= BATTRY_OFF_TIME) bTimer->offCnt += 1;
-	    mod_timer(&bTimer->batt_chkTimer, jiffies + CHECK_BATTRY_TIME);
+        if(read_adc <= batt_off_time) {
+            bTimer->offCnt += 1;
+	        mod_timer(&bTimer->batt_chkTimer, jiffies + CHECK_BATTRY_TIME);
+	    }else{
+	        mod_timer(&bTimer->batt_chkTimer, jiffies + CHECK_BATTRY_TIME);
+        }
     }
-    
-#endif	
 }
 
 static void batt_chk_time_work_handler(struct work_struct *work)
@@ -179,14 +193,10 @@ static void batt_chk_time_work_handler(struct work_struct *work)
 	int i = 0,value;
     
     get_battADC(&read_adc);
-    if(read_adc <= BATTRY_OFF_TIME)
+    if(read_adc <= batt_off_time)
 	{
 	    printk("battry low level => power off \n");
-#if 0	    
-	    pollux_gpio_setpin(GPIO_LCD_AVDD ,0);
-		pollux_gpio_setpin(GPIO_POWER_OFF ,0);
-                    
-#else	
+
 	    //Pwr_Off_Enable();
         if (!(envp = (char **) kmalloc(20 * sizeof(char *), GFP_KERNEL))) {
 		    printk(KERN_ERR "input.c: not enough memory allocating hotplug environment\n");
@@ -222,9 +232,9 @@ static void batt_chk_time_work_handler(struct work_struct *work)
 	    kfree(envp);
 	
 	}	    
-#endif
 
-	mod_timer(&bTimer->batt_chkTimer, jiffies + CHECK_BATTRY_TIME);
+
+	mod_timer(&bTimer->batt_chkTimer, jiffies + CHECK_BATTRY_TIME_LOW);
 }
 
 static int pollux_batt_open(struct inode *inode, struct file *filp)
@@ -250,11 +260,77 @@ static int pollux_batt_release(struct inode *inode, struct file *filp)
 static int pollux_batt_read(struct file *filp, char __user *buffer, size_t count, loff_t *ppos)
 {
     unsigned short readADC;
+    unsigned short battStatus;
+    unsigned short r[BATTRY_READ_CNT];
+    unsigned long sum=0;
+    unsigned short min, max, temp; 
+    int usb_in;
+    int i;
     
-    get_battADC(&readADC);
-    readADC -=0x10;
+    for(i = 0; i < BATTRY_READ_CNT ; i++) {
+        get_battADC(&readADC);
+        r[i]= readADC; 
+    }
     
-    if( copy_to_user (buffer, &readADC, sizeof(unsigned short)) )
+    if( r[0] > r[1] ){
+         min = r[1]; 
+         max = r[0];       
+    }else if( r[0] < r[1] ){
+        min = r[0];
+        max = r[1];       
+    }else  min=max=r[0];   
+    
+    for(i = 2; i < BATTRY_READ_CNT ; i++)
+    {
+        if ( min > r[i] ){
+            temp = min;
+            min = r[i];
+            r[i] = temp;
+        }      
+        
+        if ( max < r[i] ){
+            temp = max;
+            max = r[i];
+            r[i] = temp;
+        }
+        
+        sum+=r[i];
+    }
+    
+    readADC = (unsigned short) (sum / ( BATTRY_READ_CNT - 2 ));
+    
+       
+#ifdef CONFIG_ARCH_ADD_GPH_F300
+    if( (bd_rev == 0) ||  (bd_rev == 1) ) goto NOT_SUPPORT_USB_REMOVE;
+#else
+    if( (bd_rev == 0) ) goto NOT_SUPPORT_USB_REMOVE;
+#endif
+
+    if(old_adc)
+    {
+        usb_in = pollux_gpio_getpin(USB_VBUS_DECT);
+        if( !usb_in ){       
+            //No charge mode 
+            if( old_adc <= readADC)  readADC = old_adc;
+            else old_adc = readADC;
+        }
+    } else {
+         old_adc = readADC;
+    }
+    
+NOT_SUPPORT_USB_REMOVE:
+    
+//    printk("readadc:0x%x \n", readADC);
+    if(readADC  > limit_39V ) 
+		battStatus = 1;
+	else if(readADC  > limit_37V ) 
+		battStatus = 2;
+	else if(readADC  > limit_35V ) 
+		battStatus = 3;
+	else 
+		battStatus = 4;	/* 0x1A4 ~ 0x19C */
+    
+    if( copy_to_user (buffer, &battStatus, sizeof(unsigned short)) )
         return -EFAULT;
         
     return sizeof(unsigned short);
@@ -292,6 +368,46 @@ int __init pollux_batt_init(void)
 {
     int ret;
     
+    if( pollux_gpio_getpin(BD_VER_LSB) && (!pollux_gpio_getpin(BD_VER_MSB)) )
+        bd_rev = 1;
+    else if( (!pollux_gpio_getpin(BD_VER_LSB)) && pollux_gpio_getpin(BD_VER_MSB) )
+        bd_rev = 2;
+    else if( pollux_gpio_getpin(BD_VER_LSB) && pollux_gpio_getpin(BD_VER_MSB) )
+        bd_rev = 3;
+    else
+        bd_rev = 0;
+        
+	
+#ifdef CONFIG_ARCH_ADD_GPH_F300	
+    if( (bd_rev == 0) ||  (bd_rev == 1) || (bd_rev == 2) ){
+        batt_off_time = BATTRY_OFF_TIME_OLD_BOARD;
+        limit_39V = LIMIT3_9V_OLD;
+        limit_37V = LIMIT3_7V_OLD;
+        limit_35V = LIMIT3_5V_OLD;
+    }
+    else{ 
+        batt_off_time  = BATTRY_OFF_TIME_NEW_BOARD;
+        limit_39V = LIMIT3_9V_NEW;
+        limit_37V = LIMIT3_7V_NEW;
+        limit_35V = LIMIT3_5V_NEW;
+    }
+#else /* wiz */
+    if( (bd_rev == 0) ){
+        batt_off_time = BATTRY_OFF_TIME_OLD_BOARD;
+        limit_39V = LIMIT3_9V_OLD;
+        limit_37V = LIMIT3_7V_OLD;
+        limit_35V = LIMIT3_5V_OLD;
+    }
+    else{
+        batt_off_time = BATTRY_OFF_TIME_NEW_BOARD;
+        limit_39V = LIMIT3_9V_NEW;
+        limit_37V = LIMIT3_7V_NEW;
+        limit_35V = LIMIT3_5V_NEW;
+    } 
+    
+#endif
+	
+	
 	bTimer = kzalloc(sizeof(struct batt_timer), GFP_KERNEL);
 	if (unlikely(!bTimer))
 		return -ENOMEM;

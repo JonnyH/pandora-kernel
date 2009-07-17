@@ -53,10 +53,10 @@
 #define ubi_msg(fmt, ...) printk(KERN_NOTICE "UBI: " fmt "\n", ##__VA_ARGS__)
 /* UBI warning messages */
 #define ubi_warn(fmt, ...) printk(KERN_WARNING "UBI warning: %s: " fmt "\n", \
-				  __FUNCTION__, ##__VA_ARGS__)
+				  __func__, ##__VA_ARGS__)
 /* UBI error messages */
 #define ubi_err(fmt, ...) printk(KERN_ERR "UBI error: %s: " fmt "\n", \
-				 __FUNCTION__, ##__VA_ARGS__)
+				 __func__, ##__VA_ARGS__)
 
 /* Lowest number PEBs reserved for bad PEB handling */
 #define MIN_RESEVED_PEBS 2
@@ -171,7 +171,6 @@ struct vol_notifier {
 	struct list_head list;
 };
 
-
 /**
  * struct ubi_volume - UBI volume description data structure.
  * @dev: device object to make use of the the Linux device model
@@ -273,7 +272,7 @@ struct ubi_volume {
 	int gluebi_refcount;
 	struct mtd_info gluebi_mtd;
 #endif
-	int  bdev_mode;  //add by Nancy
+	int bdev_mode;	//add by Nancy
 };
 
 /**
@@ -379,7 +378,7 @@ struct ubi_wl_entry;
  */
 struct ubi_device {
 	struct cdev cdev;
-	int bdev_major;  //add by Nancy	
+	int bdev_major;		//add by Nancy
 	struct device dev;
 	int ubi_num;
 	char ubi_name[sizeof(UBI_NAME_STR)+5];

@@ -224,6 +224,21 @@
 
 #endif
 
+#if 1 /* hyun */
+
+static inline u64 div_u64_rem(u64 dividend, u32 divisor, u32 *remainder)
+{
+	*remainder = do_div(dividend, divisor);
+	return dividend;
+}
+
+static inline u64 div_u64(u64 dividend, u32 divisor)
+{
+	u32 remainder;
+	return div_u64_rem(dividend, divisor, &remainder);
+}
+#endif
+
 extern uint64_t div64_64(uint64_t dividend, uint64_t divisor);
 
 #endif

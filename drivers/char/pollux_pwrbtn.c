@@ -98,6 +98,7 @@
 
 #define DRV_NAME "pollux_pwrbtn"
 
+static int end_chk = 0;
 
 extern asmlinkage long sys_umount(char* name, int flags);
 
@@ -108,6 +109,10 @@ extern asmlinkage long sys_umount(char* name, int flags);
 #    define gprintk( x... )
 #endif
 
+#define BD_VER_LSB              POLLUX_GPC18
+#define BD_VER_MSB              POLLUX_GPC17
+static int bd_rev;
+static int pwr_time_cnt;
 	
 static void pwr_timechk_timer(unsigned long data)
 {
@@ -117,9 +122,11 @@ static void pwr_timechk_timer(unsigned long data)
 	pwrsw->power_switch_off = 0;
 	if( pollux_gpio_getpin(POWER_SWITCH_DECT) )
 	{	
-		schedule_work(&pwrsw->work);
+		if(!end_chk){
+		    end_chk = 1;
+		    schedule_work(&pwrsw->work);
+	    }
 	}   
-
 }       
         
 
@@ -138,10 +145,6 @@ static void pwr_timechk_work_handler(struct work_struct *work)
     
     Pwr_Off_Enable();
 
-#if 0    
-    sys_umount("/mnt/nand", MNT_FORCE);
-    mdelay(500);
-#endif
     
     if (!(envp = (char **) kmalloc(20 * sizeof(char *), GFP_KERNEL))) {
 		printk(KERN_ERR "input.c: not enough memory allocating hotplug environment\n");
@@ -189,7 +192,8 @@ irqreturn_t pollux_pwrbtn_interrupt( int irq, void *dev_id )
 			pwrsw->timer_done = 0;
 		}
 		
-		mod_timer(&pwrsw->pwr_chkTimer, jiffies + 23);
+		mod_timer(&pwrsw->pwr_chkTimer, jiffies + 23); //hold delay bnjang 2009.04.10
+//		mod_timer(&pwrsw->pwr_chkTimer, jiffies + pwr_time_cnt);
 		pwrsw->power_switch_off = 1;
     }
 	
@@ -275,18 +279,28 @@ int __init pollux_pwrbtn_init(void)
 {
 	int res;
     
-#if 0    
-    if( pollux_gpio_getpin(POWER_SWITCH_DECT) )
-    {
-        printk("power off \n");
-        pollux_gpio_setpin(GPIO_LCD_AVDD ,0);
-		pollux_gpio_setpin(GPIO_POWER_OFF ,0);
-        while(1);
-    }
+    if( pollux_gpio_getpin(BD_VER_LSB) && (!pollux_gpio_getpin(BD_VER_MSB)) )
+        bd_rev = 1;
+    else if( (!pollux_gpio_getpin(BD_VER_LSB)) && pollux_gpio_getpin(BD_VER_MSB) )
+        bd_rev = 2;
+    else if( pollux_gpio_getpin(BD_VER_LSB) && pollux_gpio_getpin(BD_VER_MSB) )
+        bd_rev = 3;
+    else
+        bd_rev = 0;
+        
+    
+    
+#ifdef CONFIG_ARCH_ADD_GPH_F300    
+    pwr_time_cnt = 2;
+#else
+    
+    if(bd_rev != 0)
+        pwr_time_cnt = 25;
+    else
+        pwr_time_cnt = 2;    
 #endif
 
-    
-	res = platform_device_register(&pollux_pwrbtn_device);
+    res = platform_device_register(&pollux_pwrbtn_device);
 	if(res)
 	{
 		printk("fail : platform device %s (%d) \n", pollux_pwrbtn_device.name, res);

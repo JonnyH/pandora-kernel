@@ -57,7 +57,7 @@
 #define FBIO_LCD_CHANGE_CONTROL     _IOW(FBIO_MAGIC, 90, unsigned int[2])
 #define FBIO_GET_BOARD_NUMBER       _IOR(FBIO_MAGIC, 91, unsigned char*)
 #define FBIO_SET_TVCFG_MODE         _IOW(FBIO_MAGIC, 92, struct _FB_TVCONF)
-
+#define FBIO_SET_BOARD_NUMBER       _IOW(FBIO_MAGIC, 93, unsigned char)
 #define FBIO_IDCT_RUN               _IOW(FBIO_MAGIC, 95, struct _FB_IDCT)
 
 #endif

@@ -24,7 +24,13 @@
  */
 
 #include <linux/err.h>
+
+#if 0 /* hyun */
 #include <linux/math64.h>
+#else
+#include <asm/div64.h>
+#endif
+
 #include "ubi.h"
 
 #ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
@@ -53,6 +59,8 @@ static struct device_attribute attr_vol_data_bytes =
 	__ATTR(data_bytes, S_IRUGO, vol_attribute_show, NULL);
 static struct device_attribute attr_vol_upd_marker =
 	__ATTR(upd_marker, S_IRUGO, vol_attribute_show, NULL);
+
+
 
 /*
  * "Show" method for files in '/<sysfs>/class/ubi/ubiX_Y/'.
@@ -254,7 +262,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 
 	/* Calculate how many eraseblocks are requested */
 	vol->usable_leb_size = ubi->leb_size - ubi->leb_size % req->alignment;
-	vol->reserved_pebs += div_u64(req->bytes + vol->usable_leb_size - 1,
+    vol->reserved_pebs += div_u64(req->bytes + vol->usable_leb_size - 1,
 				      vol->usable_leb_size);
 
 	/* Reserve physical eraseblocks */
@@ -326,7 +334,8 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 	vol->dev.devt = dev;
 	vol->dev.class = ubi_class;
 
-	sprintf(&vol->dev.bus_id[0], "%s_%d", ubi->ubi_name, vol->vol_id);
+	//dev_set_name(&vol->dev, "%s_%d", ubi->ubi_name, vol->vol_id);
+	sprintf(&vol->dev.bus_id[0], "%s_%d", ubi->ubi_name, vol->vol_id);	
 	err = device_register(&vol->dev);
 	if (err) {
 		ubi_err("cannot register device");
@@ -679,6 +688,7 @@ int ubi_add_volume(struct ubi_device *ubi, struct ubi_volume *vol)
 	vol->dev.devt = dev;
 	vol->dev.class = ubi_class;
 	sprintf(&vol->dev.bus_id[0], "%s_%d", ubi->ubi_name, vol->vol_id);
+	//dev_set_name(&vol->dev, "%s_%d", ubi->ubi_name, vol->vol_id);
 	err = device_register(&vol->dev);
 	if (err)
 		goto out_gluebi;

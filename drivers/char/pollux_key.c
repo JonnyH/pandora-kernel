@@ -42,6 +42,8 @@
 #define USB_VBUS_DECT	        POLLUX_GPC15
 #define SDMMC_INSERT            POLLUX_GPA19
 
+#define BD_VER_LSB              POLLUX_GPC18
+#define BD_VER_MSB              POLLUX_GPC17
 
 /* JOSYSTICK SDL MAPING */
 #define NON_KEY			 0
@@ -98,6 +100,7 @@ struct usb_connect {
 int vbus_start = 0; 
 struct usb_connect *usbCon = NULL; 
 
+static unsigned char uInfo[16];
 
 
 static irqreturn_t usb_vbus_irq(int irq, void *dev_id )
@@ -205,8 +208,8 @@ ssize_t POLLUXkey_read(struct file *filp, char *Putbuf, size_t length, loff_t *f
 int POLLUXkey_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,unsigned long arg)
 {
 	int ret;
-
-	switch(cmd)
+    
+    switch(cmd)
 	{
 
 #ifdef CONFIG_ARCH_POLLUX_GPH_GBOARD
@@ -272,6 +275,7 @@ int POLLUXkey_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,uns
          case IOCTL_GET_INSERT_SDMMC:   
             {
                 int sd_in;
+#if 0                
                 if(Get_Pwr_Status()) {
                     pollux_gpio_setpin(GPIO_LCD_AVDD ,0);
 		            pollux_set_gpio_func(POLLUX_GPA18, POLLUX_GPIO_MODE_GPIO);   
@@ -279,11 +283,55 @@ int POLLUXkey_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,uns
 		            pollux_gpio_setpin(GPIO_POWER_OFF ,0);
                     while(1);
                 }
+#endif     
+     
                 sd_in = pollux_gpio_getpin(SDMMC_INSERT);
                 if( copy_to_user((unsigned char*)arg, &sd_in, sizeof(int)) )
 	                return -EFAULT;
             }
             return 0;
+        case IOCTL_GET_BOARD_VERSION:
+            {
+                int bd_rev;
+                if( pollux_gpio_getpin(BD_VER_LSB) && (!pollux_gpio_getpin(BD_VER_MSB)) )
+                    bd_rev = 1;
+                else if( (!pollux_gpio_getpin(BD_VER_LSB)) && pollux_gpio_getpin(BD_VER_MSB) )
+                    bd_rev = 2;
+                else if( pollux_gpio_getpin(BD_VER_LSB) && pollux_gpio_getpin(BD_VER_MSB) )
+                    bd_rev = 3;
+                else
+                    bd_rev = 0;
+                
+                if( copy_to_user((unsigned char*)arg, &bd_rev, sizeof(int)) )
+	                return -EFAULT;
+            }       
+            return 0;
+        case IOCTL_GET_HOLD_STATUS:   
+            {
+                int hold_status;
+                hold_status = pollux_gpio_getpin(GPIO_HOLD_KEY);
+                if( copy_to_user((unsigned char*)arg, &hold_status, sizeof(int)) )
+	                return -EFAULT;
+            }
+            return 0;   
+        case IOCTL_GET_PWR_STATUS:
+            {
+                int pwr_status;
+                pwr_status = Get_Pwr_Status();
+                if( copy_to_user((unsigned char*)arg, &pwr_status, sizeof(int)) )
+	                return -EFAULT;
+            }
+            return 0;   
+        case IOCTL_GET_ID_NUM:
+            if( copy_to_user((unsigned char*)arg, uInfo, sizeof(uInfo)) )
+	            return -EFAULT;
+            return 0;
+        case IOCTL_SET_ID_NUM:
+            if( copy_from_user(uInfo, (unsigned char*)arg, sizeof(uInfo)) )
+	            return -EFAULT;
+            
+            return 0;
+
 #endif
     
     }	                
@@ -418,7 +466,7 @@ int __devinit POLLUX_key_init(void)
 	}
 #ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE	
 	printk(KERN_NOTICE "POLLUX gpio to key Driver\n");
-#endif	
+#endif
 	
 	
 	

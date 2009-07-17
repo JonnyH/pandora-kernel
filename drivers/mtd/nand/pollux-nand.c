@@ -30,6 +30,10 @@
 #include <asm/mach-types.h>
 #include <asm/hardware.h>
 
+#include <asm/arch/regs-gpio.h>
+#define BD_VER_LSB              POLLUX_GPC18
+#define BD_VER_MSB             POLLUX_GPC17
+
 
 #undef GDEBUG
 //#define GDEBUG
@@ -65,7 +69,7 @@ extern short BCH_IndexOfTable[8192];
 volatile 	PNANDECC		pECC;
 
 
-#define CLEAR_RnB()		pECC->reg_NFCONTROL |= 0x8000
+#define CLEAR_RnB()		pECC->reg_NFCONTROL |= 0x8000	
 #define CHECK_RnB()		while(1)								\
 	{															\
 		if (pECC->reg_NFCONTROL & 0x8000)							\
@@ -74,12 +78,15 @@ volatile 	PNANDECC		pECC;
 			break;												\
 		}														\
 	}		
-#define NF_WAITRB()		{ while(!(pECC->reg_NFCONTROL & 0x8000)); }		//add bnjang [2008.12.31]
+#define NF_WAITRB()		{ while(!(pECC->reg_NFCONTROL & 0x8000)); }		//add by bnjang [2008.12.31]
 
+#define NF_CLEARECC()                       { pECC->reg_NFCONTROL |= 0x0800; }	//add by bnjang [2009. 02. 02]
 
-
+static int getDeviceVersing(void);
 
 int cur_ecc_mode = 0;
+//board version 20090131 [bnjang]
+int boardVer = 0;
 
 
 void ReadOddSyndrome(int  *s)
@@ -328,52 +335,105 @@ static void pollux_nand_wait_dec(void)
     }
 }
 
-
 static int pollux_read_page_hwecc(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *buf)
 {
-	int      i, j; 
+	int      i, j;
 	int      eccsize = chip->ecc.size;  // 512
 	uint8_t *p = buf; // data buffer
 	unsigned int *p_oob;
 	int col = 0;
 	unsigned int *pdwSectorAddr;
 
-
 	col = mtd->writesize;
 	chip->cmdfunc(mtd, NAND_CMD_RNDOUT, col, -1);
 	chip->read_buf(mtd, chip->oob_poi, mtd->oobsize); // spare area read;
-	
-	p_oob = (chip->oob_poi+32);		//warning: assignment from incompatible pointer type
+
+	p_oob = (chip->oob_poi+32);		//warning: assignment from incompatible pointer type		
+
 	col = 0;
 	
-	for( i=0; i<4; i++) // 2k page, p는 512단위로 증가
+	for(  i=0; i<4; i++ ) // 2k page, p는 512단위로 증가
 	{
 		chip->cmdfunc(mtd, NAND_CMD_RNDOUT, col, -1);
 		
 		pECC->reg_NFORGECCL	= *p_oob++;
 		pECC->reg_NFORGECCH	= *p_oob++;
 		
-		chip->read_buf(mtd, p, eccsize);
+       NF_CLEARECC();
+		
+		chip->read_buf( mtd, p, eccsize );
 		pollux_nand_wait_dec(); // ecc 계산될 동안 대기
 		
 		if( pECC->reg_NFECCSTATUS & NAND_RDCHECKERR ) // error check 했는데, error가 있을 경우는
 		{
 			int dSyndrome[8];
-		   	int	ErrCnt, ErrPos[4];
-			
+			int ErrCnt, ErrPos[4];
+
 		    ReadOddSyndrome(dSyndrome);
 		    pdwSectorAddr = (unsigned int *)p;
 
-			ErrCnt = MES_NAND_GetErrorLocation( dSyndrome, ErrPos );
-			
-			for( j=0 ; j<ErrCnt ; j++ )
-			{
-				pdwSectorAddr[ErrPos[j]/32] ^= 1<<(ErrPos[j]%32);
-			}
+		    ErrCnt = MES_NAND_GetErrorLocation( dSyndrome, ErrPos );
+
+		    for( j=0 ; j<ErrCnt ; j++ )
+		    {
+		    	pdwSectorAddr[ErrPos[j]/32] ^= 1<<(ErrPos[j]%32);
+ 		    }
 		}
 		p   += eccsize;
 		col += eccsize;
 	}
+	
+	return 0;
+}
+
+static int pollux_read_page_hwecc_4K(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *buf)
+{
+	int      i, j;
+	int      eccsize = chip->ecc.size;  // 512
+	uint8_t *p = buf; // data buffer
+	unsigned int *p_oob;
+	int col = 0;
+	unsigned int *pdwSectorAddr;
+
+	col = mtd->writesize;
+	chip->cmdfunc(mtd, NAND_CMD_RNDOUT, col, -1);
+	chip->read_buf(mtd, chip->oob_poi, mtd->oobsize); // spare area read;
+
+	p_oob = (chip->oob_poi+64);		//warning: assignment from incompatible pointer type
+
+	col = 0;
+	
+	for(  i=0; i<8; i++ ) // 4k page, p는 512단위로 증가
+	{
+		chip->cmdfunc(mtd, NAND_CMD_RNDOUT, col, -1);
+		
+		pECC->reg_NFORGECCL	= *p_oob++;
+		pECC->reg_NFORGECCH	= *p_oob++;
+		
+       NF_CLEARECC();
+
+		chip->read_buf( mtd, p, eccsize );
+		pollux_nand_wait_dec(); // ecc 계산될 동안 대기
+		
+		if( pECC->reg_NFECCSTATUS & NAND_RDCHECKERR ) // error check 했는데, error가 있을 경우는
+		{
+			int dSyndrome[8];
+			int ErrCnt, ErrPos[4];
+
+		    ReadOddSyndrome(dSyndrome);
+		    pdwSectorAddr = (unsigned int *)p;
+
+		    ErrCnt = MES_NAND_GetErrorLocation( dSyndrome, ErrPos );
+
+		    for( j=0 ; j<ErrCnt ; j++ )
+		    {
+		    	pdwSectorAddr[ErrPos[j]/32] ^= 1<<(ErrPos[j]%32);
+ 		    }
+		}
+		p   += eccsize;
+		col += eccsize;
+	}
+	
 	return 0;
 }
 
@@ -383,48 +443,99 @@ void pollux_nand_write_page(struct mtd_info *mtd, struct nand_chip *chip, const 
 	int	i; 
 	int	eccsize = chip->ecc.size;  // 512
 	uint8_t *p = buf; // data buffer	warning: initialization discards qualifiers from pointer target type
-	int col = 0;
+	int	col = 0;
 	unsigned int *p_oob;
 	
-	
-    CLEAR_RnB();
-	
+ 	CLEAR_RnB();
+
 	/* Send command to begin page programming */
 	chip->cmdfunc(mtd, NAND_CMD_RNDIN, col, -1);
 
 	p_oob = (chip->oob_poi+32);		//warning: assignment from incompatible pointer type
-	
+
 	for( i=0; i<4; i++) // 2k page, p는 512단위로 증가
 	{
-		chip->write_buf(mtd, p, eccsize);		
+		NF_CLEARECC();		
+		chip->write_buf(mtd, p, eccsize);
 		
 		pollux_nand_wait_enc();
 		
-		*p_oob++ = pECC->reg_NFECCL;
-       *p_oob++ = pECC->reg_NFECCH;
-
-       p   += eccsize;
+        *p_oob++ = pECC->reg_NFECCL;
+        *p_oob++ = pECC->reg_NFECCH;
+		
+		p   += eccsize;
 		col += eccsize;
 		
 		chip->cmdfunc(mtd, NAND_CMD_RNDIN, col, -1);
 	}
 	
+//    for (i = 0; i < 32; i++)
+//		chip->oob_poi[i] = 0xff;
 	chip->oob_poi[0] = 0xff;
 	chip->write_buf(mtd, chip->oob_poi, mtd->oobsize);
 	
-    //col = mtd->writesize;
+	//col = mtd->writesize;
 
 #if 1	
 	#if 1	
 	col = mtd->writesize+mtd->oobsize;
-    chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, col, -1);
+	chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, col, -1);
     #else	
-	//Send command actually program the data */
-	//chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, -1, -1);
+	Send command actually program the data */
+	chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, -1, -1);
     #endif
 #endif
 	NF_WAITRB();	//bnjang [2008.12.31]
-	//CHECK_RnB();
+}
+
+void pollux_nand_write_page_4K(struct mtd_info *mtd, struct nand_chip *chip, const uint8_t *buf)
+{
+	int	i; 
+	int	eccsize = chip->ecc.size;  // 512
+	uint8_t *p = buf; // data buffer	warning: initialization discards qualifiers from pointer target type
+	int	col = 0;
+	unsigned int *p_oob;
+	
+ 	CLEAR_RnB();
+
+	/* Send command to begin page programming */
+	chip->cmdfunc(mtd, NAND_CMD_RNDIN, col, -1);
+	p_oob = (chip->oob_poi+64);		//warning: assignment from incompatible pointer type	
+
+	for( i=0; i<8; i++) // 4k page, p는 512단위로 증가
+	{
+		NF_CLEARECC();
+		chip->write_buf(mtd, p, eccsize);
+
+		pollux_nand_wait_enc();
+
+		*p_oob++ = pECC->reg_NFECCL;
+       *p_oob++ = pECC->reg_NFECCH;
+	
+		p   += eccsize;
+		col += eccsize;
+		
+		chip->cmdfunc(mtd, NAND_CMD_RNDIN, col, -1);
+	}
+	
+//    for (i = 0; i < 32; i++)
+//		chip->oob_poi[i] = 0xff;
+	chip->oob_poi[0] = 0xff;
+	chip->write_buf(mtd, chip->oob_poi, mtd->oobsize);
+	
+	//col = mtd->writesize;
+
+#if 1	
+	#if 1	
+	col = mtd->writesize+mtd->oobsize;
+	chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, col, -1);
+    #else	
+	Send command actually program the data */
+	chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, -1, -1);
+    #endif
+#endif
+
+	NF_WAITRB();	//bnjang [2008.12.31]
 }
 
 
@@ -586,8 +697,6 @@ static void pollux_nand_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ct
 	writeb(cmd, addr);
 }
 
-
-
 #if 0
 static struct nand_ecclayout pollux_nand_oob_mlc_64 = {
 	.eccbytes = 32,
@@ -601,15 +710,28 @@ static struct nand_ecclayout pollux_nand_oob_mlc_64 = {
 		 .length = 28}}
 };
 #else
-static struct nand_ecclayout pollux_nand_oob_mlc_64 = {
-	.eccbytes = 32,
-	.eccpos = {
-		 8, 9,10,11,12,13,14,15,
-		16,17,18,19,20,21,22,23,
-		24,25,26,27,28,29,30,31,
-		32,33,34,35,36,37,38,39},
-	.oobfree = {{0, 8}}   // file system reserved area지정, 일단 8개는 제낀다. ==> wince랑 맞추자....
-};
+	static struct nand_ecclayout pollux_nand_oob_mlc_64 = {
+		.eccbytes = 32,
+		.eccpos = {
+			 8, 9,10,11,12,13,14,15,
+			16,17,18,19,20,21,22,23,
+			24,25,26,27,28,29,30,31,
+			32,33,34,35,36,37,38,39},
+		.oobfree = {{0, 8}}   // file system reserved area지정, 일단 8개는 제낀다. ==> wince랑 맞추자....
+	};
+	static struct nand_ecclayout pollux_nand_oob_mlc_128 = {
+		.eccbytes = 64,
+		.eccpos = {
+			 8, 9,10,11,12,13,14,15,
+			16,17,18,19,20,21,22,23,
+			24,25,26,27,28,29,30,31,
+			32,33,34,35,36,37,38,39,
+			40,41,42,43,44,45,46,47,
+			48,49,50,51,52,53,54,55,
+			56,57,58,59,60,61,62,63,						
+			64,65,66,67,68,69,70,71},
+		.oobfree = {{0, 8}}   // file system reserved area지정, 일단 8개는 제낀다. ==> wince랑 맞추자....
+	};	
 #endif
 
 
@@ -644,9 +766,9 @@ static int __init pollux_nand_init(void)
 	int mtd_parts_nb = 0;
 	struct mtd_partition *mtd_parts = 0;
 	void __iomem* nandaddr=0;
-
-
-
+	
+	boardVer = getDeviceVersing();
+	
 #if 1 // for now....just remap
 	nandaddr = ioremap(POLLUX_PA_NAND, 0x1000);
 #else	
@@ -679,7 +801,8 @@ static int __init pollux_nand_init(void)
 	
 	pECC = (PNANDECC)POLLUX_VA_NANDECC;
 	
-
+	printk(KERN_INFO "[Device Version]>> %d  \n",  boardVer);
+	
 	/* insert callbacks */
 	this->IO_ADDR_R = nandaddr;
 	this->IO_ADDR_W = nandaddr;
@@ -687,11 +810,12 @@ static int __init pollux_nand_init(void)
 	this->dev_ready = pollux_nand_devready;
 	this->select_chip = pollux_select_chip;
 	//this->dev_ready = NULL;
-#if 1
+#if 1	
 	this->chip_delay   = 15;
-#else
-	this->chip_delay   = 30; //Read Cycle Time = 30ns, Write Cycle Time = 30ns
-#endif
+#else	
+	this->chip_delay   = 25; //bnjang [2008.12.30]
+#endif	
+
 #if 0	
 	this->options = 0;
 	this->ecc.mode = NAND_ECC_SOFT;
@@ -703,12 +827,35 @@ static int __init pollux_nand_init(void)
 	this->ecc.correct	= pollux_nand_correct_data;
 	
 	this->ecc.mode		 = NAND_ECC_HW;
-	this->ecc.read_page  = pollux_read_page_hwecc;
-	this->ecc.write_page = pollux_nand_write_page;
 	this->ecc.size       = 512;
-	this->ecc.bytes      = 32;	
-	this->ecc.layout     = &pollux_nand_oob_mlc_64;
+
+#ifdef CONFIG_ARCH_ADD_GPH_F300
+	if( !(boardVer) )
+	{
+		this->ecc.bytes      = 32;
+		this->ecc.layout     = &pollux_nand_oob_mlc_64;		
+		this->ecc.read_page  = pollux_read_page_hwecc;
+		this->ecc.write_page = pollux_nand_write_page;		
+	}
+	else
+	{
+		this->ecc.bytes      = 64;
+		this->ecc.layout     = &pollux_nand_oob_mlc_128	;
+		this->ecc.read_page  = pollux_read_page_hwecc_4K;
+		this->ecc.write_page = pollux_nand_write_page_4K;		
+	}
+#else
+    
+    this->ecc.bytes      = 32;
+	this->ecc.layout     = &pollux_nand_oob_mlc_64;		
+	this->ecc.read_page  = pollux_read_page_hwecc;
+	this->ecc.write_page = pollux_nand_write_page;		
+#endif  /* CONFIG_ARCH_ADD_GPH_F300 */
+
+
 #endif	
+
+
 	
 #ifdef 	CONFIG_POLLUX_KERNEL_BOOT_MESSAGE_ENABLE
 	printk("Searching for NAND flash...\n");
@@ -760,3 +907,25 @@ module_exit(pollux_nand_cleanup);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Claude <claude@mesdigital.com>");
 MODULE_DESCRIPTION("NAND MTD map driver for MP2530F NRK board");
+
+static int getDeviceVersing(void)
+{
+	int bd_rev;
+	
+	pollux_set_gpio_func(BD_VER_LSB,POLLUX_GPIO_MODE_GPIO);
+	pollux_gpio_set_inout(BD_VER_LSB, POLLUX_GPIO_INPUT_MODE);	
+	
+	pollux_set_gpio_func(BD_VER_MSB,POLLUX_GPIO_MODE_GPIO);
+	pollux_gpio_set_inout(BD_VER_MSB, POLLUX_GPIO_INPUT_MODE);	
+	
+	if( pollux_gpio_getpin(BD_VER_LSB) && (!pollux_gpio_getpin(BD_VER_MSB)) )
+		bd_rev = 1;
+	else if( (!pollux_gpio_getpin(BD_VER_LSB)) && pollux_gpio_getpin(BD_VER_MSB) )
+		bd_rev = 2;
+	else if( pollux_gpio_getpin(BD_VER_LSB) && pollux_gpio_getpin(BD_VER_MSB) )
+		bd_rev = 3;
+	else
+		bd_rev = 0;
+
+	return bd_rev;
+}

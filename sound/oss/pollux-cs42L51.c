@@ -29,7 +29,7 @@
 
 #include <asm/arch/dma.h>
 #include <asm/arch/regs-gpioalv.h>
-
+#include <asm/arch/regs-gpio.h>
 #include <asm/arch/aesop-pollux.h>
 
 #include "pollux-iis.h"
@@ -124,6 +124,7 @@ struct audio_device *dev = &audio_dev;
 #define GPIOALV_AUDIO_RST_BITNUM  2     // gpioalive, DAC reset pin
 #endif
 
+#define	SND_SPK_ON_OFF				POLLUX_GPA9
 
 #define NEXT_BUF(_s_,_b_) { \
 	(_s_)->_b_##_idx++; \
@@ -392,6 +393,8 @@ void cs42L51_set_volume(unsigned char left, unsigned char right)
 
 void cs42L51_set_igain(unsigned char left, unsigned char right)
 {
+	printk(" input _gain \n");
+	/*
 	int val_l, val_r;
 	if (right > 100) right = 100;
 	if (left > 100) left = 100;	
@@ -401,6 +404,7 @@ void cs42L51_set_igain(unsigned char left, unsigned char right)
 	
 	cs42L51_write_byte(CS42L51_PGAA, (unsigned char)val_l);
 	cs42L51_write_byte(CS42L51_PGAB, (unsigned char)val_r);
+    */
 }					
 
 static int cs42L51_init(void)
@@ -1464,6 +1468,7 @@ pollux_audio_open(struct inode *inode, struct file *file)
 	}
     
     cs42L51_write_byte(0x08, 0x00);
+    pollux_gpio_setpin(SND_SPK_ON_OFF ,1);
     
 	err = 0;
 out:
@@ -1505,6 +1510,8 @@ pollux_audio_release(struct inode *inode, struct file *file)
         mp2530_dma_close_channel(os->dma_ch);
         dev->wr_ref = 0;
 	}
+	
+	pollux_gpio_setpin(SND_SPK_ON_OFF ,0);
 	
 	return 0;
 }

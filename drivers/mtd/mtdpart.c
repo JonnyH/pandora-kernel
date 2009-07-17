@@ -327,7 +327,6 @@ int add_mtd_partitions(struct mtd_info *master,
 	printk (KERN_NOTICE "Creating %d MTD partitions on \"%s\":\n", nbparts, master->name);
 #endif
 
-
 	for (i = 0; i < nbparts; i++) {
 
 		/* allocate the partition structure */

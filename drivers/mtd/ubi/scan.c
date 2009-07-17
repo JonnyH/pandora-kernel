@@ -42,7 +42,11 @@
 
 #include <linux/err.h>
 #include <linux/crc32.h>
+#if 0 /* hyun */
 #include <linux/math64.h>
+#else
+#include <asm/div64.h>
+#endif
 #include "ubi.h"
 
 #ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
@@ -735,8 +739,10 @@ static int process_eb(struct ubi_device *ubi, struct ubi_scan_info *si,
 		si->bad_peb_count += 1;
 		return 0;
 	}
-
+    
+    
 	err = ubi_io_read_ec_hdr(ubi, pnum, ech, 0);
+	
 	if (err < 0)
 		return err;
 	else if (err == UBI_IO_BITFLIPS)
@@ -781,8 +787,7 @@ static int process_eb(struct ubi_device *ubi, struct ubi_scan_info *si,
 	}
 
 	/* OK, we've done with the EC header, let's look at the VID header */
-
-	err = ubi_io_read_vid_hdr(ubi, pnum, vidh, 0);
+   	err = ubi_io_read_vid_hdr(ubi, pnum, vidh, 0);
 	if (err < 0)
 		return err;
 	else if (err == UBI_IO_BITFLIPS)
@@ -838,7 +843,7 @@ static int process_eb(struct ubi_device *ubi, struct ubi_scan_info *si,
 			return -EINVAL;
 		}
 	}
-
+    
 	/* Both UBI headers seem to be fine */
 	err = ubi_scan_add_used(ubi, si, pnum, ec, vidh, bitflips);
 	if (err)

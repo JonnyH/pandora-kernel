@@ -51,6 +51,8 @@
 
 static u32 gammaIndex =0;
 static u32 lightIndex =0;
+static u32 sec_h = 480;
+
 static u8 tv_status = COMMAND_RETURN_LCD;
 
 #define COMMAND_LCD_INIT    0x55
@@ -96,9 +98,12 @@ static u32 R5G6B5toR8G8B8(u16 rgb);
 static __inline__ void SwitchVideo(int *left, int *right);
 static int LcdChangeSet(u32 cmd, u32 value);
 static int LcdRightWrite(u32 value);
+static void CountDelay(int count);
 
 void InitializeDPC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y, u8 mode)
 {
+    //mode = MES_DPC_VBS_PAL_N;
+    
     if( (command == COMMAND_INDIVIDUALLY) || (command == COMMAND_COMMONVIEW)
 	            || (command == COMMAND_ONLY_TV) )
     {
@@ -110,8 +115,16 @@ void InitializeDPC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y, u8 mode)
 		MES_DPC_SetDPCEnable( CFALSE );
 		MES_DPC_SetClockDivisorEnable(CFALSE);
         
-        //MES_DPC_SetHorizontalUpScaler( CTRUE, x, sec_x);
-        MES_DPC_SetHorizontalUpScaler( CTRUE, x, 720);
+#if 1        
+        if (command == COMMAND_INDIVIDUALLY) {
+            MES_DPC_SetHorizontalUpScaler( CFALSE, 2, 2 );
+            
+        }
+        else MES_DPC_SetHorizontalUpScaler( CTRUE, x, sec_x);
+#else
+        MES_DPC_SetHorizontalUpScaler( CTRUE, x, sec_x);
+#endif        
+        //MES_DPC_SetHorizontalUpScaler( CTRUE, 320, );
         
         //----------------------------------------------------------------------
 	    // Internal/External Encoder Mode
@@ -141,30 +154,53 @@ void InitializeDPC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y, u8 mode)
         if( (mode==MES_DPC_VBS_NTSC_M) || (mode==MES_DPC_VBS_NTSC_443) ||
                 (mode==MES_DPC_VBS_PAL_M) || (mode==MES_DPC_VBS_PSEUDO_PAL) )
         {                    
-    	    MES_DPC_SetHSync( DISPLAY_SEC_MAX_X_RESOLUTION,
-    					    DISPLAY_DPC_SEC_HSYNC_SWIDTH,
-    					    DISPLAY_DPC_SEC_HSYNC_FRONT_PORCH,
-    					    DISPLAY_DPC_SEC_HSYNC_BACK_PORCH,
+    	    
+            if (command == COMMAND_INDIVIDUALLY){
+              	    
+              	    MES_DPC_SetHSync( 320,
+    					    83,
+    					    74,
+    					    131,
     					    DISPLAY_DPC_SEC_HSYNC_ACTIVEHIGH );
 
-    	    MES_DPC_SetVSync( DISPLAY_SEC_MAX_Y_RESOLUTION/2,
-    					    DISPLAY_DPC_SEC_VSYNC_SWIDTH,
-    					    DISPLAY_DPC_SEC_VSYNC_FRONT_PORCH,
-    					    DISPLAY_DPC_SEC_VSYNC_BACK_PORCH,
+    	            MES_DPC_SetVSync( 240/2,
+    					    32,
+    					    32,
+    					    49,
     					    DISPLAY_DPC_SEC_VSYNC_ACTIVEHIGH,
-    					    DISPLAY_SEC_MAX_Y_RESOLUTION/2,
+    					    240/2,
+    					    33,
+    					    34,
+    					    46 );
+            }else{
+                MES_DPC_SetHSync( sec_x,
+    					    13,
+    					    5,
+    					    120,
+    					    DISPLAY_DPC_SEC_HSYNC_ACTIVEHIGH );
+                MES_DPC_SetVSync( sec_y/2,
+    					    2,//2,  //DISPLAY_DPC_SEC_VSYNC_SWIDTH,
+    					    2,//2,  //DISPLAY_DPC_SEC_VSYNC_FRONT_PORCH,
+    					    9,//19, //DISPLAY_DPC_SEC_VSYNC_BACK_PORCH,18
+    					    DISPLAY_DPC_SEC_VSYNC_ACTIVEHIGH,
+    					     sec_y/2 ,
     					    3,
-    					    4,
-    					    16 );
-        }
+    					    4,//2,
+    					    15 );
+                }
+            }                
+                
         else if( (mode==MES_DPC_VBS_NTSC_N) || (mode==MES_DPC_VBS_PAL_BGHI) ||
-                (mode==MES_DPC_VBS_PAL_N) || (mode==MES_DPC_VBS_PSEUDO_NTSC) )
-        {
-           MES_DPC_SetHSync( DISPLAY_SEC_MAX_X_RESOLUTION,
+                    (mode==MES_DPC_VBS_PAL_N) || (mode==MES_DPC_VBS_PSEUDO_NTSC) )
+                {
+
+#if 0
+            MES_DPC_SetHSync( TV_X_PAL,
     					    DISPLAY_DPC_SEC_HSYNC_SWIDTH1,
     					    DISPLAY_DPC_SEC_HSYNC_FRONT_PORCH1,
     					    DISPLAY_DPC_SEC_HSYNC_BACK_PORCH1,
     					    DISPLAY_DPC_SEC_HSYNC_ACTIVEHIGH );
+
 
     	    MES_DPC_SetVSync( DISPLAY_SEC_MAX_Y_RESOLUTION/2,
     					    DISPLAY_DPC_SEC_VSYNC_SWIDTH1,
@@ -175,10 +211,34 @@ void InitializeDPC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y, u8 mode)
     					    2,
     					    3,
     					    12 );
+#else
+
+            
+            
+            MES_DPC_SetHSync( sec_x,
+    					    62,//42
+    					    2,
+    					    100,
+    					    DISPLAY_DPC_SEC_HSYNC_ACTIVEHIGH );
+            
+            MES_DPC_SetVSync( sec_y/2,
+    					    2,    //2
+    					    3,  //21
+    					    30,   //3
+    					    DISPLAY_DPC_SEC_VSYNC_ACTIVEHIGH,
+    					    sec_y/2,
+    					    2,
+    					    3,
+    					    30 );
+
+
+#endif     
+     
         }
         
     	MES_DPC_SetVSyncOffset( 0, 0, 0, 0 );
-
+        
+        
 		switch(DISPLAY_DPC_SEC_OUTPUT_FORMAT)
 		{
 			case DPC_FORMAT_RGB555:
@@ -229,10 +289,10 @@ void InitializeDPC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y, u8 mode)
 		
 		if( (mode==MES_DPC_VBS_NTSC_M) || (mode==MES_DPC_VBS_NTSC_443) ||
                 (mode==MES_DPC_VBS_PAL_M) || (mode==MES_DPC_VBS_PSEUDO_PAL) )
-		    MES_DPC_SetVideoEncoderTiming( 64, 1716, 0, 3 );
+		    MES_DPC_SetVideoEncoderTiming( 64, 1716, 0, 3  );
 		else if( (mode==MES_DPC_VBS_NTSC_N) || (mode==MES_DPC_VBS_PAL_BGHI) ||
                 (mode==MES_DPC_VBS_PAL_N) || (mode==MES_DPC_VBS_PSEUDO_NTSC) )
-		    MES_DPC_SetVideoEncoderTiming( 84, 1728, 0, 4 );
+		    MES_DPC_SetVideoEncoderTiming( 114/*84*/, 1728, 0, 4 );
 		    
 		MES_DPC_SetVideoEncoderPowerDown( CFALSE );
 		
@@ -351,8 +411,12 @@ void InitializeMLC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y)
             SEC_MLC_FRAME_BASE = POLLUX_FB_PIO_BASE;
         }
         else if(command == COMMAND_INDIVIDUALLY) {   
+#if 0           
             SEC_MLC_FRAME_BASE = POLLUX_FB_PIO_BASE + ( x * DISPLAY_MLC_BYTE_PER_PIXEL );
             X_STRIDE = DISPLAY_MLC_BYTE_PER_PIXEL * ( x + SEC_X_RESOLUTION );
+#else
+            SEC_MLC_FRAME_BASE = POLLUX_FB_PIO_BASE;
+#endif        
         }
         
         MES_MLC_SetClockPClkMode(1, MES_PCLKMODE_DYNAMIC );
@@ -361,7 +425,9 @@ void InitializeMLC(u8 command, u32 x, u32 y, u32 sec_x, u32 sec_y)
         MES_MLC_SetLayerPriority(1, (MES_MLC_PRIORITY)DISPLAY_MLC_VIDEO_LAYER_PRIORITY );
 	    MES_MLC_SetTopPowerMode (1, CTRUE );
 	    MES_MLC_SetTopSleepMode (1, CFALSE );
-        MES_MLC_SetFieldEnable(1, CFALSE );
+        
+        if(command == COMMAND_INDIVIDUALLY) MES_MLC_SetFieldEnable(1, CTRUE );
+        else MES_MLC_SetFieldEnable(1, CFALSE );
         
         MES_MLC_SetScreenSize( 1, SEC_X_RESOLUTION, SEC_Y_RESOLUTION );		
 		MES_MLC_SetBackground(1, 0xFF0000);
@@ -463,41 +529,35 @@ void InitializePWM(void)
 void	
 InitializeLCD(int flag)
 {
-    LCD_CS_HIGH;
-	LCD_SCL_LOW;
+	LCD_CS_HIGH;
+	LCD_SCL_HIGH;
 	LCD_SDI_HIGH;
 	
     pollux_gpio_setpin(GPIO_LCD_AVDD, CFALSE);
-	mdelay(30);
 	pollux_gpio_setpin(GPIO_LCD_ENB, CFALSE);
-	mdelay(1);
+	CountDelay(10);
 	pollux_gpio_setpin(GPIO_LCD_ENB, CTRUE);
-    mdelay(30);
 
-    lcd_SetW( 0x01, 0x8828 );	udelay( 100 );
 	lcd_SetW( 0x02, 0x0182 );	udelay( 100 );  //18bit
 	
     if(flag){
         /* 320 x 240 */        
-        lcd_SetW( 0x03, 0x8111 );	udelay( 100 ); 	//SS=1 AM=01 ID[1:]=01
-        lcd_SetW( 0x20, 0x0000 );	udelay( 100 ); 
-	    lcd_SetW( 0x21, 0x013f );	udelay( 100 ); 
+        lcd_SetW( 0x03, 0x8111 ); 	//SS=1 AM=01 ID[1:]=01
+        lcd_SetW( 0x20, 0x0000 ); 
+		lcd_SetW( 0x21, 0x013f ); 
     }else{
-          /* 240 x 320 */
-        lcd_SetW( 0x03, 0x8130 );	udelay( 100 );  
-        lcd_SetW( 0x20, 0x0000 );	udelay( 100 ); 
-        lcd_SetW( 0x21, 0x0000 );	udelay( 100 ); 
+        /* 240 x 320 */
+        lcd_SetW( 0x03, 0x8130 );  
+        lcd_SetW( 0x20, 0x0000 ); 
+        lcd_SetW( 0x21, 0x0000 ); 
     }
-    
-    lcd_SetW( 0x10, 0x0 );  	udelay( 100 );
-	lcd_SetW( 0x22, 0xffff );	mdelay( 1 );
-	
+
+    lcd_SetW( 0x10, 0x0 );
+	lcd_SetW( 0x05, 0x0001 );
+//	lcd_SetW( 0x18, 0x28 );	udelay( 100 );	//80hz bnjang	
+	lcd_SetW( 0x22, 0xffff );	CountDelay( 1000 );
+
 	pollux_gpio_setpin(GPIO_LCD_AVDD, CTRUE);
-	mdelay(15);
-	
-	lcd_SetW( 0x05, 0x0001 );	udelay( 100 );
-	lcd_SetW( 0x22, 0xffff );	mdelay( 1 );
-    
 }
 
 
@@ -699,7 +759,7 @@ SetupVideo(struct fb_info *info,
         // calculate video position.
 	    SwitchVideo(&left, &right);
         
-        // set video image position, scale.
+        // set video image position, scale
 	    MES_MLC_SetPosition(IS_MLC_S, fbi->disp_info.video_layer, left, top, right, bottom);	
         MES_MLC_SetYUVLayerScale(IS_MLC_S, width, height, 
 					  !(right-left) ? 2 : (right-left), 
@@ -1238,12 +1298,6 @@ static int RunIdct(U16 *InputData, U16 *QuantMatrix, U16 * OutputData )
 
 static int LcdStandbyOn(void)
 {
-
-#ifndef CONFIG_ARCH_ADD_GPH_F300
-    while( !pollux_gpio_getpin(POLLUX_GPA11) );     //seek 'H'
-    while( pollux_gpio_getpin(POLLUX_GPA11) );      //seek 'L'
-#endif    
-
     lcd_SetW(0x05, 0x00);         
     mdelay(32);
     LCD_AVDD_OFF;
@@ -1258,12 +1312,6 @@ static int LcdStandbyOn(void)
 
 static int LcdStandbyOff(void)
 {
-
-#ifndef CONFIG_ARCH_ADD_GPH_F300
-    while( !pollux_gpio_getpin(POLLUX_GPA11) );     //seek 'H'
-    while( pollux_gpio_getpin(POLLUX_GPA11) );      //seek 'L'
-#endif
-    
     lcd_SetW(0x10, 0x00);         
     mdelay(100);
     LCD_AVDD_ON;
@@ -1280,12 +1328,6 @@ static int LcdGammaSet(u32 value)
 {
     struct lcd_set_form *gamma = &lcd_set_form_tbl[value][lightIndex];       
     gammaIndex = value;
-    
-#ifndef CONFIG_ARCH_ADD_GPH_F300
-    while( !pollux_gpio_getpin(POLLUX_GPA11) );     //seek 'H'
-    while( pollux_gpio_getpin(POLLUX_GPA11) );      //seek 'L'
-#endif
-    
     lcd_SetW(0x70, gamma->r70);
     lcd_SetW(0x71, gamma->r71);
     lcd_SetW(0x72, gamma->r72);
@@ -1306,12 +1348,6 @@ static int LcdGammaSet(u32 value)
 static int LcdRightWrite(u32 value)
 {
     struct lcd_set_form *gamma = &lcd_set_form_tbl[gammaIndex][value];
-    
-#ifndef CONFIG_ARCH_ADD_GPH_F300
-    while( !pollux_gpio_getpin(POLLUX_GPA11) );     //seek 'H'
-    while( pollux_gpio_getpin(POLLUX_GPA11) );      //seek 'L'
-#endif
-    
     lcd_SetW(0x70, gamma->r70);
     lcd_SetW(0x71, gamma->r71);
     lcd_SetW(0x72, gamma->r72);
@@ -1329,15 +1365,14 @@ static int LcdRightWrite(u32 value)
 
 static int LcdDirection(int flag)
 {
-    
     if(flag){
-        InitializeDPC(COMMAND_LCD_INIT, 240, 320, 0, 0, 0);
+		InitializeDPC(COMMAND_LCD_INIT, 240, 320, 0, 0, 0);
         InitializeMLC(COMMAND_LCD_INIT, 320, 240, 0, 0);
-        InitializeLCD(1);   
+		InitializeLCD(1);
     }else{
         InitializeDPC(COMMAND_LCD_INIT, 240, 320, 0, 0, 0);
         InitializeMLC(COMMAND_LCD_INIT, 240, 320, 0, 0);
-        InitializeLCD(0);   
+		InitializeLCD(0);
     }
     
     return 0;
@@ -1350,18 +1385,22 @@ static void lcd_SetW( u16 addr, u16 Data )
 	u8 sByte = 0x70;
 	
 	if(addr == 0xffff) goto SKIP_INDEX;
+#ifndef CONFIG_ARCH_ADD_GPH_F300
+    while( !pollux_gpio_getpin(POLLUX_GPA11) );     //seek 'H'
+    while( pollux_gpio_getpin(POLLUX_GPA11) );      //seek 'L'
+#endif
 	// START BYTE 
 	LCD_CS_LOW;
-	udelay(5);
+	CountDelay(5);
 	
 	for(i=7 ; i>=0 ; i--){
 		if( sByte & (1<<i) )	LCD_SDI_HIGH;
 		else LCD_SDI_LOW;
  		
  		LCD_SCL_LOW;
-//		udelay(5);
+		CountDelay(2);
 		LCD_SCL_HIGH;
-//		udelay(5);
+		CountDelay(2);
 	}
 	
 	// START addr
@@ -1370,21 +1409,21 @@ static void lcd_SetW( u16 addr, u16 Data )
 		else LCD_SDI_LOW;
  			
 		LCD_SCL_LOW;
-//		udelay(5); //60us
+		CountDelay(2);
 		LCD_SCL_HIGH;
-//		udelay(5);
+		CountDelay(2);
 	}
 	
 	// END INDEX 
 	LCD_CS_HIGH;
-	udelay(5);
+	CountDelay(5);
 	if(Data == 0xffff) return ;
 
 SKIP_INDEX:
 	
 	// START BYTE 
 	LCD_CS_LOW;
-	udelay(5);
+	CountDelay(5);
 	
 	sByte |= 0x02;
 	for(i=7 ; i>=0 ; i--){
@@ -1392,9 +1431,9 @@ SKIP_INDEX:
 		else LCD_SDI_LOW;
  		
  		LCD_SCL_LOW;
-//		udelay(5);
+		CountDelay(2);
 		LCD_SCL_HIGH;
-//		udelay(5);
+		CountDelay(2);
 	}
 	
 	// START ADDR
@@ -1403,15 +1442,15 @@ SKIP_INDEX:
 		else LCD_SDI_LOW;
  	
 		LCD_SCL_LOW;
-//		udelay(5);
+		CountDelay(2);
 		LCD_SCL_HIGH;
-//		udelay(5);
+		CountDelay(2);
 	}
 	
 	//END INSTRUCTION 
 	LCD_SDI_HIGH;
 	LCD_CS_HIGH;
-	udelay(5);
+	CountDelay(5);
 }
 
 static u16 lcd_SetR( u16 addr )
@@ -1592,7 +1631,7 @@ static int LcdChangeSet(u32 cmd, u32 value)
     switch(cmd)
     {
 #ifdef CONFIG_ARCH_POLLUX_GPH_GBOARD
-/*        
+        
         case LCD_POWER_DOWN_ON_CMD :
             LcdStandbyOn();
             break; 
@@ -1606,8 +1645,7 @@ static int LcdChangeSet(u32 cmd, u32 value)
             lightIndex = value;
             LcdRightWrite(value);
             break;
-*/
-
+        
 #ifndef CONFIG_ARCH_ADD_GPH_F300       
         case LCD_DIRECTION_ON_CMD:
             LcdDirection(1);
@@ -1639,15 +1677,22 @@ int TvConfiguration(u8 command, u8 mode, u32 width, u32 Height)
     {
         case COMMAND_INDIVIDUALLY:
             tv_status = COMMAND_INDIVIDUALLY;
+#if 0
+            InitializeDPC(command, 320, 240, width, Height, mode);
+            InitializeMLC(command, 320, 240, width, Height);
+            sec_h = Height;
+#endif            
             break;
         case COMMAND_COMMONVIEW:
-            InitializeDPC(command, 320, 240, 720, 480, mode);
-            InitializeMLC(command, 320, 240, 720, 480);
+            InitializeDPC(command, 320, 240, width, Height, mode);
+            InitializeMLC(command, 320, 240, width, Height);
             tv_status = COMMAND_COMMONVIEW;
+            sec_h = Height;
             break;
         case COMMAND_ONLY_TV:
-            InitializeDPC(command, 320, 240, 720, 480, mode);
-            InitializeMLC(command, 320, 240, 720, 480);
+            InitializeDPC(command, 320, 240, width, Height, mode);
+            InitializeMLC(command, 320, 240, width, Height);
+#if 1
             LcdStandbyOn();  //lcd off
             
             // mlc0 & dpc0 disable 
@@ -1666,7 +1711,10 @@ int TvConfiguration(u8 command, u8 mode, u32 width, u32 Height)
             MES_DPC_SetDPCEnable( CFALSE );
             
             tv_status = COMMAND_ONLY_TV;
-            
+#else
+            tv_status = COMMAND_COMMONVIEW;
+#endif            
+            sec_h = Height;
             break;
         case COMMAND_RETURN_LCD:
             // mlc1 & dpc1 disable     
@@ -1812,4 +1860,10 @@ static __inline__ void SwitchVideo(int *left, int *right)
 	}
 
 #endif
+}
+
+static void CountDelay(int count)
+{	
+	volatile unsigned int delay = 0;
+ 	for(delay = 0; delay<count*100; delay++); 
 }
