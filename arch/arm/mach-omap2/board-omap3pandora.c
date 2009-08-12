@@ -223,9 +223,31 @@ static struct twl4030_usb_data omap3pandora_usb_data = {
 	.usb_mode	= T2_USB_MODE_ULPI,
 };
 
+static int pandora_batt_table[] = { 
+	/* 0 C*/
+	30800, 29500, 28300, 27100,
+	26000, 24900, 23900, 22900, 22000, 21100, 20300, 19400, 18700, 17900,
+	17200, 16500, 15900, 15300, 14700, 14100, 13600, 13100, 12600, 12100,
+	11600, 11200, 10800, 10400, 10000, 9630,   9280,   8950,   8620,   8310,
+	8020,   7730,   7460,   7200,   6950,   6710,   6470,   6250,   6040,   5830,
+	5640,   5450,   5260,   5090,   4920,   4760,   4600,   4450,   4310,   4170,
+	4040,   3910,   3790,   3670,   3550
+};
+
+static struct twl4030_bci_platform_data pandora_bci_data = { 
+        .battery_tmp_tbl	= pandora_batt_table,
+        .tblsize		= ARRAY_SIZE(pandora_batt_table),
+};
+
+static struct twl4030_madc_platform_data pandora_madc_data = {
+	.irq_line	= 1,
+};
+
 static struct twl4030_platform_data omap3pandora_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
+	.bci		= &pandora_bci_data,
+	.madc		= &pandora_madc_data,
 	.gpio		= &omap3pandora_gpio_data,
 	.usb		= &omap3pandora_usb_data,
 	.keypad		= &omap3pandora_kp_data,
