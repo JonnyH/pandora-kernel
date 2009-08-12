@@ -15,6 +15,7 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+#define DEBUG
 /* Boot with automatic charge */
 #define CHARGE_MODE 1
 
@@ -692,7 +693,12 @@ static int twl4030bci_status(void)
 	}
 
 #ifdef DEBUG
-	printk("BCI DEBUG: BCIMSTATEC Charge state is 0x%x\n", status);
+	{
+		static int oldstatus = -1;
+		if (status != oldstatus)
+			printk("BCI DEBUG: BCIMSTATEC Charge state is 0x%x\n", status);
+		oldstatus = status;
+	}
 #endif
 	return (int) (status & BCIMSTAT_MASK);
 }
@@ -740,7 +746,7 @@ static int twl4030backupbatt_voltage_setup(void)
  * Settup the twl4030 BCI module to measure battery
  * temperature
  */
-static int twl4030battery_temp_setup(void)
+static int twl4030battery_temp_setup(int dump)
 {
 #ifdef DEBUG
 	u8 i;
@@ -753,6 +759,8 @@ static int twl4030battery_temp_setup(void)
 	if (ret)
 		return ret;
 
+	if (!dump)
+		return 0;
 #ifdef DEBUG
 	twl4030_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &ret, REG_BOOT_BCI);
 	printk("BCI DEBUG: BOOT_BCI Value is 0x%x\n", ret);
@@ -893,7 +901,7 @@ show_charge_current(struct device *dev, struct device_attribute *attr, char *buf
 
 #ifdef DEBUG
 	/* Dump debug */
-	twl4030battery_temp_setup();
+	twl4030battery_temp_setup(1);
 #endif
 
 	return sprintf(buf, "%d\n", ret);
@@ -961,6 +969,30 @@ set_charge_current(struct device *dev, struct device_attribute *attr, const char
 	return count;
 }
 static DEVICE_ATTR(charge_current, S_IRUGO | S_IWUSR, show_charge_current, set_charge_current);
+
+static ssize_t
+show_current2(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret, curr = read_bci_val(T2_BATTERY_CUR);
+	u8 val;
+
+	ret = twl4030_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE, &val,
+		REG_BCICTL1);
+	if (ret)
+		return ret;
+
+	if (val & CGAIN)
+		//ret = (int)((float)curr * 1.6617790811339199f * 2.0f - 1.7f);
+		ret = curr * 16618 * 2 - 1700 * 10000;
+	else
+		//ret = (int)((float)curr * 1.6617790811339199f - 0.85f);
+		ret = curr * 16618 - 850 * 10000;
+	ret /= 10000;
+
+	return sprintf(buf, "%d (BCIICHG2 = 0x%02x, BCIICHG1 = 0x%02x, CGAIN = %d)\n",
+		ret, curr >> 8, curr & 0xff, (val & CGAIN) ? 1 : 0);
+}
+static DEVICE_ATTR(current_now2, S_IRUGO | S_IWUSR, show_current2, NULL);
 
 static int twl4030_bk_bci_battery_get_property(struct power_supply *psy,
 					enum power_supply_property psp,
@@ -1091,7 +1123,7 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, di);
 
 	/* settings for temperature sensing */
-	ret = twl4030battery_temp_setup();
+	ret = twl4030battery_temp_setup(0);
 	if (ret)
 		goto temp_setup_fail;
 
@@ -1150,6 +1182,7 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to create sysfs entries\n");
 		goto bk_batt_failed;
 	}
+	device_create_file(di->bat.dev, &dev_attr_current_now2);
 
 	INIT_DELAYED_WORK_DEFERRABLE(&di->twl4030_bk_bci_monitor_work,
 				twl4030_bk_bci_battery_work);
