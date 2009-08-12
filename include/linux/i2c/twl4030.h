@@ -221,6 +221,8 @@ int twl4030_i2c_read(u8 mod_no, u8 *value, u8 reg, u8 num_bytes);
 struct twl4030_bci_platform_data {
 	int *battery_tmp_tbl;
 	unsigned int tblsize;
+
+	bool no_backup_battery;
 };
 
 /* TWL4030_GPIO_MAX (18) GPIOs, with interrupts */
