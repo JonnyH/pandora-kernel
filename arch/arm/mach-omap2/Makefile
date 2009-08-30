@@ -83,6 +83,7 @@ obj-$(CONFIG_MACH_OMAP3_PANDORA)	+= board-omap3pandora.o \
 					   hsmmc.o \
 					   usb-musb.o \
 					   usb-ehci.o
+obj-$(CONFIG_OMAP3_PANDORA_WIFI)	+= board-omap3pandora-wifi.o
 
 # TUSB 6010 chips
 obj-$(CONFIG_MACH_OMAP2_TUSB6010)	+= usb-tusb6010.o
