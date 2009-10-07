@@ -199,6 +199,8 @@ static struct platform_device omap3pandora_bl = {
 static int omap3pandora_twl_gpio_setup(struct device *dev,
 		unsigned gpio, unsigned ngpio)
 {
+	int ret, gpio_32khz;
+
 	/* TWL4030_GPIO_MAX + 0 == ledA, KEYPAD_BACKLIGHT (out, active low) */
 	omap3pandora_gpio_leds[0].gpio = gpio + TWL4030_GPIO_MAX + 0;
 
@@ -207,6 +209,18 @@ static int omap3pandora_twl_gpio_setup(struct device *dev,
 
 	/* gpio + 7 is PWM1, CHARGER_LED */
 	omap3pandora_gpio_leds[2].gpio = gpio + 7;
+
+	/* hack */
+	gpio_32khz = gpio + 13;
+	ret = gpio_request(gpio_32khz, "32kHz");
+	if (ret != 0)
+		printk(KERN_ERR "Cannot get GPIO line %d\n", gpio_32khz);
+	ret = gpio_direction_output(gpio_32khz, 1);
+	if (ret != 0)
+		printk(KERN_ERR "Cannot set GPIO line %d\n", gpio_32khz);
+	else
+		printk(KERN_INFO "TWL GPIO 13 (GPIO %d) set.\n", gpio_32khz);
+	gpio_free(gpio_32khz);
 
 	return 0;
 }
