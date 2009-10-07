@@ -75,7 +75,8 @@ static int omap3pandora_keymap[] = {
 	KEY(4, 7, KEY_COMMA),
 	KEY(5, 0, KEY_M),
 	KEY(5, 1, KEY_SPACE),
-	KEY(5, 2, KEY_FN),
+	KEY(5, 2, KEY_SPACE),
+	KEY(5, 3, KEY_FN),
 };
 
 struct twl4030_keypad_data omap3pandora_kp_data = {
@@ -151,7 +152,7 @@ static struct gpio_keys_button gpio_buttons[] = {
 	}, {
 		.code			= KEY_LEFTALT,
 		.gpio			= 100,
-		.active_low		= 0,
+		.active_low		= 1,
 		.desc			= "start",
 	}, {
 		.code			= KEY_LEFTCTRL,

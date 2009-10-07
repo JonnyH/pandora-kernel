@@ -282,7 +282,7 @@ static struct vsense_platform_data omap3pandora_nub1_data = {
 };
 
 static struct vsense_platform_data omap3pandora_nub2_data = {
-	.gpio_irq	= 162,
+	.gpio_irq	= 126,
 	.gpio_reset	= 156,
 };
 
