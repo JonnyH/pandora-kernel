@@ -1,6 +1,8 @@
 /*
- * Backlight driver for TWL4030 PWM0.
+ * Backlight driver for TWL4030 PWM0 -> TPS61161 combo.
  * Based on pwm_bl.c
+ *
+ * Author: Gražvydas Ignotas <notasas@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -10,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/delay.h>
 #include <linux/fb.h>
 #include <linux/backlight.h>
 #include <linux/i2c/twl4030.h>
@@ -21,11 +24,32 @@
 #define TWL_INTBR_GPBR1	0x0c
 #define TWL_INTBR_PMBR1	0x0d
 
+#define PWM0_CLK_ENABLE	1
+#define PWM0_ENABLE	4
+
+/* range accepted by hardware */
+#define MIN_VALUE 9
+#define MAX_VALUE 63
+#define MAX_USER_VALUE (MAX_VALUE - MIN_VALUE)
+
 static int old_brightness;
+
+static void pwm0_disable(void)
+{
+	u8 r;
+
+	/* first disable PWM0 output, then clock */
+	twl4030_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_GPBR1);
+	r &= ~PWM0_ENABLE;
+	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
+	r &= ~PWM0_CLK_ENABLE;
+	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
+}
 
 static int pwm0_backlight_update_status(struct backlight_device *bl)
 {
 	int brightness = bl->props.brightness;
+	u8 r;
 
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
@@ -35,31 +59,37 @@ static int pwm0_backlight_update_status(struct backlight_device *bl)
 		brightness = 0;
 	*/
 
-	if ((unsigned)brightness > 57)
-		brightness = 57;
+	if ((unsigned int)brightness > MAX_USER_VALUE)
+		brightness = MAX_USER_VALUE;
 
 	if (brightness == 0) {
-		if (old_brightness != 0) {
-			/* set OFF time to max,
-			 * then disable PWM0 output and clock */
-			twl4030_i2c_write_u8(TWL4030_MODULE_PWM0, 0x3f,
-						TWL_PWM0_OFF);
-			/* 0x49 0x91 */
-			twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, 0x01,
-						TWL_INTBR_GPBR1);
-			twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, 0x00,
-						TWL_INTBR_GPBR1);
-		}
+		if (old_brightness != 0)
+			pwm0_disable();
 
 		goto done;
 	}
 
-	if (old_brightness == 0)
-		/* turn PWM0 output and clock on */
-		twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, 0x05,
-					TWL_INTBR_GPBR1);
+	if (old_brightness == 0) {
+		/* set PWM duty cycle to max. TPS61161 seems to use this
+		 * to calibrate it's PWM sensitivity when it starts. */
+		twl4030_i2c_write_u8(TWL4030_MODULE_PWM0, MAX_VALUE,
+					TWL_PWM0_OFF);
 
-	twl4030_i2c_write_u8(TWL4030_MODULE_PWM0, 6 + brightness,
+		/* first enable clock, then PWM0 out */
+		twl4030_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_GPBR1);
+		r &= ~PWM0_ENABLE;
+		r |= PWM0_CLK_ENABLE;
+		twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
+		r |= PWM0_ENABLE;
+		twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
+
+		/* TI made it very easy to enable digital control, so easy that
+		 * it often triggers unintentionally and disabes PWM control,
+		 * so wait until 1 wire mode detection window ends. */
+		udelay(2000);
+	}
+
+	twl4030_i2c_write_u8(TWL4030_MODULE_PWM0, MIN_VALUE + brightness,
 				TWL_PWM0_OFF);
 
 done:
@@ -80,6 +110,7 @@ static struct backlight_ops pwm0_backlight_ops = {
 static int pwm0_backlight_probe(struct platform_device *pdev)
 {
 	struct backlight_device *bl;
+	u8 r;
 
 	bl = backlight_device_register(pdev->name, &pdev->dev,
 			NULL, &pwm0_backlight_ops);
@@ -88,14 +119,18 @@ static int pwm0_backlight_probe(struct platform_device *pdev)
 		return PTR_ERR(bl);
 	}
 
-	twl4030_i2c_write_u8(TWL4030_MODULE_PWM0, 0x81, TWL_PWM0_ON);
+	/* 64 cycle period, ON position 0 */
+	twl4030_i2c_write_u8(TWL4030_MODULE_PWM0, 0x80, TWL_PWM0_ON);
 
-	bl->props.max_brightness = 57;
-	bl->props.brightness = 57;
+	bl->props.max_brightness = MAX_USER_VALUE;
+	bl->props.brightness = MAX_USER_VALUE;
 	backlight_update_status(bl);
 
 	/* enable PWM function in pin mux (i2c addr 0x49 0x92) */
-	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, 0x04, TWL_INTBR_PMBR1);
+	twl4030_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_PMBR1);
+	r &= ~0x0c;
+	r |= 0x04;
+	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_PMBR1);
 
 	return 0;
 }
@@ -111,9 +146,7 @@ static int pwm0_backlight_remove(struct platform_device *pdev)
 static int pwm0_backlight_suspend(struct platform_device *pdev,
 				 pm_message_t state)
 {
-	/* turn PWM0 off */
-	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, 0x01, TWL_INTBR_GPBR1);
-	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, 0x00, TWL_INTBR_GPBR1);
+	pwm0_disable();
 	old_brightness = 0;
 
 	return 0;

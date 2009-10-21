@@ -1081,7 +1081,8 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 	di->pdata = pdata;
 
 	/* Set up clocks */
-	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, MADC_HFCLK_EN | DEFAULT_MADC_CLK_EN, REG_GPBR1);
+	clear_n_set(TWL4030_MODULE_INTBR, 0,
+			MADC_HFCLK_EN | DEFAULT_MADC_CLK_EN, REG_GPBR1);
 
 	twl4030charger_ac_en(ENABLE, CHARGE_MODE);
 	twl4030charger_usb_en(ENABLE);
