@@ -303,7 +303,7 @@ static int __init omap3pandora_i2c_init(void)
 	omap_register_i2c_bus(1, 2600, omap3pandora_i2c_boardinfo,
 			ARRAY_SIZE(omap3pandora_i2c_boardinfo));
 	/* i2c2 pins are not connected */
-	omap_register_i2c_bus(3, 400, omap3pandora_i2c_vsense,
+	omap_register_i2c_bus(3, 100, omap3pandora_i2c_vsense,
 			ARRAY_SIZE(omap3pandora_i2c_vsense));
 	return 0;
 }
