@@ -45,7 +45,7 @@ static void vsense_work(struct work_struct *work)
 {
 	struct vsense_drvdata *ddata;
 	int ax = 0, ay = 0, rx = 0, ry = 0;
-	signed char buff[8];
+	signed char buff[4];
 	int ret;
 
 	ddata = container_of(work, struct vsense_drvdata, work.work);
@@ -53,8 +53,8 @@ static void vsense_work(struct work_struct *work)
 	if (unlikely(gpio_get_value(ddata->irq_gpio)))
 		goto dosync;
 
-	ret = i2c_master_recv(ddata->client, buff, 8);
-	if (unlikely(ret != 8)) {
+	ret = i2c_master_recv(ddata->client, buff, sizeof(buff));
+	if (unlikely(ret != sizeof(buff))) {
 		dev_err(&ddata->client->dev, "read failed with %i\n", ret);
 		goto dosync;
 	}
