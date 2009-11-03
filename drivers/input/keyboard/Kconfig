@@ -199,6 +199,15 @@ config KEYBOARD_ATARI
 	  To compile this driver as a module, choose M here: the
 	  module will be called atakbd.
 
+config KEYBOARD_MATRIX
+	tristate "GPIO driven matrix keypad support"
+	depends on GENERIC_GPIO
+	help
+	  Enable support for GPIO driven matrix keypad.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called matrix_keypad.
+
 config KEYBOARD_HIL_OLD
 	tristate "HP HIL keyboard support (simple driver)"
 	depends on GSC || HP300
