@@ -32,6 +32,7 @@
 #include <linux/input.h>
 #include <linux/platform_device.h>
 #include <linux/i2c/twl4030.h>
+#include <linux/input/matrix_keypad.h>
 
 
 /*

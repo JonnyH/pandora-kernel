@@ -25,9 +25,6 @@
 #ifndef __TWL4030_H_
 #define __TWL4030_H_
 
-#include <linux/types.h>
-#include <linux/input/matrix_keypad.h>
-
 /*
  * Using the twl4030 core we address registers using a pair
  *	{ module id, relative register offset }
