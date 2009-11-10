@@ -707,6 +707,11 @@ source "drivers/pci/Kconfig"
 
 source "drivers/pcmcia/Kconfig"
 
+config CPU_V7_SYSFS
+	bool
+	depends on CPU_V7 && SYSFS
+	default y
+
 endmenu
 
 menu "Kernel Features"
