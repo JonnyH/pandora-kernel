@@ -1828,6 +1828,11 @@ config DEPRECATED_PARAM_STRUCT
 	  This was deprecated in 2001 and announced to live on for 5 years.
 	  Some old boot loaders still use this way.
 
+config CPU_V7_SYSFS
+	bool
+	depends on CPU_V7 && SYSFS
+	default y
+
 endmenu
 
 menu "Boot options"
