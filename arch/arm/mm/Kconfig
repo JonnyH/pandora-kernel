@@ -750,3 +750,11 @@ config CACHE_XSC3L2
 	select OUTER_CACHE
 	help
 	  This option enables the L2 cache on XScale3.
+
+config USER_L2_PLE
+	bool "Enable userspace access to the L2 PLE"
+	depends on CPU_V7
+	default n
+	help
+	  Enable userspace access to the L2 preload engine (PLE) available
+	  in Cortex-A series ARM processors.
