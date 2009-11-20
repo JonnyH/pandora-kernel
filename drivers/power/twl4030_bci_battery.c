@@ -153,10 +153,6 @@
 #define VOLT_STEP_SIZE		588
 #define VOLT_PSR_R		100
 
-#define CURR_STEP_SIZE		147
-#define CURR_PSR_R1		44
-#define CURR_PSR_R2		80
-
 #define BK_VOLT_STEP_SIZE	441
 #define BK_VOLT_PSR_R		100
 
@@ -616,10 +612,14 @@ static int twl4030battery_current(void)
 	if (ret)
 		return ret;
 
-	if (val & CGAIN) /* slope of 0.44 mV/mA */
-		return (curr * CURR_STEP_SIZE) / CURR_PSR_R1;
-	else /* slope of 0.88 mV/mA */
-		return (curr * CURR_STEP_SIZE) / CURR_PSR_R2;
+	if (val & CGAIN)
+		//ret = (int)((float)curr * 1.6617790811339199f * 2.0f - 1.7f);
+		ret = curr * 16618 * 2 - 1700 * 10000;
+	else
+		//ret = (int)((float)curr * 1.6617790811339199f - 0.85f);
+		ret = curr * 16618 - 850 * 10000;
+	ret /= 10000;
+	return ret;
 }
 
 /*
@@ -903,11 +903,22 @@ static ssize_t
 set_charge_current(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned long newCurrent;
-	int ret;
+	u8 tmp, boot_bci_prev;
+	int i, ret;
 
 	ret = strict_strtoul(buf, 10, &newCurrent);
 	if (ret)
 		return -EINVAL;
+
+	ret = twl4030_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &boot_bci_prev, REG_BOOT_BCI);
+	if (ret)
+		return ret;
+
+	/* Leave automatic mode as some things cannot be changed there. */
+	ret = clear_n_set(TWL4030_MODULE_PM_MASTER, BCIAUTOAC | BCIAUTOUSB | CVENAC,
+			(CONFIG_DONE | BCIAUTOWEN), REG_BOOT_BCI);
+	if (ret)
+		return ret;
 
 	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, KEY_IIREF, REG_BCIMFKEY);
 	if (ret)
@@ -925,38 +936,37 @@ set_charge_current(struct device *dev, struct device_attribute *attr, const char
 	if (ret)
 		return ret;
 
-	/* Set software-controlled charge */
-	twl4030charger_ac_en(ENABLE, 0);
-
 	/* Set CGAIN = 0 or 1 */
-	if(newCurrent > 511) {
-		u8 tmp;
-
+	if (newCurrent > 511) {
 		/* Set CGAIN = 1 -- need to wait until automatic charge turns off */
-		while(!ret) {
+		for (i = 0; i < 10; i++) {
 			clear_n_set(TWL4030_MODULE_MAIN_CHARGE, 0, CGAIN | 0x1B, REG_BCICTL1);
 			twl4030_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE, &tmp, REG_BCICTL1);
 
 			ret = tmp & CGAIN;
-			if(!ret)
-				mdelay(50);
+			if (ret)
+				break;
+			mdelay(50);
 		}
 	} else {
-		u8 tmp;
-
 		/* Set CGAIN = 0 -- need to wait until automatic charge turns off */
-		while(!ret) {
+		for (i = 0; i < 10; i++) {
 			clear_n_set(TWL4030_MODULE_MAIN_CHARGE, CGAIN, 0x1B, REG_BCICTL1);
 			twl4030_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE, &tmp, REG_BCICTL1);
 
 			ret = !(tmp & CGAIN);
-			if(!ret)
-				mdelay(50);
+			if (ret)
+				break;
+			mdelay(50);
 		}
 	}
 
-	/* Set automatic charge (CGAIN = 0/1 persists) */
-	twl4030charger_ac_en(ENABLE, 1);
+	if (!ret)
+		dev_err(dev, "CGAIN change failed\n");
+
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_MASTER, boot_bci_prev, REG_BOOT_BCI);
+	if (ret)
+		return ret;
 
 	return count;
 }
