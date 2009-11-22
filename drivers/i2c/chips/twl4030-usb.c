@@ -586,30 +586,12 @@ static int twl4030_set_peripheral(struct otg_transceiver *x,
 		struct usb_gadget *gadget)
 {
 	struct twl4030_usb *twl;
-	u32 l;
 
 	if (!x)
 		return -ENODEV;
 
 	twl = xceiv_to_twl(x);
-
-	if (!gadget) {
-		omap_writew(0, OTG_IRQ_EN);
-		twl4030_phy_suspend(twl, 1);
-		twl->otg.gadget = NULL;
-
-		return -ENODEV;
-	}
-
 	twl->otg.gadget = gadget;
-	twl4030_phy_resume(twl);
-
-	l = omap_readl(OTG_CTRL) & OTG_CTRL_MASK;
-	l &= ~(OTG_XCEIV_OUTPUTS|OTG_CTRL_BITS);
-	l |= OTG_ID;
-	omap_writel(l, OTG_CTRL);
-
-	twl->otg.state = OTG_STATE_B_IDLE;
 
 	return 0;
 }
@@ -622,24 +604,7 @@ static int twl4030_set_host(struct otg_transceiver *x, struct usb_bus *host)
 		return -ENODEV;
 
 	twl = xceiv_to_twl(x);
-
-	if (!host) {
-		omap_writew(0, OTG_IRQ_EN);
-		twl4030_phy_suspend(twl, 1);
-		twl->otg.host = NULL;
-
-		return -ENODEV;
-	}
-
 	twl->otg.host = host;
-	twl4030_phy_resume(twl);
-
-	twl4030_usb_set_bits(twl, TWL4030_OTG_CTRL,
-			TWL4030_OTG_CTRL_DMPULLDOWN
-				| TWL4030_OTG_CTRL_DPPULLDOWN);
-
-	twl4030_usb_set_bits(twl, FUNC_CTRL, FUNC_CTRL_SUSPENDM);
-	twl4030_usb_set_bits(twl, TWL4030_OTG_CTRL, TWL4030_OTG_CTRL_DRVVBUS);
 
 	return 0;
 }
