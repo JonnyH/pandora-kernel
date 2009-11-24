@@ -479,9 +479,7 @@ static int twl4030charger_ac_en(int enable, int automatic)
  */
 int twl4030charger_usb_en(int enable)
 {
-	u8 value;
 	int ret;
-	unsigned long timeout;
 
 	if (enable) {
 		/* Check for USB charger conneted */
@@ -499,38 +497,12 @@ int twl4030charger_usb_en(int enable)
 		if (ret)
 			return ret;
 
-		ret = clear_n_set(TWL4030_MODULE_USB, 0, PHY_DPLL_CLK,
-			REG_PHY_CLK_CTRL);
-		if (ret)
-			return ret;
-
-		value = 0;
-		timeout = jiffies + msecs_to_jiffies(50);
-
-		while ((!(value & PHY_DPLL_CLK)) &&
-			time_before(jiffies, timeout)) {
-			udelay(10);
-			ret = twl4030_i2c_read_u8(TWL4030_MODULE_USB, &value,
-				REG_PHY_CLK_CTRL_STS);
-			if (ret)
-				return ret;
-		}
-
-		/* OTG_EN (POWER_CTRL[5]) to 1 */
-		ret = clear_n_set(TWL4030_MODULE_USB, 0, OTG_EN,
-			REG_POWER_CTRL);
-		if (ret)
-			return ret;
-
-		mdelay(50);
-
 		/* forcing USBFASTMCHG(BCIMFSTS4[2]) to 1 */
 		ret = clear_n_set(TWL4030_MODULE_MAIN_CHARGE, 0,
 			USBFASTMCHG, REG_BCIMFSTS4);
 		if (ret)
 			return ret;
 	} else {
-		twl4030charger_presence();
 		ret = clear_n_set(TWL4030_MODULE_PM_MASTER, BCIAUTOUSB,
 			(CONFIG_DONE | BCIAUTOWEN), REG_BOOT_BCI);
 		if (ret)
