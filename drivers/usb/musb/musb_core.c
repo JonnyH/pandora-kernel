@@ -968,6 +968,18 @@ static void musb_shutdown(struct platform_device *pdev)
 	/* FIXME power down */
 }
 
+/* HACK */
+struct musb *g_musb;
+
+extern void musb_kick_host(void)
+{
+	unsigned long	flags;
+	if (g_musb) {
+		spin_lock_irqsave(&g_musb->lock, flags);
+		musb_platform_set_mode(g_musb, MUSB_HOST);
+		spin_unlock_irqrestore(&g_musb->lock, flags);
+	}
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -2064,6 +2076,9 @@ bad_config:
 #endif
 	if (status)
 		goto fail2;
+
+	/* HACK */
+	g_musb = musb;
 
 	return 0;
 

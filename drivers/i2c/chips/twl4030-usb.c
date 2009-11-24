@@ -33,6 +33,7 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/usb/otg.h>
+#include <linux/usb/musb.h>
 #include <linux/i2c/twl4030.h>
 #include <mach/usb.h>
 
@@ -557,6 +558,9 @@ static void twl4030_change_mode_work(struct work_struct *work)
 			twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
 				dedicated1, VUSB_DEDICATED1);
 			mdelay(50);
+
+			if (twl->linkstat == USB_LINK_ID)
+				musb_kick_host();
 		}
 
 		/* FIXME add a set_power() method so that B-devices can
