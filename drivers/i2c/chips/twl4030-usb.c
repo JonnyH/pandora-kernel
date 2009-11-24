@@ -269,6 +269,8 @@ struct twl4030_usb {
 	u8			linkstat;
 	u8			asleep;
 	bool			irq_enabled;
+
+	struct work_struct	change_mode_work;
 };
 
 /* internal define on top of container_of */
@@ -370,10 +372,10 @@ static enum linkstat twl4030_usb_linkstat(struct twl4030_usb *twl)
 	status = twl4030_readb(twl, TWL4030_MODULE_PM_MASTER, 0x0f);
 	if (status < 0)
 		dev_err(twl->dev, "USB link status err %d\n", status);
-	else if (status & BIT(7))
-		linkstat = USB_LINK_VBUS;
 	else if (status & BIT(2))
 		linkstat = USB_LINK_ID;
+	else if (status & BIT(7))
+		linkstat = USB_LINK_VBUS;
 	else
 		linkstat = USB_LINK_NONE;
 
@@ -496,9 +498,6 @@ static void twl4030_usb_ldo_init(struct twl4030_usb *twl)
 	/* put VUSB3V1 LDO in active state */
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0, VUSB_DEDICATED2);
 
-	/* input to VUSB3V1 LDO is from VBAT, not VBUS */
-	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x14, VUSB_DEDICATED1);
-
 	/* turn on 3.1V regulator */
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x20, VUSB3V1_DEV_GRP);
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0, VUSB3V1_TYPE);
@@ -531,6 +530,50 @@ static ssize_t twl4030_usb_vbus_show(struct device *dev,
 }
 static DEVICE_ATTR(vbus, 0444, twl4030_usb_vbus_show, NULL);
 
+static void twl4030_change_mode_work(struct work_struct *work)
+{
+	struct twl4030_usb *twl = container_of(work,
+		struct twl4030_usb, change_mode_work);
+	u8 old_dedicated1, dedicated1;
+
+	if (twl->linkstat != USB_LINK_UNKNOWN) {
+		twl4030_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER,
+			&old_dedicated1, VUSB_DEDICATED1);
+
+		if (twl->linkstat == USB_LINK_ID)
+			/* input to VUSB3V1 LDO is VBAT */
+			dedicated1 = 0x14;
+		else
+			/* input to VUSB3V1 LDO is VBUS */
+			dedicated1 = 0x18;
+
+		if (dedicated1 != old_dedicated1) {
+			dev_dbg(twl->dev, "VUSB_DEDICATED1 change %x -> %x\n",
+				old_dedicated1, dedicated1);
+			/* turn off VUSB3V1 input for a bit before change */
+			twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+				0x10, VUSB_DEDICATED1);
+			mdelay(50);
+			twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+				dedicated1, VUSB_DEDICATED1);
+			mdelay(50);
+		}
+
+		/* FIXME add a set_power() method so that B-devices can
+		 * configure the charger appropriately.  It's not always
+		 * correct to consume VBUS power, and how much current to
+		 * consume is a function of the USB configuration chosen
+		 * by the host.
+		 *
+		 * REVISIT usb_gadget_vbus_connect(...) as needed, ditto
+		 * its disconnect() sibling, when changing to/from the
+		 * USB_LINK_VBUS state.  musb_hdrc won't care until it
+		 * starts to handle softconnect right.
+		 */
+		twl4030charger_usb_en(twl->linkstat == USB_LINK_VBUS);
+	}
+}
+
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
 	struct twl4030_usb *twl = _twl;
@@ -547,23 +590,12 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 	status = twl4030_usb_linkstat(twl);
 	if (status != USB_LINK_UNKNOWN) {
 
-		/* FIXME add a set_power() method so that B-devices can
-		 * configure the charger appropriately.  It's not always
-		 * correct to consume VBUS power, and how much current to
-		 * consume is a function of the USB configuration chosen
-		 * by the host.
-		 *
-		 * REVISIT usb_gadget_vbus_connect(...) as needed, ditto
-		 * its disconnect() sibling, when changing to/from the
-		 * USB_LINK_VBUS state.  musb_hdrc won't care until it
-		 * starts to handle softconnect right.
-		 */
-		twl4030charger_usb_en(status == USB_LINK_VBUS);
-
 		if (status == USB_LINK_NONE)
 			twl4030_phy_suspend(twl, 0);
 		else
 			twl4030_phy_resume(twl);
+
+		schedule_work(&twl->change_mode_work);
 	}
 	sysfs_notify(&twl->dev->kobj, NULL, "vbus");
 
@@ -643,6 +675,8 @@ static int __init twl4030_usb_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, twl);
 	if (device_create_file(&pdev->dev, &dev_attr_vbus))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
+
+	INIT_WORK(&twl->change_mode_work, twl4030_change_mode_work);
 
 	/* Our job is to use irqs and status from the power module
 	 * to keep the transceiver disabled when nothing's connected.
