@@ -159,6 +159,7 @@ static struct gpio_led omap3pandora_gpio_leds[] = {
 		.active_low		= true,
 	}, {
 		.name			= "pandora::charger",
+		.default_trigger	= "twl4030_bci_battery-charging",
 		.gpio			= -EINVAL,
 	}, {
 		.name			= "pandora::sd1",
