@@ -121,6 +121,8 @@ void led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trigger)
 		led_cdev->trigger = trigger;
 		if (trigger->activate)
 			trigger->activate(led_cdev);
+		else
+			led_set_brightness(led_cdev, trigger->prev_brightness);
 	}
 }
 EXPORT_SYMBOL_GPL(led_trigger_set);
@@ -218,6 +220,7 @@ void led_trigger_event(struct led_trigger *trigger,
 		led_cdev = list_entry(entry, struct led_classdev, trig_list);
 		led_set_brightness(led_cdev, brightness);
 	}
+	trigger->prev_brightness = brightness;
 	read_unlock(&trigger->leddev_list_lock);
 }
 EXPORT_SYMBOL_GPL(led_trigger_event);
