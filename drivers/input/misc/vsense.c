@@ -25,10 +25,10 @@
 #define VSENSE_MODE_MOUSE	1
 #define VSENSE_MODE_SCROLL	2
 
-/* hack for Pandora: keep track of usage to prevent reset
- * while other nub is in use
+/* Reset state is shared between both nubs, so we keep
+ * track of it here.
  */
-static int reference_count;
+static int vsense_reset_state;
 
 struct vsense_drvdata {
 	struct input_dev *input;
@@ -103,25 +103,22 @@ static irqreturn_t vsense_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int vsense_reset(struct input_dev *dev, int val)
+static int vsense_reset(struct vsense_drvdata *ddata, int val)
 {
-	struct vsense_drvdata *ddata;
 	int ret;
 
-	ddata = input_get_drvdata(dev);
-
-	dev_dbg(&dev->dev, "vsense_reset: %i\n", val);
+	dev_dbg(&ddata->client->dev, "vsense_reset: %i\n", val);
 
 	ret = gpio_request(ddata->reset_gpio, "vsense reset");
 	if (ret < 0) {
-		dev_err(&dev->dev, "failed to request GPIO %d,"
+		dev_err(&ddata->client->dev, "failed to request GPIO %d,"
 				" error %d\n", ddata->reset_gpio, ret);
 		return ret;
 	}
 
 	ret = gpio_direction_output(ddata->reset_gpio, val);
 	if (ret < 0) {
-		dev_err(&dev->dev, "failed to configure input direction "
+		dev_err(&ddata->client->dev, "failed to configure direction "
 			"for GPIO %d, error %d\n", ddata->reset_gpio, ret);
 	}
 
@@ -133,19 +130,13 @@ static int vsense_open(struct input_dev *dev)
 {
 	dev_dbg(&dev->dev, "vsense_open\n");
 
-	if (reference_count++ == 0)
-		vsense_reset(dev, 0);
+	/* get out of reset and stay there until driver is unloaded */
+	if (vsense_reset_state != 0) {
+		vsense_reset_state = 0;
+		vsense_reset(input_get_drvdata(dev), 0);
+	}
 
 	return 0;
-}
-
-static void vsense_close(struct input_dev *dev)
-{
-	dev_dbg(&dev->dev, "vsense_close\n");
-
-	if (--reference_count == 0)
-		vsense_reset(dev, 1);
-	BUG_ON(reference_count < 0);
 }
 
 static int vsense_input_register(struct vsense_drvdata *ddata, int mode)
@@ -179,7 +170,6 @@ static int vsense_input_register(struct vsense_drvdata *ddata, int mode)
 	input->id.version = 0x0091;
 
 	input->open = vsense_open;
-	input->close = vsense_close;
 
 	ddata->input = input;
 	input_set_drvdata(input, ddata);
@@ -265,6 +255,36 @@ static int vsense_proc_write(struct file *file, const char __user *buffer,
 	return count;
 }
 
+static ssize_t
+vsense_show_reset(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", vsense_reset_state);
+}
+
+static ssize_t
+vsense_set_reset(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long new_reset;
+	struct i2c_client *client;
+	struct vsense_drvdata *ddata;
+	int ret;
+
+	ret = strict_strtoul(buf, 10, &new_reset);
+	if (ret)
+		return -EINVAL;
+
+	client = to_i2c_client(dev);
+	ddata = i2c_get_clientdata(client);
+
+	vsense_reset_state = new_reset ? 1 : 0;
+	vsense_reset(ddata, vsense_reset_state);
+
+	return count;
+}
+static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR,
+	vsense_show_reset, vsense_set_reset);
+
 static int vsense_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -320,6 +340,9 @@ static int vsense_probe(struct i2c_client *client,
 	ddata->irq_gpio = pdata->gpio_irq;
 	i2c_set_clientdata(client, ddata);
 
+	vsense_reset_state = 1;
+	vsense_reset(ddata, 1);
+
 	ret = vsense_input_register(ddata, ddata->mode);
 	if (ret) {
 		dev_err(&client->dev, "failed to register input device, "
@@ -348,6 +371,8 @@ static int vsense_probe(struct i2c_client *client,
 			dev_err(&client->dev, "can't create proc file");
 	}
 
+	ret = device_create_file(&client->dev, &dev_attr_reset);
+
 	pret->data = ddata;
 	pret->read_proc = vsense_proc_read;
 	pret->write_proc = vsense_proc_write;
@@ -370,6 +395,10 @@ static int __devexit vsense_remove(struct i2c_client *client)
 
 	ddata = i2c_get_clientdata(client);
 
+	vsense_reset_state = 1;
+	vsense_reset(ddata, 1);
+
+	device_remove_file(&client->dev, &dev_attr_reset);
 	snprintf(buff, sizeof(buff), "pandora/vsense%02x", client->addr);
 	remove_proc_entry(buff, NULL);
 	free_irq(client->irq, ddata);
