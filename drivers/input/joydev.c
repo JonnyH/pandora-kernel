@@ -77,6 +77,10 @@ static const struct {
 	__u16 from;
 	__u16 to;
 } converted_keys[] = {
+	{ KEY_KP1,	BTN_0 },
+	{ KEY_KP2,	BTN_1 },
+	{ KEY_KP3,	BTN_2 },
+	{ KEY_KP4,	BTN_3 },
 	{ KEY_LEFTCTRL,	BTN_SELECT },
 	{ KEY_LEFTALT,	BTN_START },
 	{ KEY_MENU,	BTN_MODE },
@@ -780,6 +784,13 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 			joydev->nabs++;
 		}
 
+	for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
+		if (test_bit(converted_keys[i].from, dev->keybit)) {
+			joydev->keymap[converted_keys[i].to - BTN_MISC] = joydev->nkey;
+			joydev->keypam[joydev->nkey] = converted_keys[i].to;
+			joydev->nkey++;
+		}
+
 	for (i = BTN_JOYSTICK - BTN_MISC; i < KEY_MAX - BTN_MISC + 1; i++)
 		if (test_bit(i + BTN_MISC, dev->keybit)) {
 			joydev->keymap[i] = joydev->nkey;
@@ -791,13 +802,6 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 		if (test_bit(i + BTN_MISC, dev->keybit)) {
 			joydev->keymap[i] = joydev->nkey;
 			joydev->keypam[joydev->nkey] = i + BTN_MISC;
-			joydev->nkey++;
-		}
-
-	for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
-		if (test_bit(converted_keys[i].from, dev->keybit)) {
-			joydev->keymap[converted_keys[i].to - BTN_MISC] = joydev->nkey;
-			joydev->keypam[joydev->nkey] = converted_keys[i].to;
 			joydev->nkey++;
 		}
 
