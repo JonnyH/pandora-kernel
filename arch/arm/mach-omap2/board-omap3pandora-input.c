@@ -110,25 +110,25 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.active_low		= 1,
 		.desc			= "dpad right",
 	}, {
-		.code			= BTN_A,
+		.code			= KEY_KP2,
 		.gpio			= 111,
 		.active_low		= 1,
-		.desc			= "a",
+		.desc			= "game 2",
 	}, {
-		.code			= BTN_B,
+		.code			= KEY_KP3,
 		.gpio			= 106,
 		.active_low		= 1,
-		.desc			= "b",
+		.desc			= "game 3",
 	}, {
-		.code			= BTN_X,
+		.code			= KEY_KP1,
 		.gpio			= 109,
 		.active_low		= 1,
-		.desc			= "x",
+		.desc			= "game 1",
 	}, {
-		.code			= BTN_Y,
+		.code			= KEY_KP4,
 		.gpio			= 101,
 		.active_low		= 1,
-		.desc			= "y",
+		.desc			= "game 4",
 	}, {
 		.code			= BTN_TL,
 		.gpio			= 102,
