@@ -30,6 +30,7 @@
 #include <linux/i2c/twl4030.h>
 #include <linux/i2c/vsense.h>
 #include <linux/leds.h>
+#include <linux/leds_pwm.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
@@ -149,19 +150,6 @@ static struct omap_uart_config omap3pandora_uart_config __initdata = {
 
 static struct gpio_led omap3pandora_gpio_leds[] = {
 	{
-		.name			= "pandora::keypad_bl",
-		.gpio			= -EINVAL,	/* gets replaced */
-		.active_low		= true,
-	}, {
-		.name			= "pandora::power",
-		.default_trigger	= "default-on",
-		.gpio			= -EINVAL,
-		.active_low		= true,
-	}, {
-		.name			= "pandora::charger",
-		.default_trigger	= "twl4030_bci_battery-charging",
-		.gpio			= -EINVAL,
-	}, {
 		.name			= "pandora::sd1",
 		.default_trigger	= "mmc0",
 		.gpio			= 128,
@@ -192,6 +180,33 @@ static struct platform_device omap3pandora_leds_gpio = {
 	},
 };
 
+static struct led_pwm pandora_pwm_leds[] = {
+	{
+		.name			= "pandora::keypad_bl",
+		.pwm_id			= 0, /* LEDA */
+	}, {
+		.name			= "pandora::power",
+		.pwm_id			= 1, /* LEDB */
+	}, {
+		.name			= "pandora::charger",
+		.default_trigger	= "twl4030_bci_battery-charging",
+		.pwm_id			= 3, /* PWM1 */
+	}
+};
+
+static struct led_pwm_platform_data pandora_pwm_led_data = {
+	.leds		= pandora_pwm_leds,
+	.num_leds	= ARRAY_SIZE(pandora_pwm_leds),
+};
+
+static struct platform_device pandora_leds_pwm = {
+	.name	= "leds-twl4030-pwm",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &pandora_pwm_led_data,
+	},
+};
+
 static struct platform_device omap3pandora_bl = {
 	.name	= "twl4030-pwm0-bl",
 	.id	= -1,
@@ -201,15 +216,6 @@ static int omap3pandora_twl_gpio_setup(struct device *dev,
 		unsigned gpio, unsigned ngpio)
 {
 	int ret, gpio_32khz;
-
-	/* TWL4030_GPIO_MAX + 0 == ledA, KEYPAD_BACKLIGHT (out, active low) */
-	omap3pandora_gpio_leds[0].gpio = gpio + TWL4030_GPIO_MAX + 0;
-
-	/* TWL4030_GPIO_MAX + 1 == ledB, POWER_LED (out, active low) */
-	omap3pandora_gpio_leds[1].gpio = gpio + TWL4030_GPIO_MAX + 1;
-
-	/* gpio + 7 is PWM1, CHARGER_LED */
-	omap3pandora_gpio_leds[2].gpio = gpio + 7;
 
 	/* hack */
 	gpio_32khz = gpio + 13;
@@ -489,6 +495,7 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&bt_device,
 	&omap3pandora_bl,
 	&omap3pandora_dss_device,
+	&pandora_leds_pwm,
 };
 
 static void __init omap3pandora_init(void)
