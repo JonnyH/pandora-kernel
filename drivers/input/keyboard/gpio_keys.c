@@ -41,19 +41,6 @@ static void gpio_keys_report_event(struct gpio_keys_button *button,
 {
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
-	int val = 0;
-
-	if (button->code == KEY_LEFT || button->code == KEY_RIGHT) {
-		if (state)
-			val = button->code == KEY_LEFT ? -256 : 256;
-		input_report_abs(input, ABS_RX, val);
-	}
-
-	if (button->code == KEY_UP || button->code == KEY_DOWN) {
-		if (state)
-			val = button->code == KEY_UP ? -256 : 256;
-		input_report_abs(input, ABS_RY, val);
-	}
 
 	input_event(input, type, button->code, !!state);
 	input_sync(input);
@@ -100,7 +87,6 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	struct input_dev *input;
 	int i, error;
 	int wakeup = 0;
-	int fake_abs_x = 0, fake_abs_y = 0;
 
 	ddata = kzalloc(sizeof(struct gpio_keys_drvdata) +
 			pdata->nbuttons * sizeof(struct gpio_button_data),
@@ -176,24 +162,7 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 		if (button->wakeup)
 			wakeup = 1;
 
-		if (button->code == KEY_LEFT || button->code == KEY_RIGHT)
-			fake_abs_x = 1;
-
-		if (button->code == KEY_UP || button->code == KEY_DOWN)
-			fake_abs_y = 1;
-
 		input_set_capability(input, type, button->code);
-	}
-
-	if (fake_abs_x) {
-		input->evbit[BIT_WORD(EV_ABS)] |= BIT_MASK(EV_ABS);
-		/* use RX to prevent xevdev from picking it */
-		input_set_abs_params(input, ABS_RX, -256, 256, 0, 0);
-	}
-
-	if (fake_abs_y) {
-		input->evbit[BIT_WORD(EV_ABS)] |= BIT_MASK(EV_ABS);
-		input_set_abs_params(input, ABS_RY, -256, 256, 0, 0);
 	}
 
 	error = input_register_device(input);
