@@ -56,6 +56,8 @@ struct joydev {
 	__u8 absmap[ABS_MAX + 1];
 	__u8 abspam[ABS_MAX + 1];
 	__s16 abs[ABS_MAX + 1];
+
+	int pandora_hack;
 };
 
 struct joydev_client {
@@ -72,6 +74,8 @@ struct joydev_client {
 static struct joydev *joydev_table[JOYDEV_MINORS];
 static DEFINE_MUTEX(joydev_table_mutex);
 
+static const struct input_device_id joydev_ids[];
+
 /* pandora hack: convert some normal keys to joystick keys */
 static const struct {
 	__u16 from;
@@ -84,6 +88,21 @@ static const struct {
 	{ KEY_LEFTCTRL,	BTN_SELECT },
 	{ KEY_LEFTALT,	BTN_START },
 	{ KEY_MENU,	BTN_MODE },
+};
+
+/* pandora hack 2: convert some normal keys to abs events
+ * must be 2 entries/axis
+ * will cause some input_dev.abs* reads by jsdev,
+ * but that should cause no problems (I hope?) */
+static const struct {
+	__u16 key_from;
+	__u8 abs_to;
+	__s8 abs_val;
+} abs_hack[] = {
+	{ KEY_LEFT,	ABS_X, -1 },
+	{ KEY_RIGHT,	ABS_X, 1 },
+	{ KEY_UP,	ABS_Y, -1 },
+	{ KEY_DOWN,	ABS_Y, 1 },
 };
 
 static int joydev_correct(int value, struct js_corr *corr)
@@ -138,15 +157,31 @@ static void joydev_event(struct input_handle *handle,
 	struct js_event event;
 	int i;
 
-	switch (type) {
+	/* some really nasty hacks here */
+	if (type == EV_KEY && joydev->pandora_hack) {
+		if (value == 2)
+			return;
 
-	case EV_KEY:
+		for (i = 0; i < ARRAY_SIZE(abs_hack); i++)
+			if (code == abs_hack[i].key_from) {
+				type = EV_ABS;
+				code = abs_hack[i].abs_to;
+				if (value != 0)
+					value = abs_hack[i].abs_val;
+				goto hack_done;
+			}
+
 		for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
 			if (code == converted_keys[i].from) {
 				code = converted_keys[i].to;
 				break;
 			}
+hack_done:;
+	}
 
+	switch (type) {
+
+	case EV_KEY:
 		if (code < BTN_MISC || value == 2)
 			return;
 		event.type = JS_EVENT_BUTTON;
@@ -777,18 +812,32 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 	joydev->handle.handler = handler;
 	joydev->handle.private = joydev;
 
+	if (id == &joydev_ids[3]) {
+		joydev->pandora_hack = 1;
+
+		for (i = 0; i < ARRAY_SIZE(abs_hack); i += 2) {
+			j = abs_hack[i].abs_to;
+			joydev->absmap[j] = joydev->nabs;
+			joydev->abspam[joydev->nabs] = j;
+			joydev->nabs++;
+			/* HACK */
+			dev->absmin[j] = abs_hack[i].abs_val;
+			dev->absmax[j] = abs_hack[i + 1].abs_val;
+		}
+
+		for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
+			if (test_bit(converted_keys[i].from, dev->keybit)) {
+				joydev->keymap[converted_keys[i].to - BTN_MISC] = joydev->nkey;
+				joydev->keypam[joydev->nkey] = converted_keys[i].to;
+				joydev->nkey++;
+			}
+	}
+
 	for (i = 0; i < ABS_MAX + 1; i++)
 		if (test_bit(i, dev->absbit)) {
 			joydev->absmap[i] = joydev->nabs;
 			joydev->abspam[joydev->nabs] = i;
 			joydev->nabs++;
-		}
-
-	for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
-		if (test_bit(converted_keys[i].from, dev->keybit)) {
-			joydev->keymap[converted_keys[i].to - BTN_MISC] = joydev->nkey;
-			joydev->keypam[joydev->nkey] = converted_keys[i].to;
-			joydev->nkey++;
 		}
 
 	for (i = BTN_JOYSTICK - BTN_MISC; i < KEY_MAX - BTN_MISC + 1; i++)
@@ -897,6 +946,17 @@ static const struct input_device_id joydev_ids[] = {
 				INPUT_DEVICE_ID_MATCH_ABSBIT,
 		.evbit = { BIT_MASK(EV_ABS) },
 		.absbit = { BIT_MASK(ABS_THROTTLE) },
+	},
+	{
+		/* pandora hack - take gpiokeys */
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+				INPUT_DEVICE_ID_MATCH_KEYBIT |
+				INPUT_DEVICE_ID_MATCH_SWBIT |
+				INPUT_DEVICE_ID_MATCH_BUS,
+		.evbit = { BIT_MASK(EV_SW) },
+		.keybit = { [BIT_WORD(KEY_COFFEE)] = BIT_MASK(KEY_COFFEE) },
+		.swbit = { BIT_MASK(SW_LID) },
+		.bustype = BUS_HOST,
 	},
 	{ }	/* Terminating entry */
 };
