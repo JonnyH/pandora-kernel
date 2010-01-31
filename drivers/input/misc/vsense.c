@@ -88,7 +88,7 @@ dosync:
 		break;
 	default:
 		input_report_abs(ddata->input, ABS_X, ax * 8);
-		input_report_abs(ddata->input, ABS_Y, ay * 8);
+		input_report_abs(ddata->input, ABS_Y, -ay * 8);
 		break;
 	}
 	input_sync(ddata->input);
@@ -167,7 +167,7 @@ static int vsense_input_register(struct vsense_drvdata *ddata, int mode)
 	input->dev.parent = &ddata->client->dev;
 
 	input->id.bustype = BUS_I2C;
-	input->id.version = 0x0091;
+	input->id.version = 0x0092;
 
 	input->open = vsense_open;
 
