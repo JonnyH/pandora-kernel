@@ -498,9 +498,9 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 
 	OMAP_HSMMC_WRITE(host->base, STAT, status);
 
-	if (end_cmd || (status & CC))
+	if (host->cmd != NULL && (end_cmd || (status & CC)))
 		mmc_omap_cmd_done(host, host->cmd);
-	if (end_trans || (status & TC))
+	if (data != NULL && (end_trans || (status & TC)))
 		mmc_omap_xfer_done(host, data);
 
 	return IRQ_HANDLED;
