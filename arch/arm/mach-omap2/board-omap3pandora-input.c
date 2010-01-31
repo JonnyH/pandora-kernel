@@ -129,22 +129,22 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.active_low		= 1,
 		.desc			= "game 4",
 	}, {
-		.code			= BTN_TL,
+		.code			= KEY_KP5,
 		.gpio			= 102,
 		.active_low		= 1,
 		.desc			= "shoulder l",
 	}, {
-		.code			= BTN_TL2,
+		.code			= KEY_KP7,
 		.gpio			= 97,
 		.active_low		= 1,
 		.desc			= "shoulder l2",
 	}, {
-		.code			= BTN_TR,
+		.code			= KEY_KP6,
 		.gpio			= 105,
 		.active_low		= 1,
 		.desc			= "shoulder r",
 	}, {
-		.code			= BTN_TR2,
+		.code			= KEY_KP8,
 		.gpio			= 107,
 		.active_low		= 1,
 		.desc			= "shoulder r2",

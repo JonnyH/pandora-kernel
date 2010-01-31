@@ -88,6 +88,10 @@ static const struct {
 	{ KEY_LEFTCTRL,	BTN_SELECT },
 	{ KEY_LEFTALT,	BTN_START },
 	{ KEY_MENU,	BTN_MODE },
+	{ KEY_KP5,	BTN_TL },
+	{ KEY_KP6,	BTN_TR },
+	{ KEY_KP7,	BTN_TL2 },
+	{ KEY_KP8,	BTN_TR2 },
 };
 
 /* pandora hack 2: convert some normal keys to abs events
