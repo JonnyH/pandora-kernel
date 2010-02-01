@@ -84,8 +84,8 @@ static int omap3pandora_keymap[] = {
 	FNKEY(0, 1, KEY_F8),
 	FNKEY(0, 2, KEY_BRIGHTNESSUP),
 	FNKEY(0, 3, KEY_F13),		/* apostrophe, differs from Fn-A? */
-	FNKEY(0, 4, KEY_DOLLAR),
-	FNKEY(0, 5, KEY_EURO),
+	FNKEY(0, 4, KEY_F22),
+	FNKEY(0, 5, KEY_F23),
 	FNKEY(1, 0, KEY_F10),
 	FNKEY(1, 1, KEY_F7),
 	FNKEY(1, 2, KEY_BRIGHTNESSDOWN),
