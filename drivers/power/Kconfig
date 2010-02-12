@@ -71,9 +71,9 @@ config BATTERY_PALMTX
 	  Say Y to enable support for the battery in Palm T|X.
 
 config BATTERY_BQ27x00
-	tristate "BQ27200 battery driver"
+	tristate "BQ27x00 battery driver"
 	depends on I2C
 	help
-	  Say Y here to enable support for batteries with BQ27200(I2C) chip.
+	  Say Y here to enable support for batteries with BQ27x00 (I2C) chips.
 
 endif # POWER_SUPPLY
