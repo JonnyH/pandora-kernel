@@ -293,7 +293,7 @@ static struct vsense_platform_data omap3pandora_nub2_data = {
 	.gpio_reset	= 156,
 };
 
-static struct i2c_board_info __initdata omap3pandora_i2c_vsense[] = {
+static struct i2c_board_info __initdata omap3pandora_i2c3_boardinfo[] = {
 	{
 		I2C_BOARD_INFO("vsense", 0x66),
 		.flags = I2C_CLIENT_WAKE,
@@ -302,6 +302,9 @@ static struct i2c_board_info __initdata omap3pandora_i2c_vsense[] = {
 		I2C_BOARD_INFO("vsense", 0x67),
 		.flags = I2C_CLIENT_WAKE,
 		.platform_data = &omap3pandora_nub2_data,
+	}, {
+		I2C_BOARD_INFO("bq27500", 0x55),
+		.flags = I2C_CLIENT_WAKE,
 	},
 };
 
@@ -310,8 +313,8 @@ static int __init omap3pandora_i2c_init(void)
 	omap_register_i2c_bus(1, 2600, omap3pandora_i2c_boardinfo,
 			ARRAY_SIZE(omap3pandora_i2c_boardinfo));
 	/* i2c2 pins are not connected */
-	omap_register_i2c_bus(3, 100, omap3pandora_i2c_vsense,
-			ARRAY_SIZE(omap3pandora_i2c_vsense));
+	omap_register_i2c_bus(3, 100, omap3pandora_i2c3_boardinfo,
+			ARRAY_SIZE(omap3pandora_i2c3_boardinfo));
 	return 0;
 }
 
