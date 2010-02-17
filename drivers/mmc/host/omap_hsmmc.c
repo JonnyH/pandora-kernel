@@ -381,9 +381,9 @@ mmc_omap_cmd_done(struct mmc_omap_host *host, struct mmc_command *cmd)
 /*
  * DMA clean up for command errors
  */
-static void mmc_dma_cleanup(struct mmc_omap_host *host)
+static void mmc_dma_cleanup(struct mmc_omap_host *host, int errno)
 {
-	host->data->error = -ETIMEDOUT;
+	host->data->error = errno;
 
 	if (host->use_dma && host->dma_ch != -1) {
 		dma_unmap_sg(mmc_dev(host->mmc), host->data->sg, host->dma_len,
@@ -394,6 +394,33 @@ static void mmc_dma_cleanup(struct mmc_omap_host *host)
 	}
 	host->data = NULL;
 	host->datadir = OMAP_MMC_DATADIR_NONE;
+}
+
+/*
+ * MMC controller internal state machines reset
+ *
+ * Used to reset command or data internal state machines, using respectively
+ *  SRC or SRD bit of SYSCTL register
+ * Can be called from interrupt context
+ */
+static inline void omap_hsmmc_reset_controller_fsm(struct mmc_omap_host *host,
+						   unsigned long bit)
+{
+	unsigned long i = 0;
+	unsigned long limit = (loops_per_jiffy *
+				msecs_to_jiffies(MMC_TIMEOUT_MS));
+
+	OMAP_HSMMC_WRITE(host->base, SYSCTL,
+			 OMAP_HSMMC_READ(host->base, SYSCTL) | bit);
+
+	while ((OMAP_HSMMC_READ(host->base, SYSCTL) & bit) &&
+		(i++ < limit))
+		cpu_relax();
+
+	if (OMAP_HSMMC_READ(host->base, SYSCTL) & bit)
+		dev_err(mmc_dev(host->mmc),
+			"Timeout waiting on controller reset in %s\n",
+			__func__);
 }
 
 /*
@@ -439,6 +466,8 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 	if (host->cmd == NULL && host->data == NULL) {
 		OMAP_HSMMC_WRITE(host->base, STAT,
 			OMAP_HSMMC_READ(host->base, STAT));
+		/* Flush posted write */
+		OMAP_HSMMC_READ(host->base, STAT);
 		return IRQ_HANDLED;
 	}
 
@@ -451,38 +480,37 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 		mmc_omap_report_irq(host, status);
 #endif
 		if (status & CMD_TIMEOUT) {
-			OMAP_HSMMC_WRITE(host->base, SYSCTL,
-				OMAP_HSMMC_READ(host->base, SYSCTL) | SRC);
-			while (OMAP_HSMMC_READ(host->base, SYSCTL) & SRC)
-				;
+			omap_hsmmc_reset_controller_fsm(host, SRC);
 			if (host->cmd) {
 				host->cmd->error = -ETIMEDOUT;
 				end_cmd = 1;
 			}
-			if (host->data)
-				mmc_dma_cleanup(host);
+			if (host->data) {
+				mmc_dma_cleanup(host, -ETIMEDOUT);
+				omap_hsmmc_reset_controller_fsm(host, SRD);
+			}
 		}
 		if (status & (CMD_CRC | STAT_CIE | STAT_CEB)) {
 			if (host->cmd) {
 				host->cmd->error = -EILSEQ;
 				end_cmd = 1;
 			}
-			if (host->data)
-				mmc_dma_cleanup(host);
+			if (host->data) {
+				mmc_dma_cleanup(host, -EILSEQ);
+				omap_hsmmc_reset_controller_fsm(host, SRD);
+			}
 		}
 		if (status & DATA_TIMEOUT) {
-			OMAP_HSMMC_WRITE(host->base, SYSCTL,
-				OMAP_HSMMC_READ(host->base, SYSCTL) | SRD);
-			while (OMAP_HSMMC_READ(host->base, SYSCTL) & SRD)
-				;
+			omap_hsmmc_reset_controller_fsm(host, SRD);
 			if (host->data) {
-				mmc_dma_cleanup(host);
+				mmc_dma_cleanup(host, -ETIMEDOUT);
 				end_trans = 1;
 			}
 		}
 		if (status & (DATA_CRC | STAT_DEB)) {
+			omap_hsmmc_reset_controller_fsm(host, SRD);
 			if (host->data) {
-				host->data->error = -EILSEQ;
+				mmc_dma_cleanup(host, -EILSEQ);
 				end_trans = 1;
 			}
 		}
@@ -497,6 +525,8 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 	}
 
 	OMAP_HSMMC_WRITE(host->base, STAT, status);
+	/* Flush posted write */
+	OMAP_HSMMC_READ(host->base, STAT);
 
 	if (host->cmd != NULL && (end_cmd || (status & CC)))
 		mmc_omap_cmd_done(host, host->cmd);
