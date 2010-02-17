@@ -15,6 +15,12 @@
  * kind, whether express or implied.
  */
 
+/* for now we always want verbose error logs */
+#undef DEBUG
+#define DEBUG
+#undef CONFIG_MMC_DEBUG
+#define CONFIG_MMC_DEBUG
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -283,8 +289,8 @@ mmc_omap_start_command(struct mmc_omap_host *host, struct mmc_command *cmd,
 {
 	int cmdreg = 0, resptype = 0, cmdtype = 0;
 
-	dev_dbg(mmc_dev(host->mmc), "%s: CMD%d, argument 0x%08x\n",
-		mmc_hostname(host->mmc), cmd->opcode, cmd->arg);
+	//dev_dbg(mmc_dev(host->mmc), "%s: CMD%d, argument 0x%08x\n",
+	//	mmc_hostname(host->mmc), cmd->opcode, cmd->arg);
 	host->cmd = cmd;
 
 	/*
@@ -473,11 +479,12 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 
 	data = host->data;
 	status = OMAP_HSMMC_READ(host->base, STAT);
-	dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
+	//dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
 
 	if (status & ERR) {
 #ifdef CONFIG_MMC_DEBUG
-		mmc_omap_report_irq(host, status);
+		if (!(status & CMD_TIMEOUT) || host->data)
+			mmc_omap_report_irq(host, status);
 #endif
 		if (status & CMD_TIMEOUT) {
 			omap_hsmmc_reset_controller_fsm(host, SRC);
