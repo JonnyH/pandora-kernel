@@ -76,22 +76,11 @@ static DEFINE_MUTEX(joydev_table_mutex);
 
 static const struct input_device_id joydev_ids[];
 
-/* pandora hack: convert some normal keys to joystick keys */
-static const struct {
-	__u16 from;
-	__u16 to;
-} converted_keys[] = {
-	{ KEY_KP1,	BTN_0 },
-	{ KEY_KP2,	BTN_1 },
-	{ KEY_KP3,	BTN_2 },
-	{ KEY_KP4,	BTN_3 },
-	{ KEY_LEFTCTRL,	BTN_SELECT },
-	{ KEY_LEFTALT,	BTN_START },
-	{ KEY_MENU,	BTN_MODE },
-	{ KEY_KP5,	BTN_TL },
-	{ KEY_KP6,	BTN_TR },
-	{ KEY_KP7,	BTN_TL2 },
-	{ KEY_KP8,	BTN_TR2 },
+/* pandora hack: register specified keys, in given order */
+static const unsigned short pandora_game_buttons[] = {
+	BTN_BASE, BTN_BASE2, BTN_BASE3, BTN_BASE4,
+	BTN_SELECT, BTN_START, BTN_MODE,
+	BTN_TL, BTN_TR, BTN_TL2, BTN_TR2
 };
 
 /* pandora hack 2: convert some normal keys to abs events
@@ -102,11 +91,11 @@ static const struct {
 	__u16 key_from;
 	__u8 abs_to;
 	__s8 abs_val;
-} abs_hack[] = {
-	{ KEY_LEFT,	ABS_X, -1 },
-	{ KEY_RIGHT,	ABS_X, 1 },
-	{ KEY_UP,	ABS_Y, -1 },
-	{ KEY_DOWN,	ABS_Y, 1 },
+} pandora_abs_hack[] = {
+	{ BTN_2, ABS_X, -1 },
+	{ BTN_3, ABS_X, 1 },
+	{ BTN_0, ABS_Y, -1 },
+	{ BTN_1, ABS_Y, 1 },
 };
 
 static int joydev_correct(int value, struct js_corr *corr)
@@ -166,21 +155,17 @@ static void joydev_event(struct input_handle *handle,
 		if (value == 2)
 			return;
 
-		for (i = 0; i < ARRAY_SIZE(abs_hack); i++)
-			if (code == abs_hack[i].key_from) {
-				type = EV_ABS;
-				code = abs_hack[i].abs_to;
-				if (value != 0)
-					value = abs_hack[i].abs_val;
-				goto hack_done;
-			}
+		if (code == KEY_MENU)
+			code = BTN_MODE;
 
-		for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
-			if (code == converted_keys[i].from) {
-				code = converted_keys[i].to;
+		for (i = 0; i < ARRAY_SIZE(pandora_abs_hack); i++)
+			if (code == pandora_abs_hack[i].key_from) {
+				type = EV_ABS;
+				code = pandora_abs_hack[i].abs_to;
+				if (value != 0)
+					value = pandora_abs_hack[i].abs_val;
 				break;
 			}
-hack_done:;
 	}
 
 	switch (type) {
@@ -816,27 +801,6 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 	joydev->handle.handler = handler;
 	joydev->handle.private = joydev;
 
-	if (id == &joydev_ids[3]) {
-		joydev->pandora_hack = 1;
-
-		for (i = 0; i < ARRAY_SIZE(abs_hack); i += 2) {
-			j = abs_hack[i].abs_to;
-			joydev->absmap[j] = joydev->nabs;
-			joydev->abspam[joydev->nabs] = j;
-			joydev->nabs++;
-			/* HACK */
-			dev->absmin[j] = abs_hack[i].abs_val;
-			dev->absmax[j] = abs_hack[i + 1].abs_val;
-		}
-
-		for (i = 0; i < ARRAY_SIZE(converted_keys); i++)
-			if (test_bit(converted_keys[i].from, dev->keybit)) {
-				joydev->keymap[converted_keys[i].to - BTN_MISC] = joydev->nkey;
-				joydev->keypam[joydev->nkey] = converted_keys[i].to;
-				joydev->nkey++;
-			}
-	}
-
 	for (i = 0; i < ABS_MAX + 1; i++)
 		if (test_bit(i, dev->absbit)) {
 			joydev->absmap[i] = joydev->nabs;
@@ -857,6 +821,29 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 			joydev->keypam[joydev->nkey] = i + BTN_MISC;
 			joydev->nkey++;
 		}
+
+	if (id == &joydev_ids[3]) {
+		/* override */
+		joydev->pandora_hack = 1;
+		joydev->nabs = 0;
+		joydev->nkey = 0;
+
+		for (i = 0; i < ARRAY_SIZE(pandora_abs_hack); i += 2) {
+			j = pandora_abs_hack[i].abs_to;
+			joydev->absmap[j] = joydev->nabs;
+			joydev->abspam[joydev->nabs] = j;
+			joydev->nabs++;
+			/* HACK */
+			dev->absmin[j] = pandora_abs_hack[i].abs_val;
+			dev->absmax[j] = pandora_abs_hack[i + 1].abs_val;
+		}
+
+		for (i = 0; i < ARRAY_SIZE(pandora_game_buttons); i++) {
+			joydev->keymap[pandora_game_buttons[i] - BTN_MISC] = joydev->nkey;
+			joydev->keypam[joydev->nkey] = pandora_game_buttons[i];
+			joydev->nkey++;
+		}
+	}
 
 	for (i = 0; i < joydev->nabs; i++) {
 		j = joydev->abspam[i];

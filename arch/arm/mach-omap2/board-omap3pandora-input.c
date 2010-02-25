@@ -24,9 +24,13 @@
 #include <linux/input.h>
 #include <linux/gpio_keys.h>
 #include <linux/input/matrix_keypad.h>
+#include <linux/proc_fs.h>
+#include <linux/uaccess.h>
 
 #include <mach/hardware.h>
 #include <mach/gpio.h>
+
+#define GPIO_KEYS_PROC "pandora/game_button_mode"
 
 /* hardware debounce, (value + 1) * 31us */
 #define GPIO_DEBOUNCE_TIME 0x7f
@@ -137,99 +141,57 @@ struct twl4030_keypad_data omap3pandora_kp_data = {
 	.rep		= 1,
 };
 
+#define GPIO_BUTTON(gpio_num, ev_type, ev_code, act_low, descr)	\
+{								\
+	.gpio		= gpio_num,				\
+	.type		= ev_type,				\
+	.code		= ev_code,				\
+	.active_low	= act_low,				\
+	.desc		= "btn " descr,				\
+}
+
+#define GPIO_BUTTON_LOW(gpio_num, event_code, description)	\
+	GPIO_BUTTON(gpio_num, EV_KEY, event_code, 1, description)
+
 static struct gpio_keys_button gpio_buttons[] = {
-	{
-		.code			= KEY_UP,
-		.gpio			= 110,
-		.active_low		= 1,
-		.desc			= "dpad up",
-	}, {
-		.code			= KEY_DOWN,
-		.gpio			= 103,
-		.active_low		= 1,
-		.desc			= "dpad down",
-	}, {
-		.code			= KEY_LEFT,
-		.gpio			= 96,
-		.active_low		= 1,
-		.desc			= "dpad left",
-	}, {
-		.code			= KEY_RIGHT,
-		.gpio			= 98,
-		.active_low		= 1,
-		.desc			= "dpad right",
-	}, {
-		.code			= KEY_KP2,
-		.gpio			= 111,
-		.active_low		= 1,
-		.desc			= "game 2",
-	}, {
-		.code			= KEY_KP3,
-		.gpio			= 106,
-		.active_low		= 1,
-		.desc			= "game 3",
-	}, {
-		.code			= KEY_KP1,
-		.gpio			= 109,
-		.active_low		= 1,
-		.desc			= "game 1",
-	}, {
-		.code			= KEY_KP4,
-		.gpio			= 101,
-		.active_low		= 1,
-		.desc			= "game 4",
-	}, {
-		.code			= KEY_KP5,
-		.gpio			= 102,
-		.active_low		= 1,
-		.desc			= "shoulder l",
-	}, {
-		.code			= KEY_KP7,
-		.gpio			= 97,
-		.active_low		= 1,
-		.desc			= "shoulder l2",
-	}, {
-		.code			= KEY_KP6,
-		.gpio			= 105,
-		.active_low		= 1,
-		.desc			= "shoulder r",
-	}, {
-		.code			= KEY_KP8,
-		.gpio			= 107,
-		.active_low		= 1,
-		.desc			= "shoulder r2",
-	}, {
-		.code			= KEY_LEFTALT,
-		.gpio			= 100,
-		.active_low		= 0,
-		.desc			= "start",
-	}, {
-		.code			= KEY_LEFTCTRL,
-		.gpio			= 104,
-		.active_low		= 1,
-		.desc			= "select",
-	}, {
-		.code			= KEY_MENU,
-		.gpio			= 99,
-		.active_low		= 1,
-		.desc			= "menu",
-	}, {
-		.code			= KEY_COFFEE,
-		.gpio			= 176,
-		.active_low		= 1,
-		.desc			= "hold",
-	}, {
-		.type			= EV_SW,
-		.code			= SW_LID,
-		.gpio			= 108,
-		.active_low		= 1,
-		.desc			= "lid switch",
-	},
+	GPIO_BUTTON_LOW(110,	KEY_UP,		"up"),
+	GPIO_BUTTON_LOW(103,	KEY_DOWN,	"down"),
+	GPIO_BUTTON_LOW(96,	KEY_LEFT,	"left"),
+	GPIO_BUTTON_LOW(98,	KEY_RIGHT,	"right"),
+	GPIO_BUTTON_LOW(109,	KEY_KP1,	"game 1"),
+	GPIO_BUTTON_LOW(111,	KEY_KP2,	"game 2"),
+	GPIO_BUTTON_LOW(106,	KEY_KP3,	"game 3"),
+	GPIO_BUTTON_LOW(101,	KEY_KP4,	"game 4"),
+	GPIO_BUTTON_LOW(102,	KEY_KP5,	"l"),
+	GPIO_BUTTON_LOW(97,	KEY_KP7,	"l2"),
+	GPIO_BUTTON_LOW(105,	KEY_KP6,	"r"),
+	GPIO_BUTTON_LOW(107,	KEY_KP8,	"r2"),
+	GPIO_BUTTON_LOW(104,	KEY_LEFTCTRL,	"ctrl"),
+	GPIO_BUTTON(100, EV_KEY, KEY_LEFTALT, 0, "alt"),
+	GPIO_BUTTON_LOW(99,	KEY_MENU,	"menu"),
+	GPIO_BUTTON_LOW(176,	KEY_COFFEE,	"hold"),
+	GPIO_BUTTON(108, EV_SW, SW_LID, 1, "lid"),
+};
+
+static const unsigned short buttons_kbd[] = {
+	KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT,
+	KEY_KP1, KEY_KP2, KEY_KP3, KEY_KP4,
+	KEY_KP5, KEY_KP7, KEY_KP6, KEY_KP8,
+	KEY_LEFTCTRL, KEY_LEFTALT,
+};
+
+static const unsigned short buttons_joy[] = {
+	BTN_0, BTN_1, BTN_2, BTN_3,
+	BTN_BASE, BTN_BASE2, BTN_BASE3, BTN_BASE4,
+	BTN_TL, BTN_TL2, BTN_TR, BTN_TR2,
+	BTN_SELECT, BTN_START,
 };
 
 static struct gpio_keys_platform_data gpio_key_info = {
 	.buttons	= gpio_buttons,
 	.nbuttons	= ARRAY_SIZE(gpio_buttons),
+	.buttons_reserved	= buttons_joy,
+	.nbuttons_reserved	= ARRAY_SIZE(buttons_joy),
 };
 
 static struct platform_device omap3pandora_keys_gpio = {
@@ -240,8 +202,51 @@ static struct platform_device omap3pandora_keys_gpio = {
 	},
 };
 
+static int pandora_keys_gpio_mode;
+
+static int pandora_input_proc_read(char *page, char **start, off_t off,
+		int count, int *eof, void *data)
+{
+	*eof = 1;
+	return sprintf(page, "%d\n", pandora_keys_gpio_mode);
+}
+
+static int pandora_input_proc_write(struct file *file,
+		const char __user *buffer, unsigned long count, void *data)
+{
+	const unsigned short *buttons;
+	int i, val, button_count;
+	char s[32];
+
+	if (!count)
+		return 0;
+	if (count > 31)
+		return -EINVAL;
+	if (copy_from_user(s, buffer, count))
+		return -EFAULT;
+	s[count] = 0;
+	if (sscanf(s, "%i", &val) != 1)
+		return -EINVAL;
+
+	if (val == 1) {
+		buttons = buttons_kbd;
+		button_count = ARRAY_SIZE(buttons_kbd);
+	} else if (val == 2) {
+		buttons = buttons_joy;
+		button_count = ARRAY_SIZE(buttons_joy);
+	} else
+		return -EINVAL;
+
+	for (i = 0; i < button_count; i++)
+		gpio_buttons[i].code = buttons[i];
+
+	pandora_keys_gpio_mode = val;
+	return count;
+}
+
 void __init omap3pandora_input_init(void)
 {
+	struct proc_dir_entry *pret;
 	int i, ret;
 
 	for (i = 0; i < ARRAY_SIZE(gpio_buttons); i++)
@@ -252,7 +257,25 @@ void __init omap3pandora_input_init(void)
 	omap_set_gpio_debounce_time(32 * 5, GPIO_DEBOUNCE_TIME);
 
 	ret = platform_device_register(&omap3pandora_keys_gpio);
-	if (ret != 0)
-		printk(KERN_ERR "Failed to register gpio-keys\n");
+	if (ret != 0) {
+		pr_err("Failed to register gpio-keys\n");
+		return;
+	}
+
+	pret = create_proc_entry(GPIO_KEYS_PROC, S_IWUGO | S_IRUGO, NULL);
+	if (pret == NULL) {
+		proc_mkdir("pandora", NULL);
+		pret = create_proc_entry(GPIO_KEYS_PROC, S_IWUGO | S_IRUGO, NULL);
+		if (pret == NULL)
+			pr_err("pandora_input: can't create proc file");
+	}
+
+	if (pret != NULL) {
+		pret->read_proc = pandora_input_proc_read;
+		pret->write_proc = pandora_input_proc_write;
+	}
+
+	/* kbd mode by default */
+	pandora_keys_gpio_mode = 1;
 }
 
