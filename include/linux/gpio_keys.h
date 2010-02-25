@@ -15,6 +15,8 @@ struct gpio_keys_button {
 struct gpio_keys_platform_data {
 	struct gpio_keys_button *buttons;
 	int nbuttons;
+	const unsigned short *buttons_reserved;
+	int nbuttons_reserved;
 };
 
 #endif

@@ -165,6 +165,9 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 		input_set_capability(input, type, button->code);
 	}
 
+	for (i = 0; i < pdata->nbuttons_reserved; i++)
+		input_set_capability(input, EV_KEY, pdata->buttons_reserved[i]);
+
 	error = input_register_device(input);
 	if (error) {
 		pr_err("gpio-keys: Unable to register input device, "
