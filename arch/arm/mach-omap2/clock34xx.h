@@ -1301,6 +1301,8 @@ static struct clk sgx_fck = {
 	.flags		= CLOCK_IN_OMAP3430ES2,
 	.clkdm		= { .name = "sgx_clkdm" },
 	.recalc		= &omap2_clksel_recalc,
+	.set_rate	= &omap2_clksel_set_rate,
+	.round_rate	= &omap2_clksel_round_rate,
 };
 
 static struct clk sgx_ick = {
