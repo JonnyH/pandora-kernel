@@ -185,14 +185,17 @@ static int omap_mcbsp_dai_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		if (!mcbsp_data->active++)
-			omap_mcbsp_start(mcbsp_data->bus_id);
+		mcbsp_data->active++;
+		omap_mcbsp_start(mcbsp_data->bus_id);
 		break;
 
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		if (!--mcbsp_data->active)
+		mcbsp_data->active--;
+		if (mcbsp_data->active < 0)
+			mcbsp_data->active = 0;
+		if (mcbsp_data->active == 0)
 			omap_mcbsp_stop(mcbsp_data->bus_id);
 		break;
 	default:
