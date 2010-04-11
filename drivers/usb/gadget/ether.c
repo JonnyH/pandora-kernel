@@ -266,6 +266,10 @@ MODULE_PARM_DESC(host_addr, "Host Ethernet Address");
 /* For CDC-incapable hardware, choose the simple cdc subset.
  * Anything that talks bulk (without notable bugs) can do this.
  */
+#ifdef CONFIG_USB_GADGET_LF1000
+#define DEV_CONFIG_SUBSET
+#endif
+
 #ifdef CONFIG_USB_GADGET_PXA2XX
 #define	DEV_CONFIG_SUBSET
 #endif
