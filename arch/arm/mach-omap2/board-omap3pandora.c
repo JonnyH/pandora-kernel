@@ -31,6 +31,7 @@
 #include <linux/i2c/vsense.h>
 #include <linux/leds.h>
 #include <linux/leds_pwm.h>
+#include <linux/spi/wl12xx.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
@@ -492,6 +493,71 @@ static struct platform_device bt_device = {
 	},
 };
 
+#define PANDORA_WIFI_NRESET_GPIO	23
+#define PANDORA_WIFI_IRQ_GPIO		21
+
+/* platform_device for the wl1251 driver */
+static void wl1251_set_power(bool enable)
+{
+	gpio_set_value(PANDORA_WIFI_NRESET_GPIO, enable);
+}
+
+static struct wl12xx_platform_data wl1251_data = {
+	.set_power	= wl1251_set_power,
+	.use_eeprom	= true,
+};
+
+static struct platform_device wl1251_data_device = {
+	.name           = "wl1251_data",
+	.id             = -1,
+	.dev		= {
+		.platform_data	= &wl1251_data,
+	},
+};
+
+static void pandora_wl1251_init(void)
+{
+	int ret;
+
+	ret = gpio_request(PANDORA_WIFI_NRESET_GPIO, "wl1251 nreset");
+	if (ret < 0)
+		goto fail;
+
+	ret = gpio_direction_output(PANDORA_WIFI_NRESET_GPIO, 0);
+	if (ret < 0)
+		goto fail_nreset;
+
+	ret = gpio_request(PANDORA_WIFI_IRQ_GPIO, "wl1251 irq");
+	if (ret < 0)
+		goto fail_nreset;
+
+	ret = gpio_direction_input(PANDORA_WIFI_IRQ_GPIO);
+	if (ret < 0)
+		goto fail_irq;
+
+	wl1251_data.irq = gpio_to_irq(PANDORA_WIFI_IRQ_GPIO);
+	if (wl1251_data.irq < 0)
+		goto fail_irq;
+
+	return;
+
+fail_irq:
+	gpio_free(PANDORA_WIFI_IRQ_GPIO);
+fail_nreset:
+	gpio_free(PANDORA_WIFI_NRESET_GPIO);
+fail:
+	printk(KERN_ERR "wl1251 board initialisation failed\n");
+}
+
+/* platform_device for fake card detect 'driver' */
+static struct platform_device wl1251_cd_device = {
+	.name           = "pandora_wifi",
+	.id             = -1,
+	.dev		= {
+		.platform_data	= &wl1251_data,
+	},
+};
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_lcd_device,
 	&omap3pandora_leds_gpio,
@@ -499,12 +565,15 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_bl,
 	&omap3pandora_dss_device,
 	&pandora_leds_pwm,
+	&wl1251_data_device,
+	&wl1251_cd_device,
 };
 
 static void __init omap3pandora_init(void)
 {
 	omap3pandora_i2c_init();
 	omap3pandora_input_init();
+	pandora_wl1251_init();
 	platform_add_devices(omap3pandora_devices, ARRAY_SIZE(omap3pandora_devices));
 	omap_board_config = omap3pandora_config;
 	omap_board_config_size = ARRAY_SIZE(omap3pandora_config);
