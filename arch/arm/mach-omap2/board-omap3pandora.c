@@ -413,8 +413,6 @@ static void pandora_panel_disable_lcd(struct omap_display *display)
 {
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
 			TWL4030_VAUX1_DEV_GRP);
-	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
-			TWL4030_VAUX1_DEDICATED);
 }
 
 static int pandora_panel_enable_tv(struct omap_display *display)
@@ -435,8 +433,6 @@ static void pandora_panel_disable_tv(struct omap_display *display)
 {
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
 			TWL4030_VDAC_DEV_GRP);
-	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x00,
-			TWL4030_VDAC_DEDICATED);
 }
 
 static struct omap_dss_display_config omap3pandora_display_data[] = {
@@ -569,8 +565,36 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&wl1251_cd_device,
 };
 
+static void pandora_enable_supplies(void)
+{
+	/* someday we'll turn these off when we don't need them */
+#define TWL4030_VAUX4_DEV_GRP		0x23
+#define TWL4030_VAUX4_DEDICATED		0x26
+#define TWL4030_VSIM_DEV_GRP		0x37
+#define TWL4030_VSIM_DEDICATED		0x3a
+
+	/* set vaux4 to ~2.85V (TOUCH, NUBS) */
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x0a,
+			     TWL4030_VAUX4_DEDICATED);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x20,
+			     TWL4030_VAUX4_DEV_GRP);
+
+	/* set vsim to 2.8V (AUDIO DAC external) */
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x04,
+			     TWL4030_VSIM_DEDICATED);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x20,
+			     TWL4030_VSIM_DEV_GRP);
+
+	/* set vaux2 to 1.8V (USB HOST PHY power) */
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x05,
+			     TWL4030_VAUX2_DEDICATED);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x20,
+			     TWL4030_VAUX2_DEV_GRP);
+}
+
 static void __init omap3pandora_init(void)
 {
+	pandora_enable_supplies();
 	omap3pandora_i2c_init();
 	omap3pandora_input_init();
 	pandora_wl1251_init();
