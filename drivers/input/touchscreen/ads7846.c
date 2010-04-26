@@ -910,7 +910,7 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 
 	snprintf(ts->phys, sizeof(ts->phys), "%s/input0", spi->dev.bus_id);
 
-	input_dev->name = "ADS784x Touchscreen";
+	input_dev->name = "touchscreen";
 	input_dev->phys = ts->phys;
 	input_dev->dev.parent = &spi->dev;
 

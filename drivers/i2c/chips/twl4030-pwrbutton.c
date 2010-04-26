@@ -93,7 +93,7 @@ static int __init twl4030_pwrbutton_init(void)
 
 	powerbutton_dev->evbit[0] = BIT_MASK(EV_KEY);
 	powerbutton_dev->keybit[BIT_WORD(KEY_POWER)] = BIT_MASK(KEY_POWER);
-	powerbutton_dev->name = "triton2-pwrbutton";
+	powerbutton_dev->name = "power-button";
 
 	err = input_register_device(powerbutton_dev);
 	if (err) {
