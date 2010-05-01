@@ -42,7 +42,7 @@
 
 #include <linux/err.h>
 #include <linux/crc32.h>
-#include <asm/div64.h>
+#include <linux/math64.h>
 #include "ubi.h"
 
 #ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
@@ -75,9 +75,10 @@ static int add_to_list(struct ubi_scan_info *si, int pnum, int ec,
 		dbg_bld("add to free: PEB %d, EC %d", pnum, ec);
 	else if (list == &si->erase)
 		dbg_bld("add to erase: PEB %d, EC %d", pnum, ec);
-	else if (list == &si->corr)
+	else if (list == &si->corr) {
 		dbg_bld("add to corrupted: PEB %d, EC %d", pnum, ec);
-	else if (list == &si->alien)
+		si->corr_count += 1;
+	} else if (list == &si->alien)
 		dbg_bld("add to alien: PEB %d, EC %d", pnum, ec);
 	else
 		BUG();
@@ -320,7 +321,7 @@ static int compare_lebs(struct ubi_device *ubi, const struct ubi_scan_leb *seb,
 	}
 
 	err = ubi_io_read_data(ubi, buf, pnum, 0, len);
-	if (err && err != UBI_IO_BITFLIPS)
+	if (err && err != UBI_IO_BITFLIPS && err != -EBADMSG)
 		goto out_free_buf;
 
 	data_crc = be32_to_cpu(vid_hdr->data_crc);
@@ -387,7 +388,7 @@ int ubi_scan_add_used(struct ubi_device *ubi, struct ubi_scan_info *si,
 		pnum, vol_id, lnum, ec, sqnum, bitflips);
 
 	sv = add_volume(si, vol_id, pnum, vid_hdr);
-	if (IS_ERR(sv) < 0)
+	if (IS_ERR(sv))
 		return PTR_ERR(sv);
 
 	if (si->max_sqnum < sqnum)
@@ -757,6 +758,8 @@ static int process_eb(struct ubi_device *ubi, struct ubi_scan_info *si,
 	si->is_empty = 0;
 
 	if (!ec_corr) {
+		int image_seq;
+
 		/* Make sure UBI version is OK */
 		if (ech->version != UBI_VERSION) {
 			ubi_err("this UBI version is %d, image version is %d",
@@ -775,6 +778,28 @@ static int process_eb(struct ubi_device *ubi, struct ubi_scan_info *si,
 			 */
 			ubi_err("erase counter overflow, max is %d",
 				UBI_MAX_ERASECOUNTER);
+			ubi_dbg_dump_ec_hdr(ech);
+			return -EINVAL;
+		}
+
+		/*
+		 * Make sure that all PEBs have the same image sequence number.
+		 * This allows us to detect situations when users flash UBI
+		 * images incorrectly, so that the flash has the new UBI image
+		 * and leftovers from the old one. This feature was added
+		 * relatively recently, and the sequence number was always
+		 * zero, because old UBI implementations always set it to zero.
+		 * For this reasons, we do not panic if some PEBs have zero
+		 * sequence number, while other PEBs have non-zero sequence
+		 * number.
+		 */
+		image_seq = be32_to_cpu(ech->image_seq);
+		if (!ubi->image_seq && image_seq)
+			ubi->image_seq = image_seq;
+		if (ubi->image_seq && image_seq &&
+		    ubi->image_seq != image_seq) {
+			ubi_err("bad image sequence number %d in PEB %d, "
+				"expected %d", image_seq, pnum, ubi->image_seq);
 			ubi_dbg_dump_ec_hdr(ech);
 			return -EINVAL;
 		}
@@ -839,7 +864,9 @@ static int process_eb(struct ubi_device *ubi, struct ubi_scan_info *si,
 		}
 	}
 
-	/* Both UBI headers seem to be fine */
+	if (ec_corr)
+		ubi_warn("valid VID header but corrupted EC header at PEB %d",
+			 pnum);
 	err = ubi_scan_add_used(ubi, si, pnum, ec, vidh, bitflips);
 	if (err)
 		return err;
@@ -904,13 +931,24 @@ struct ubi_scan_info *ubi_scan(struct ubi_device *ubi)
 	dbg_msg("scanning is finished");
 
 	/* Calculate mean erase counter */
-	if (si->ec_count) {
-		do_div(si->ec_sum, si->ec_count);
-		si->mean_ec = si->ec_sum;
-	}
+	if (si->ec_count)
+		si->mean_ec = div_u64(si->ec_sum, si->ec_count);
 
 	if (si->is_empty)
 		ubi_msg("empty MTD device detected");
+
+	/*
+	 * Few corrupted PEBs are not a problem and may be just a result of
+	 * unclean reboots. However, many of them may indicate some problems
+	 * with the flash HW or driver. Print a warning in this case.
+	 */
+	if (si->corr_count >= 8 || si->corr_count >= ubi->peb_count / 4) {
+		ubi_warn("%d PEBs are corrupted", si->corr_count);
+		printk(KERN_WARNING "corrupted PEBs are:");
+		list_for_each_entry(seb, &si->corr, u.list)
+			printk(KERN_CONT " %d", seb->pnum);
+		printk(KERN_CONT "\n");
+	}
 
 	/*
 	 * In case of unknown erase counter we use the mean erase counter

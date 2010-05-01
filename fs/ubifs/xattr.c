@@ -78,9 +78,9 @@ enum {
 	SECURITY_XATTR,
 };
 
-static struct inode_operations none_inode_operations;
+static const struct inode_operations none_inode_operations;
 static struct address_space_operations none_address_operations;
-static struct file_operations none_file_operations;
+static const struct file_operations none_file_operations;
 
 /**
  * create_xattr - create an extended attribute.
@@ -446,7 +446,7 @@ ssize_t ubifs_listxattr(struct dentry *dentry, char *buffer, size_t size)
 		int type;
 
 		xent = ubifs_tnc_next_ent(c, &key, &nm);
-		if (unlikely(IS_ERR(xent))) {
+		if (IS_ERR(xent)) {
 			err = PTR_ERR(xent);
 			break;
 		}

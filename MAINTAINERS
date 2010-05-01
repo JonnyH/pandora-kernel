@@ -2330,7 +2330,7 @@ UBI FILE SYSTEM (UBIFS)
 P:	Artem Bityutskiy
 M:	dedekind@infradead.org
 P:	Adrian Hunter
-M:	ext-adrian.hunter@nokia.com
+M:	adrian.hunter@nokia.com
 L:	linux-mtd@lists.infradead.org
 T:	git git://git.infradead.org/~dedekind/ubifs-2.6.git
 W:	http://www.linux-mtd.infradead.org/doc/ubifs.html
@@ -2777,7 +2777,7 @@ P:	Artem Bityutskiy
 M:	dedekind@infradead.org
 W:	http://www.linux-mtd.infradead.org/
 L:	linux-mtd@lists.infradead.org
-T:	git git://git.infradead.org/~dedekind/ubi-2.6.git
+T:	git git://git.infradead.org/ubi-2.6.git
 S:	Maintained
 
 MICROTEK X6 SCANNER

@@ -478,7 +478,7 @@ const struct ubifs_lprops *do_find_free_space(struct ubifs_info *c,
  * ubifs_find_free_space - find a data LEB with free space.
  * @c: the UBIFS file-system description object
  * @min_space: minimum amount of required free space
- * @free: contains amount of free space in the LEB on exit
+ * @offs: contains offset of where free space starts on exit
  * @squeeze: whether to try to find space in a non-empty LEB first
  *
  * This function looks for an LEB with at least @min_space bytes of free space.
@@ -490,7 +490,7 @@ const struct ubifs_lprops *do_find_free_space(struct ubifs_info *c,
  * failed to find a LEB with @min_space bytes of free space and other a negative
  * error codes in case of failure.
  */
-int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *free,
+int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *offs,
 			  int squeeze)
 {
 	const struct ubifs_lprops *lprops;
@@ -558,10 +558,10 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *free,
 		spin_unlock(&c->space_lock);
 	}
 
-	*free = lprops->free;
+	*offs = c->leb_size - lprops->free;
 	ubifs_release_lprops(c);
 
-	if (*free == c->leb_size) {
+	if (*offs == 0) {
 		/*
 		 * Ensure that empty LEBs have been unmapped. They may not have
 		 * been, for example, because of an unclean unmount.  Also
@@ -573,8 +573,8 @@ int ubifs_find_free_space(struct ubifs_info *c, int min_space, int *free,
 			return err;
 	}
 
-	dbg_find("found LEB %d, free %d", lnum, *free);
-	ubifs_assert(*free >= min_space);
+	dbg_find("found LEB %d, free %d", lnum, c->leb_size - *offs);
+	ubifs_assert(*offs <= c->leb_size - min_space);
 	return lnum;
 
 out:
@@ -901,11 +901,11 @@ static int get_idx_gc_leb(struct ubifs_info *c)
 	 * it is needed now for this commit.
 	 */
 	lp = ubifs_lpt_lookup_dirty(c, lnum);
-	if (unlikely(IS_ERR(lp)))
+	if (IS_ERR(lp))
 		return PTR_ERR(lp);
 	lp = ubifs_change_lp(c, lp, LPROPS_NC, LPROPS_NC,
 			     lp->flags | LPROPS_INDEX, -1);
-	if (unlikely(IS_ERR(lp)))
+	if (IS_ERR(lp))
 		return PTR_ERR(lp);
 	dbg_find("LEB %d, dirty %d and free %d flags %#x",
 		 lp->lnum, lp->dirty, lp->free, lp->flags);
