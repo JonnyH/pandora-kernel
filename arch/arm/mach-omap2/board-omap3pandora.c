@@ -63,24 +63,24 @@
 static struct mtd_partition omap3pandora_nand_partitions[] = {
 	{
 		.name           = "xloader",
-		.offset         = 0,			/* Offset = 0x00000 */
+		.offset         = 0,
 		.size           = 4 * NAND_BLOCK_SIZE,
 		.mask_flags     = MTD_WRITEABLE
 	}, {
 		.name           = "uboot",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x80000 */
-		.size           = 14 * NAND_BLOCK_SIZE,
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = 15 * NAND_BLOCK_SIZE,
 	}, {
-		.name           = "uboot environment",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x240000 */
-		.size           = 2 * NAND_BLOCK_SIZE,
+		.name           = "uboot-env",
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = 1 * NAND_BLOCK_SIZE,
 	}, {
-		.name           = "linux",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x280000 */
-		.size           = 32 * NAND_BLOCK_SIZE,
+		.name           = "boot",
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = 80 * NAND_BLOCK_SIZE,
 	}, {
 		.name           = "rootfs",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x680000 */
+		.offset         = MTDPART_OFS_APPEND,
 		.size           = MTDPART_SIZ_FULL,
 	},
 };
