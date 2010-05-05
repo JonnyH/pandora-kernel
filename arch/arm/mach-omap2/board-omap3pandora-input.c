@@ -190,6 +190,7 @@ static const unsigned short buttons_joy[] = {
 static struct gpio_keys_platform_data gpio_key_info = {
 	.buttons	= gpio_buttons,
 	.nbuttons	= ARRAY_SIZE(gpio_buttons),
+	.rep		= 1,
 	.buttons_reserved	= buttons_joy,
 	.nbuttons_reserved	= ARRAY_SIZE(buttons_joy),
 };
