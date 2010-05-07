@@ -96,3 +96,5 @@ extern int __init tusb6010_setup_interface(
 extern int tusb6010_platform_retime(unsigned is_refclk);
 
 #endif	/* OMAP2 */
+
+extern void musb_kick_host(void);

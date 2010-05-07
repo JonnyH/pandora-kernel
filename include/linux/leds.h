@@ -85,6 +85,8 @@ struct led_trigger {
 
 	/* Link to next registered trigger */
 	struct list_head  next_trig;
+
+	enum led_brightness prev_brightness;
 };
 
 /* Registration functions for complex triggers */

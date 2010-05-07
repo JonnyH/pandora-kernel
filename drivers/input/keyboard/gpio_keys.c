@@ -108,6 +108,10 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	input->id.product = 0x0001;
 	input->id.version = 0x0100;
 
+	/* Enable auto repeat feature of Linux input subsystem */
+	if (pdata->rep)
+		__set_bit(EV_REP, input->evbit);
+
 	ddata->input = input;
 
 	for (i = 0; i < pdata->nbuttons; i++) {
@@ -164,6 +168,9 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 
 		input_set_capability(input, type, button->code);
 	}
+
+	for (i = 0; i < pdata->nbuttons_reserved; i++)
+		input_set_capability(input, EV_KEY, pdata->buttons_reserved[i]);
 
 	error = input_register_device(input);
 	if (error) {

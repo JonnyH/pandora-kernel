@@ -1,5 +1,5 @@
 /*
- * File: include/asm-arm/arch-omap/omapfb.h
+ * File: arch/arm/plat-omap/include/mach/omapfb.h
  *
  * Framebuffer driver for TI OMAP boards
  *
@@ -50,6 +50,12 @@
 #define OMAPFB_UPDATE_WINDOW	OMAP_IOW(54, struct omapfb_update_window)
 #define OMAPFB_SETUP_MEM	OMAP_IOW(55, struct omapfb_mem_info)
 #define OMAPFB_QUERY_MEM	OMAP_IOW(56, struct omapfb_mem_info)
+#define OMAPFB_WAITFORVSYNC	OMAP_IO(57)
+#define OMAPFB_MEMORY_READ	OMAP_IOR(58, struct omapfb_memory_read)
+
+#ifndef FBIO_WAITFORVSYNC
+#define FBIO_WAITFORVSYNC	_IOW('F', 0x20, u_int32_t)
+#endif
 
 #define OMAPFB_CAPS_GENERIC_MASK	0x00000fff
 #define OMAPFB_CAPS_LCDC_MASK		0x00fff000
@@ -90,6 +96,13 @@ enum omapfb_color_format {
 	OMAPFB_COLOR_CLUT_1BPP,
 	OMAPFB_COLOR_RGB444,
 	OMAPFB_COLOR_YUY422,
+
+	OMAPFB_COLOR_ARGB16,
+	OMAPFB_COLOR_RGB24U,	/* RGB24, 32-bit container */
+	OMAPFB_COLOR_RGB24P,	/* RGB24, 24-bit container */
+	OMAPFB_COLOR_ARGB32,
+	OMAPFB_COLOR_RGBA32,
+	OMAPFB_COLOR_RGBX32,
 };
 
 struct omapfb_update_window {
@@ -159,6 +172,15 @@ enum omapfb_update_mode {
 	OMAPFB_UPDATE_DISABLED = 0,
 	OMAPFB_AUTO_UPDATE,
 	OMAPFB_MANUAL_UPDATE
+};
+
+struct omapfb_memory_read {
+	__u16 x;
+	__u16 y;
+	__u16 w;
+	__u16 h;
+	size_t buffer_size;
+	void __user *buffer;
 };
 
 #ifdef __KERNEL__
@@ -280,6 +302,11 @@ struct omapfb_mem_region {
 	void __iomem	*vaddr;
 	unsigned long	size;
 	u8		type;		/* OMAPFB_PLANE_MEM_* */
+	enum omapfb_color_format format;/* OMAPFB_COLOR_* */
+	unsigned	format_used:1;	/* Must be set when format is set.
+					 * Needed b/c of the badly chosen 0
+					 * base for OMAPFB_COLOR_* values
+					 */
 	unsigned	alloc:1;	/* allocated by the driver */
 	unsigned	map:1;		/* kernel mapped by the driver */
 };
@@ -353,8 +380,8 @@ struct omapfb_device {
 	u32			pseudo_palette[17];
 
 	struct lcd_panel	*panel;			/* LCD panel */
-	struct lcd_ctrl         *ctrl;			/* LCD controller */
-	struct lcd_ctrl		*int_ctrl;		/* internal LCD ctrl */
+	const struct lcd_ctrl	*ctrl;			/* LCD controller */
+	const struct lcd_ctrl	*int_ctrl;		/* internal LCD ctrl */
 	struct lcd_ctrl_extif	*ext_if;		/* LCD ctrl external
 							   interface */
 	struct device		*dev;
@@ -375,6 +402,8 @@ extern struct lcd_ctrl omap1_lcd_ctrl;
 #else
 extern struct lcd_ctrl omap2_disp_ctrl;
 #endif
+
+extern void omapfb_set_platform_data(struct omapfb_platform_data *data);
 
 extern void omapfb_reserve_sdram(void);
 extern void omapfb_register_panel(struct lcd_panel *panel);

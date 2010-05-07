@@ -41,6 +41,9 @@ struct omap_chip_id {
  */
 extern unsigned int system_rev;
 
+/* compatibility with newer code */
+#define omap_rev() system_rev
+
 /*
  * Test if multicore OMAP support is needed
  */

@@ -512,8 +512,8 @@ u32 omap2_clksel_round_rate_div(struct clk *clk, unsigned long target_rate,
 	const struct clksel_rate *clkr;
 	u32 last_div = 0;
 
-	printk(KERN_INFO "clock: clksel_round_rate_div: %s target_rate %ld\n",
-	       clk->name, target_rate);
+	pr_debug("clock: clksel_round_rate_div: %s target_rate %ld\n",
+		 clk->name, target_rate);
 
 	*new_div = 1;
 
@@ -527,7 +527,7 @@ u32 omap2_clksel_round_rate_div(struct clk *clk, unsigned long target_rate,
 
 		/* Sanity check */
 		if (clkr->div <= last_div)
-			printk(KERN_ERR "clock: clksel_rate table not sorted "
+			pr_err("clock: clksel_rate table not sorted "
 			       "for clock %s", clk->name);
 
 		last_div = clkr->div;
@@ -539,7 +539,7 @@ u32 omap2_clksel_round_rate_div(struct clk *clk, unsigned long target_rate,
 	}
 
 	if (!clkr->div) {
-		printk(KERN_ERR "clock: Could not find divisor for target "
+		pr_err("clock: Could not find divisor for target "
 		       "rate %ld for clock %s parent %s\n", target_rate,
 		       clk->name, clk->parent->name);
 		return ~0;
@@ -547,8 +547,8 @@ u32 omap2_clksel_round_rate_div(struct clk *clk, unsigned long target_rate,
 
 	*new_div = clkr->div;
 
-	printk(KERN_INFO "clock: new_div = %d, new_rate = %ld\n", *new_div,
-	       (clk->parent->rate / clkr->div));
+	pr_debug("clock: new_div = %d, new_rate = %ld\n", *new_div,
+		 (clk->parent->rate / clkr->div));
 
 	return (clk->parent->rate / clkr->div);
 }
@@ -817,6 +817,11 @@ int omap2_clk_set_parent(struct clk *clk, struct clk *new_parent)
 	return 0;
 }
 
+struct clk *omap2_clk_get_parent(struct clk *clk)
+{
+	return clk->parent;
+}
+
 /* DPLL rate rounding code */
 
 /**
@@ -1011,7 +1016,7 @@ void omap2_clk_disable_unused(struct clk *clk)
 	if ((regval32 & (1 << clk->enable_bit)) == v)
 		return;
 
-	printk(KERN_INFO "Disabling unused clock \"%s\"\n", clk->name);
+	printk(KERN_DEBUG "Disabling unused clock \"%s\"\n", clk->name);
 	_omap2_clk_disable(clk);
 }
 #endif

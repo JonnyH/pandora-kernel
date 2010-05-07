@@ -968,6 +968,18 @@ static void musb_shutdown(struct platform_device *pdev)
 	/* FIXME power down */
 }
 
+/* HACK */
+struct musb *g_musb;
+
+extern void musb_kick_host(void)
+{
+	unsigned long	flags;
+	if (g_musb) {
+		spin_lock_irqsave(&g_musb->lock, flags);
+		musb_platform_set_mode(g_musb, MUSB_HOST);
+		spin_unlock_irqrestore(&g_musb->lock, flags);
+	}
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -2054,15 +2066,6 @@ bad_config:
 
 	}
 
-	return 0;
-
-fail:
-	if (musb->clock)
-		clk_put(musb->clock);
-	device_init_wakeup(dev, 0);
-	musb_free(musb);
-	return status;
-
 #ifdef CONFIG_SYSFS
 	status = device_create_file(dev, &dev_attr_mode);
 	status = device_create_file(dev, &dev_attr_vbus);
@@ -2071,12 +2074,34 @@ fail:
 #endif /* CONFIG_USB_GADGET_MUSB_HDRC */
 	status = 0;
 #endif
+	if (status)
+		goto fail2;
+
+	/* HACK */
+	g_musb = musb;
+
+	return 0;
+
+fail2:
+#ifdef CONFIG_SYSFS
+	device_remove_file(musb->controller, &dev_attr_mode);
+	device_remove_file(musb->controller, &dev_attr_vbus);
+#ifdef CONFIG_USB_MUSB_OTG
+	device_remove_file(musb->controller, &dev_attr_srp);
+#endif
+#endif
+	musb_platform_exit(musb);
+fail:
+	dev_err(musb->controller,
+		"musb_init_controller failed with status %d\n", status);
+
+	if (musb->clock)
+		clk_put(musb->clock);
+	device_init_wakeup(dev, 0);
+	musb_free(musb);
 
 	return status;
 
-fail2:
-	musb_platform_exit(musb);
-	goto fail;
 }
 
 /*-------------------------------------------------------------------------*/

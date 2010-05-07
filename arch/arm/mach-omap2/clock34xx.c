@@ -272,6 +272,7 @@ static int omap3_noncore_dpll_enable(struct clk *clk)
 {
 	int r;
 	struct dpll_data *dd;
+	u32 rate;
 
 	if (clk == &dpll3_ck)
 		return -EINVAL;
@@ -280,7 +281,9 @@ static int omap3_noncore_dpll_enable(struct clk *clk)
 	if (!dd)
 		return -EINVAL;
 
-	if (clk->rate == dd->bypass_clk->rate)
+	rate = omap2_get_dpll_rate(clk);
+
+	if (dd->bypass_clk->rate == rate)
 		r = _omap3_noncore_dpll_bypass(clk);
 	else
 		r = _omap3_noncore_dpll_lock(clk);
@@ -484,10 +487,10 @@ static int omap3_core_dpll_m2_set_rate(struct clk *clk, unsigned long rate)
 	if (!sp)
 		return -EINVAL;
 
-	pr_info("clock: changing CORE DPLL rate from %lu to %lu\n", clk->rate,
-		validrate);
-	pr_info("clock: SDRC timing params used: %08x %08x %08x\n",
-		sp->rfr_ctrl, sp->actim_ctrla, sp->actim_ctrlb);
+	pr_debug("clock: changing CORE DPLL rate from %lu to %lu\n", clk->rate,
+		 validrate);
+	pr_debug("clock: SDRC timing params used: %08x %08x %08x\n",
+		 sp->rfr_ctrl, sp->actim_ctrla, sp->actim_ctrlb);
 
 	/* REVISIT: SRAM code doesn't support other M2 divisors yet */
 	WARN_ON(new_div != 1 && new_div != 2);
@@ -635,6 +638,7 @@ static struct clk_functions omap2_clk_functions = {
 	.clk_round_rate		= omap2_clk_round_rate,
 	.clk_set_rate		= omap2_clk_set_rate,
 	.clk_set_parent		= omap2_clk_set_parent,
+	.clk_get_parent		= omap2_clk_get_parent,
 	.clk_disable_unused	= omap2_clk_disable_unused,
 };
 

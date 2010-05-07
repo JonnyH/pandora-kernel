@@ -4,6 +4,7 @@
  * Copyright (C) 2005, 2006 Nokia Corporation.
  *
  * Contact: Ville Tervo <ville.tervo@nokia.com>
+ * Hacked by Gražvydas Ignotas for Pandora handheld console
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -48,6 +49,7 @@
 #include "hci_h4p.h"
 
 #define PM_TIMEOUT 200
+#define BAUD_RATE  3686400
 
 /* This should be used in function that cannot release clocks */
 static void hci_h4p_set_clk(struct hci_h4p_info *info, int *clock, int enable)
@@ -58,22 +60,18 @@ static void hci_h4p_set_clk(struct hci_h4p_info *info, int *clock, int enable)
 	if (enable && !*clock) {
 		NBT_DBG_POWER("Enabling %p\n", clock);
 		clk_enable(info->uart_fclk);
-#ifdef CONFIG_ARCH_OMAP2
-		if (cpu_is_omap24xx()) {
+		if (cpu_class_is_omap2()) {
 			clk_enable(info->uart_iclk);
 			omap2_block_sleep();
 		}
-#endif
 	}
 	if (!enable && *clock) {
 		NBT_DBG_POWER("Disabling %p\n", clock);
 		clk_disable(info->uart_fclk);
-#ifdef CONFIG_ARCH_OMAP2
-		if (cpu_is_omap24xx()) {
+		if (cpu_class_is_omap2()) {
 			clk_disable(info->uart_iclk);
 			omap2_allow_sleep();
 		}
-#endif
 	}
 
 	*clock = enable;
@@ -83,26 +81,26 @@ static void hci_h4p_set_clk(struct hci_h4p_info *info, int *clock, int enable)
 /* Power management functions */
 static void hci_h4p_disable_tx(struct hci_h4p_info *info)
 {
-	NBT_DBG_POWER("\n");
-
 	if (!info->pm_enabled)
 		return;
 
+	NBT_DBG_POWER("\n");
 	mod_timer(&info->tx_pm_timer, jiffies + msecs_to_jiffies(PM_TIMEOUT));
 }
 
 static void hci_h4p_enable_tx(struct hci_h4p_info *info)
 {
-	NBT_DBG_POWER("\n");
-
 	if (!info->pm_enabled)
 		return;
 
+	NBT_DBG_POWER("\n");
 	del_timer_sync(&info->tx_pm_timer);
 	if (info->tx_pm_enabled) {
 		info->tx_pm_enabled = 0;
 		hci_h4p_set_clk(info, &info->tx_clocks_en, 1);
-		omap_set_gpio_dataout(info->bt_wakeup_gpio, 1);
+#if 0
+		gpio_set_value(info->bt_wakeup_gpio, 1);
+#endif
 	}
 }
 
@@ -115,7 +113,9 @@ static void hci_h4p_tx_pm_timer(unsigned long data)
 	info = (struct hci_h4p_info *)data;
 
 	if (hci_h4p_inb(info, UART_LSR) & UART_LSR_TEMT) {
-		omap_set_gpio_dataout(info->bt_wakeup_gpio, 0);
+#if 0
+		gpio_set_value(info->bt_wakeup_gpio, 0);
+#endif
 		hci_h4p_set_clk(info, &info->tx_clocks_en, 0);
 		info->tx_pm_enabled = 1;
 	}
@@ -169,6 +169,26 @@ static void hci_h4p_rx_pm_timer(unsigned long data)
 	spin_unlock_irqrestore(&info->lock, flags);
 }
 
+#ifdef CONFIG_LEDS_TRIGGERS
+static void hci_h4p_led_blink(unsigned long data)
+{
+	struct hci_h4p_info *info = (struct hci_h4p_info *)data;
+
+	if (!time_after(jiffies, info->led_next_change))
+		return;
+
+	info->led_next_change = jiffies + msecs_to_jiffies(250);
+	info->led_state = !info->led_state;
+
+	led_trigger_event(info->led, info->led_state ? LED_FULL : LED_OFF);
+	
+	if (!info->led_state)
+		mod_timer(&info->led_timer, jiffies + msecs_to_jiffies(300));
+}
+#else
+#define hci_h4p_led_blink(x) do {} while(0)
+#endif
+
 /* Negotiation functions */
 int hci_h4p_send_alive_packet(struct hci_h4p_info *info)
 {
@@ -198,62 +218,47 @@ static void hci_h4p_alive_packet(struct hci_h4p_info *info, struct sk_buff *skb)
 	kfree_skb(skb);
 }
 
-static int hci_h4p_send_negotiation(struct hci_h4p_info *info, struct sk_buff *skb)
-{
-	NBT_DBG("Sending negotiation..\n");
+struct speed_change_cmd_t {
+	__u8 uart_prefix;
+	struct hci_command_hdr hci_hdr;
+	__le32 speed;
+} __attribute__((packed));
 
-	hci_h4p_change_speed(info, INIT_SPEED);
+static int hci_h4p_send_speed(struct hci_h4p_info *info, int speed)
+{
+	struct speed_change_cmd_t cmd;
+	struct sk_buff *skb;
+	int i;
+
+	NBT_DBG("Sending speed change command..\n");
 
 	info->init_error = 0;
 	init_completion(&info->init_completion);
-	skb_queue_tail(&info->txq, skb);
-	tasklet_schedule(&info->tx_task);
 
-	if (!wait_for_completion_interruptible_timeout(&info->init_completion,
-				msecs_to_jiffies(1000))) 
-		return -ETIMEDOUT;
+	cmd.uart_prefix = HCI_COMMAND_PKT;
+	cmd.hci_hdr.opcode = 0xff36;
+	cmd.hci_hdr.plen = sizeof(cmd.speed);
+	cmd.speed = speed;
 
-	NBT_DBG("Negotiation sent\n");
-	return info->init_error;
-}
+	for (i = 0; i < 3; i++) {
+		skb = bt_skb_alloc(sizeof(cmd), GFP_KERNEL);
+		if (skb == NULL)
+			return -ENOMEM;
 
-static void hci_h4p_negotiation_packet(struct hci_h4p_info *info,
-				       struct sk_buff *skb)
-{
-	int err = 0;
+		memcpy(skb_put(skb, sizeof(cmd)), &cmd, sizeof(cmd));
 
-	if (skb->data[1] == 0x20) {
-		/* Change to operational settings */
-		hci_h4p_set_rts(info, 0);
+		skb_queue_tail(&info->txq, skb);
+		tasklet_schedule(&info->tx_task);
 
-		err = hci_h4p_wait_for_cts(info, 0, 100);
-		if (err < 0)
-			goto neg_ret;
-
-		hci_h4p_change_speed(info, MAX_BAUD_RATE);
-
-		err = hci_h4p_wait_for_cts(info, 1, 100);
-		if (err < 0)
-			goto neg_ret;
-
-		hci_h4p_set_auto_ctsrts(info, 1, UART_EFR_CTS | UART_EFR_RTS);
-
-		err = hci_h4p_send_alive_packet(info);
-		if (err < 0)
-			goto neg_ret;
-	} else {
-		dev_err(info->dev, "Could not negotiate hci_h4p settings\n");
-		err = -EINVAL;
-		goto neg_ret;
+		if (wait_for_completion_interruptible_timeout(
+			    &info->init_completion, msecs_to_jiffies(100))) {
+			NBT_DBG("Got speed change response after "
+				"%d try(-ies)\n", i+1);
+			return info->init_error;
+		}
 	}
 
-	kfree_skb(skb);
-	return;
-
-neg_ret:
-	info->init_error = err;
-	complete(&info->init_completion);
-	kfree_skb(skb);
+	return -ETIMEDOUT;
 }
 
 /* H4 packet handling functions */
@@ -323,7 +328,6 @@ static inline void hci_h4p_recv_frame(struct hci_h4p_info *info,
 {
 
 	if (unlikely(!test_bit(HCI_RUNNING, &info->hdev->flags))) {
-		NBT_DBG("fw_event\n");
 		hci_h4p_parse_fw_event(info, skb);
 	} else {
 		hci_recv_frame(skb);
@@ -331,98 +335,118 @@ static inline void hci_h4p_recv_frame(struct hci_h4p_info *info,
 	}
 }
 
+static void hci_h4p_rx_flush(struct hci_h4p_info *info)
+{
+	while (hci_h4p_inb(info, UART_LSR) & UART_LSR_DR)
+		hci_h4p_inb(info, UART_RX);
+	if (info->rx_skb != NULL)
+		kfree_skb(info->rx_skb);
+	info->rx_skb = NULL;
+	info->rx_state = WAIT_FOR_PKT_TYPE;
+	info->hdev->stat.err_rx++;
+}
+
 static void hci_h4p_rx_tasklet(unsigned long data)
 {
 	u8 byte;
 	unsigned long flags;
 	struct hci_h4p_info *info = (struct hci_h4p_info *)data;
+	int count = 0, i;
 
-	NBT_DBG("tasklet woke up\n");
-	NBT_DBG_TRANSFER("rx_tasklet woke up\ndata ");
+	NBT_DBG_TRANSFER("rx tasklet\n");
+
+	if (info->rx_skb != NULL && info->rx_timed_out) {
+		kfree_skb(info->rx_skb);
+		info->rx_skb = NULL;
+	}
+	info->rx_timed_out = 0;
+	info->rx_calls++;
 
 	while (hci_h4p_inb(info, UART_LSR) & UART_LSR_DR) {
-		byte = hci_h4p_inb(info, UART_RX);
-		if (info->garbage_bytes) {
-			info->garbage_bytes--;
-			continue;
-		}
 		if (info->rx_skb == NULL) {
-			info->rx_skb = bt_skb_alloc(HCI_MAX_FRAME_SIZE, GFP_ATOMIC | GFP_DMA);
+			hci_h4p_led_blink((unsigned long)info);
+			info->rx_skb = bt_skb_alloc(HCI_MAX_FRAME_SIZE,
+				GFP_ATOMIC | GFP_DMA);
 			if (!info->rx_skb) {
-				dev_err(info->dev, "Can't allocate memory for new packet\n");
-				goto finish_task;
+				dev_err(info->dev, "Can't allocate memory "
+					"for new packet\n");
+				hci_h4p_rx_flush(info);
+				break;
 			}
-			info->rx_state = WAIT_FOR_PKT_TYPE;
 			info->rx_skb->dev = (void *)info->hdev;
+			info->rx_state = WAIT_FOR_PKT_TYPE;
 		}
-		info->hdev->stat.byte_rx++;
-		NBT_DBG_TRANSFER_NF("0x%.2x  ", byte);
-		switch (info->rx_state) {
-		case WAIT_FOR_PKT_TYPE:
+
+		if (info->rx_state == WAIT_FOR_PKT_TYPE) {
+			byte = hci_h4p_inb(info, UART_RX);
+			count++;
 			bt_cb(info->rx_skb)->pkt_type = byte;
 			info->rx_count = hci_h4p_get_hdr_len(info, byte);
 			if (info->rx_count < 0) {
-				info->hdev->stat.err_rx++;
-				kfree_skb(info->rx_skb);
-				info->rx_skb = NULL;
-			} else {
-				info->rx_state = WAIT_FOR_HEADER;
+				hci_h4p_rx_flush(info);
+				break;
 			}
-			break;
-		case WAIT_FOR_HEADER:
-			info->rx_count--;
-			*skb_put(info->rx_skb, 1) = byte;
-			if (info->rx_count == 0) {
-				info->rx_count = hci_h4p_get_data_len(info, info->rx_skb);
-				if (info->rx_count > skb_tailroom(info->rx_skb)) {
-					dev_err(info->dev, "Frame is %ld bytes too long.\n",
-					       info->rx_count - skb_tailroom(info->rx_skb));
-					kfree_skb(info->rx_skb);
-					info->rx_skb = NULL;
-					info->garbage_bytes = info->rx_count - skb_tailroom(info->rx_skb);
-					break;
-				}
-				info->rx_state = WAIT_FOR_DATA;
 
-				if (bt_cb(info->rx_skb)->pkt_type == H4_NEG_PKT) {
-					hci_h4p_negotiation_packet(info, info->rx_skb);
-					info->rx_skb = NULL;
-					info->rx_state = WAIT_FOR_PKT_TYPE;
-					goto finish_task;
-				}
-				if (bt_cb(info->rx_skb)->pkt_type == H4_ALIVE_PKT) {
-					hci_h4p_alive_packet(info, info->rx_skb);
-					info->rx_skb = NULL;
-					info->rx_state = WAIT_FOR_PKT_TYPE;
-					goto finish_task;
-				}
+			info->rx_calls = 1;
+			info->rx_state = WAIT_FOR_HEADER;
+		}
+
+		if (info->rx_state == WAIT_FOR_HEADER) {
+			while (info->rx_count > 0) {
+				if (!(hci_h4p_inb(info, UART_LSR) & UART_LSR_DR))
+					goto end;
+				*skb_put(info->rx_skb, 1) = hci_h4p_inb(info, UART_RX);
+				info->rx_count--;
+				count++;
 			}
-			break;
-		case WAIT_FOR_DATA:
-			info->rx_count--;
-			*skb_put(info->rx_skb, 1) = byte;
-			if (info->rx_count == 0) {
-				/* H4+ devices should allways send word aligned packets */
-				if (!(info->rx_skb->len % 2)) {
-					info->garbage_bytes++;
-				}
+
+			info->rx_count = hci_h4p_get_data_len(info, info->rx_skb);
+			if (unlikely(info->rx_count > skb_tailroom(info->rx_skb) ||
+						info->rx_count < 0)) {
+				dev_err(info->dev, "Frame too long or can't "
+					"determine size.\n");
+				hci_h4p_rx_flush(info);
+				break;
+			}
+
+			info->rx_state = WAIT_FOR_DATA;
+		}
+
+		if (info->rx_state == WAIT_FOR_DATA) {
+			while (info->rx_count > 0) {
+				if (!(hci_h4p_inb(info, UART_LSR) & UART_LSR_DR))
+					goto end;
+				*skb_put(info->rx_skb, 1) = hci_h4p_inb(info, UART_RX);
+				info->rx_count--;
+				count++;
+			}
+
+			NBT_DBG("rx done, type %02x, len %i, calls %i\n",
+				bt_cb(info->rx_skb)->pkt_type,
+				info->rx_skb->len + 1, info->rx_calls);
+
+			NBT_DBG_TRANSFER_NF("  rx: %02x", bt_cb(info->rx_skb)->pkt_type);
+			for (i = 0; i < info->rx_skb->len; i++)
+				NBT_DBG_TRANSFER_NF(" %02x", info->rx_skb->data[i]);
+			NBT_DBG_TRANSFER_NF("\n");
+
+			/* handle the data */
+			if (bt_cb(info->rx_skb)->pkt_type == H4_ALIVE_PKT)
+				hci_h4p_alive_packet(info, info->rx_skb);
+			else
 				hci_h4p_recv_frame(info, info->rx_skb);
-				info->rx_skb = NULL;
-			}
-			break;
-		default:
-			WARN_ON(1);
-			break;
+
+			info->rx_state = WAIT_FOR_PKT_TYPE;
+			info->rx_skb = NULL;
 		}
 	}
 
-finish_task:
+end:
+	info->hdev->stat.byte_rx += count;
 	spin_lock_irqsave(&info->lock, flags);
 	hci_h4p_outb(info, UART_IER, hci_h4p_inb(info, UART_IER) | UART_IER_RDI);
 	spin_unlock_irqrestore(&info->lock, flags);
-
-	NBT_DBG_TRANSFER_NF("\n");
-	NBT_DBG("rx_ended\n");
+	NBT_DBG_TRANSFER("rx end\n");
 }
 
 static void hci_h4p_tx_tasklet(unsigned long data)
@@ -432,15 +456,26 @@ static void hci_h4p_tx_tasklet(unsigned long data)
 	struct sk_buff *skb;
 	struct hci_h4p_info *info = (struct hci_h4p_info *)data;
 
-	NBT_DBG("tasklet woke up\n");
 	NBT_DBG_TRANSFER("tx_tasklet woke up\n data ");
 
 	skb = skb_dequeue(&info->txq);
 	if (!skb) {
 		/* No data in buffer */
-		NBT_DBG("skb ready\n");
+		NBT_DBG_TRANSFER("skb ready\n");
 		hci_h4p_disable_tx(info);
+		hci_h4p_led_blink((unsigned long)info);
 		return;
+	}
+
+	NBT_DBG("tx %p %d bytes\n", skb, skb->len);
+
+	/* there hould be no rx in progress at this point */
+	if (info->rx_skb != NULL) {
+		dev_err(info->dev, "Receive timed out, %i done, %li left, "
+			"LSR=%02x, IER=%02x\n", info->rx_skb->len + 1,
+			info->rx_count, hci_h4p_inb(info, UART_LSR),
+			hci_h4p_inb(info, UART_IER));
+		info->rx_timed_out = 1;
 	}
 
 	/* Copy data to tx fifo */
@@ -468,51 +503,61 @@ static void hci_h4p_tx_tasklet(unsigned long data)
 static irqreturn_t hci_h4p_interrupt(int irq, void *data)
 {
 	struct hci_h4p_info *info = (struct hci_h4p_info *)data;
-	u8 iir, msr;
-	int ret;
 	unsigned long flags;
-
-	ret = IRQ_NONE;
+	u8 iir;
 
 	iir = hci_h4p_inb(info, UART_IIR);
 	if (iir & UART_IIR_NO_INT) {
-		dev_err(info->dev, "Interrupt but no reason irq 0x%.2x\n", iir);
-		return IRQ_HANDLED;
+		/* why does this happen from time to time? */
+		NBT_DBG("Interrupt but no reason irq 0x%.2x, "
+			"LSR=%02x, IER=%02x\n",iir,hci_h4p_inb(info, UART_LSR),
+			hci_h4p_inb(info, UART_IER));
+		goto end;
 	}
 
-	NBT_DBG("In interrupt handler iir 0x%.2x\n", iir);
+	iir &= 0x3e;
 
-	iir &= UART_IIR_ID;
+	if (iir == UART_IIR_RDI || iir == UART_IIR_THRI)
+		NBT_DBG_TRANSFER("In interrupt handler iir 0x%.2x\n", iir);
+	else
+		NBT_DBG("irq 0x%.2x, LSR=%02x, IER=%02x\n", iir,
+			hci_h4p_inb(info, UART_LSR), hci_h4p_inb(info, UART_IER));
 
-	if (iir == UART_IIR_MSI) {
-		msr = hci_h4p_inb(info, UART_MSR);
-		ret = IRQ_HANDLED;
+	switch (iir) {
+		case UART_IIR_MSI:
+			hci_h4p_inb(info, UART_MSR);
+			break;
+		case UART_IIR_RLSI:
+			hci_h4p_inb(info, UART_RX);
+			hci_h4p_inb(info, UART_LSR);
+			break;
+
+		case 0x0c: /* rx timeout, same mask? */
+		case UART_IIR_RDI:
+			spin_lock_irqsave(&info->lock, flags);
+			hci_h4p_outb(info, UART_IER, hci_h4p_inb(info, UART_IER) & ~UART_IER_RDI);
+			spin_unlock_irqrestore(&info->lock, flags);
+			break;
+
+		case UART_IIR_THRI:
+			spin_lock_irqsave(&info->lock, flags);
+			hci_h4p_outb(info, UART_IER, hci_h4p_inb(info, UART_IER) & ~UART_IER_THRI);
+			spin_unlock_irqrestore(&info->lock, flags);
+			tasklet_schedule(&info->tx_task);
+			return IRQ_HANDLED;	/* don't schedule read yet */
 	}
-	if (iir == UART_IIR_RLSI) {
-		hci_h4p_inb(info, UART_RX);
-		hci_h4p_inb(info, UART_LSR);
-		ret = IRQ_HANDLED;
-	}
 
-	if (iir == UART_IIR_RDI) {
-		spin_lock_irqsave(&info->lock, flags);
-		hci_h4p_outb(info, UART_IER, hci_h4p_inb(info, UART_IER) & ~UART_IER_RDI);
-		spin_unlock_irqrestore(&info->lock, flags);
+end:
+	/* if we have data to read, schedule read,
+	 * ignoring real reason we were called here.
+	 */
+	if (iir == UART_IIR_RDI || hci_h4p_inb(info, UART_LSR) & UART_LSR_DR)
 		tasklet_schedule(&info->rx_task);
-		ret = IRQ_HANDLED;
-	}
 
-	if (iir == UART_IIR_THRI) {
-		spin_lock_irqsave(&info->lock, flags);
-		hci_h4p_outb(info, UART_IER, hci_h4p_inb(info, UART_IER) & ~UART_IER_THRI);
-		spin_unlock_irqrestore(&info->lock, flags);
-		tasklet_schedule(&info->tx_task);
-		ret = IRQ_HANDLED;
-	}
-
-	return ret;
+	return IRQ_HANDLED;
 }
 
+#if 0
 static irqreturn_t hci_h4p_wakeup_interrupt(int irq, void *dev_inst)
 {
 	struct hci_h4p_info *info = dev_inst;
@@ -527,7 +572,7 @@ static irqreturn_t hci_h4p_wakeup_interrupt(int irq, void *dev_inst)
 	if (!test_bit(HCI_RUNNING, &hdev->flags))
 		return IRQ_HANDLED;
 
-	should_wakeup = omap_get_gpio_datain(info->host_wakeup_gpio);
+	should_wakeup = gpio_get_value(info->host_wakeup_gpio);
 	NBT_DBG_POWER("gpio interrupt %d\n", should_wakeup);
 	if (should_wakeup) {
 		hci_h4p_enable_rx(info);
@@ -537,27 +582,34 @@ static irqreturn_t hci_h4p_wakeup_interrupt(int irq, void *dev_inst)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 static int hci_h4p_reset(struct hci_h4p_info *info)
 {
 	int err;
 
+	gpio_set_value(info->reset_gpio, 0);
+
+	/* reset needs at least 10ms */
+	msleep(20);
+
 	hci_h4p_init_uart(info);
+	hci_h4p_change_speed(info, 115200);
+	hci_h4p_set_auto_ctsrts(info, 0, UART_EFR_CTS | UART_EFR_RTS);
 	hci_h4p_set_rts(info, 0);
 
-	omap_set_gpio_dataout(info->reset_gpio, 0);
-	msleep(100);
-	omap_set_gpio_dataout(info->bt_wakeup_gpio, 1);
-	omap_set_gpio_dataout(info->reset_gpio, 1);
-	msleep(100);
+#if 0
+	gpio_set_value(info->bt_wakeup_gpio, 1);
+#endif
+	gpio_set_value(info->reset_gpio, 1);
+	msleep(80);
 
-	err = hci_h4p_wait_for_cts(info, 1, 10);
+	err = hci_h4p_wait_for_cts(info, 1, 100);
 	if (err < 0) {
 		dev_err(info->dev, "No cts from bt chip\n");
 		return err;
 	}
-
-	hci_h4p_set_rts(info, 1);
+	msleep(20);	/* just in case response was too early */
 
 	return 0;
 }
@@ -577,7 +629,6 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 {
 	struct hci_h4p_info *info;
 	int err;
-	struct sk_buff *neg_cmd_skb;
 	struct sk_buff_head fw_queue;
 
 	info = hdev->driver_data;
@@ -590,16 +641,6 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 	if (err < 0) {
 		dev_err(info->dev, "Cannot read firmware\n");
 		return err;
-	}
-	neg_cmd_skb = skb_dequeue(&fw_queue);
-	if (!neg_cmd_skb) {
-		err = -EPROTO;
-		goto err_clean;
-	}
-	info->alive_cmd_skb = skb_dequeue(&fw_queue);
-	if (!info->alive_cmd_skb) {
-		err = -EPROTO;
-		goto err_clean;
 	}
 
 	hci_h4p_set_clk(info, &info->tx_clocks_en, 1);
@@ -618,10 +659,28 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 	if (err < 0)
 		goto err_clean;
 
-	err = hci_h4p_send_negotiation(info, neg_cmd_skb);
-	neg_cmd_skb = NULL;
-	if (err < 0)
+	hci_h4p_set_auto_ctsrts(info, 1, UART_EFR_CTS | UART_EFR_RTS);
+
+	err = hci_h4p_send_speed(info, BAUD_RATE);
+	if (err < 0) {
+		dev_err(info->dev, "Failed to set chip baud rate "
+			"to %d\n", BAUD_RATE);
 		goto err_clean;
+	}
+
+	/* Change to operational settings */
+	hci_h4p_set_auto_ctsrts(info, 0, UART_EFR_CTS | UART_EFR_RTS);
+	hci_h4p_set_rts(info, 0);
+	hci_h4p_change_speed(info, BAUD_RATE);
+
+	err = hci_h4p_wait_for_cts(info, 1, 100);
+	if (err < 0) {
+		dev_err(info->dev, "No CTS after speed change.\n");
+		goto err_clean;
+	}
+	msleep(10);	/* just to be sure both sides changed rate */
+
+	hci_h4p_set_auto_ctsrts(info, 1, UART_EFR_CTS | UART_EFR_RTS);
 
 	err = hci_h4p_send_fw(info, &fw_queue);
 	if (err < 0) {
@@ -631,12 +690,14 @@ static int hci_h4p_hci_open(struct hci_dev *hdev)
 
 	kfree_skb(info->alive_cmd_skb);
 	info->alive_cmd_skb = NULL;
-	info->pm_enabled = 1;
+	/* TODO: fix PM */
+//	info->pm_enabled = 1;
 	info->tx_pm_enabled = 1;
 	info->rx_pm_enabled = 0;
 	set_bit(HCI_RUNNING, &hdev->flags);
+	led_trigger_event(info->led, LED_FULL);
+	dev_info(info->dev, "BT hci up and running.\n");
 
-	NBT_DBG("hci up and running\n");
 	return 0;
 
 err_clean:
@@ -646,11 +707,15 @@ err_clean:
 	hci_h4p_reset_uart(info);
 	hci_h4p_set_clk(info, &info->tx_clocks_en, 0);
 	hci_h4p_set_clk(info, &info->rx_clocks_en, 0);
-	omap_set_gpio_dataout(info->reset_gpio, 0);
-	omap_set_gpio_dataout(info->bt_wakeup_gpio, 0);
+	gpio_set_value(info->reset_gpio, 0);
+#if 0
+	gpio_set_value(info->bt_wakeup_gpio, 0);
+#endif
 	skb_queue_purge(&fw_queue);
+#if 0
 	kfree_skb(neg_cmd_skb);
 	neg_cmd_skb = NULL;
+#endif
 	kfree_skb(info->alive_cmd_skb);
 	info->alive_cmd_skb = NULL;
 	kfree_skb(info->rx_skb);
@@ -675,9 +740,16 @@ static int hci_h4p_hci_close(struct hci_dev *hdev)
 	hci_h4p_reset_uart(info);
 	hci_h4p_set_clk(info, &info->tx_clocks_en, 0);
 	hci_h4p_set_clk(info, &info->rx_clocks_en, 0);
-	omap_set_gpio_dataout(info->reset_gpio, 0);
-	omap_set_gpio_dataout(info->bt_wakeup_gpio, 0);
+	gpio_set_value(info->reset_gpio, 0);
+#if 0
+	gpio_set_value(info->bt_wakeup_gpio, 0);
+#endif
 	kfree_skb(info->rx_skb);
+#ifdef CONFIG_LEDS_TRIGGERS
+	del_timer_sync(&info->led_timer);
+	led_trigger_event(info->led, LED_OFF);
+#endif
+	dev_info(info->dev, "BT hci down.\n");
 
 	return 0;
 }
@@ -690,7 +762,6 @@ static int hci_h4p_hci_send_frame(struct sk_buff *skb)
 {
 	struct hci_h4p_info *info;
 	struct hci_dev *hdev = (struct hci_dev *)skb->dev;
-	int err = 0;
 
 	if (!hdev) {
 		printk(KERN_WARNING "hci_h4p: Frame for unknown device\n");
@@ -721,12 +792,14 @@ static int hci_h4p_hci_send_frame(struct sk_buff *skb)
 	/* Push frame type to skb */
 	*skb_push(skb, 1) = (bt_cb(skb)->pkt_type);
 	/* We should allways send word aligned data to h4+ devices */
+#if 0
 	if (skb->len % 2) {
+		int err = 0;
 		err = skb_pad(skb, 1);
+		if (err)
+			return err;
 	}
-	if (err)
-		return err;
-
+#endif
 	hci_h4p_enable_tx(info);
 	skb_queue_tail(&info->txq, skb);
 	tasklet_schedule(&info->tx_task);
@@ -831,6 +904,7 @@ static int hci_h4p_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
+#if 0
 	err = omap_request_gpio(info->bt_wakeup_gpio);
 	if (err < 0)
 	{
@@ -852,16 +926,17 @@ static int hci_h4p_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
-	omap_set_gpio_direction(info->reset_gpio, 0);
-	omap_set_gpio_direction(info->bt_wakeup_gpio, 0);
-	omap_set_gpio_direction(info->host_wakeup_gpio, 1);
+	gpio_direction_output(info->bt_wakeup_gpio, 0);
+	gpio_direction_input(info->host_wakeup_gpio);
+#endif
+	gpio_direction_output(info->reset_gpio, 0);
 
 	switch (bt_config->bt_uart) {
 	case 1:
 		if (cpu_is_omap16xx()) {
 			irq = INT_UART1;
 			info->uart_fclk = clk_get(NULL, "uart1_ck");
-		} else if (cpu_is_omap24xx()) {
+		} else if (cpu_class_is_omap2()) {
 			irq = INT_24XX_UART1_IRQ;
 			info->uart_iclk = clk_get(NULL, "uart1_ick");
 			info->uart_fclk = clk_get(NULL, "uart1_fck");
@@ -905,35 +980,40 @@ static int hci_h4p_probe(struct platform_device *pdev)
 	}
 
 	info->irq = irq;
-	err = request_irq(irq, hci_h4p_interrupt, 0, "hci_h4p", (void *)info);
+	err = request_irq(irq, hci_h4p_interrupt, 0,
+			"hci_h4p_uart", (void *)info);
 	if (err < 0) {
 		dev_err(info->dev, "hci_h4p: unable to get IRQ %d\n", irq);
 		goto cleanup;
 	}
 
-	err = request_irq(OMAP_GPIO_IRQ(info->host_wakeup_gpio),
+#if 0
+	err = request_irq(gpio_to_irq(info->host_wakeup_gpio),
 			  hci_h4p_wakeup_interrupt,
 				IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 			  "hci_h4p_wkup", (void *)info);
 	if (err < 0) {
 		dev_err(info->dev, "hci_h4p: unable to get wakeup IRQ %d\n",
-			  OMAP_GPIO_IRQ(info->host_wakeup_gpio));
+			  gpio_to_irq(info->host_wakeup_gpio));
 		free_irq(irq, (void *)info);
 		goto cleanup;
 	}
+#endif
 
 	hci_h4p_set_clk(info, &info->tx_clocks_en, 1);
-	hci_h4p_set_auto_ctsrts(info, 0, UART_EFR_CTS | UART_EFR_RTS);
-	err = hci_h4p_init_uart(info);
-	if (err < 0)
-		goto cleanup_irq;
 	err = hci_h4p_reset(info);
 	if (err < 0)
 		goto cleanup_irq;
-	err = hci_h4p_wait_for_cts(info, 1, 10);
-	if (err < 0)
-		goto cleanup_irq;
 	hci_h4p_set_clk(info, &info->tx_clocks_en, 0);
+
+#ifdef CONFIG_LEDS_TRIGGERS
+	init_timer(&info->led_timer);
+	info->led_timer.function = hci_h4p_led_blink;
+	info->led_timer.data = (unsigned long)info;
+	info->led_state = 1;
+	info->led_next_change = jiffies;
+	led_trigger_register_simple("bluetooth", &info->led);
+#endif
 
 	platform_set_drvdata(pdev, info);
 	err = hci_h4p_sysfs_create_files(info->dev);
@@ -944,18 +1024,22 @@ static int hci_h4p_probe(struct platform_device *pdev)
 		dev_err(info->dev, "failed to register hci_h4p hci device\n");
 		goto cleanup_irq;
 	}
-	omap_set_gpio_dataout(info->reset_gpio, 0);
+	gpio_set_value(info->reset_gpio, 0);
 
 	return 0;
 
 cleanup_irq:
 	free_irq(irq, (void *)info);
-	free_irq(OMAP_GPIO_IRQ(info->host_wakeup_gpio), (void *)info);
+#if 0
+	free_irq(gpio_to_irq(info->host_wakeup_gpio), (void *)info);
+#endif
 cleanup:
-	omap_set_gpio_dataout(info->reset_gpio, 0);
+	gpio_set_value(info->reset_gpio, 0);
 	omap_free_gpio(info->reset_gpio);
+#if 0
 	omap_free_gpio(info->bt_wakeup_gpio);
 	omap_free_gpio(info->host_wakeup_gpio);
+#endif
 	kfree(info);
 
 	return err;
@@ -969,12 +1053,17 @@ static int hci_h4p_remove(struct platform_device *dev)
 	info = platform_get_drvdata(dev);
 
 	hci_h4p_hci_close(info->hdev);
-	free_irq(OMAP_GPIO_IRQ(info->host_wakeup_gpio), (void *) info);
+#if 0
+	free_irq(gpio_to_irq(info->host_wakeup_gpio), (void *) info);
+#endif
 	hci_free_dev(info->hdev);
 	omap_free_gpio(info->reset_gpio);
+#if 0
 	omap_free_gpio(info->bt_wakeup_gpio);
 	omap_free_gpio(info->host_wakeup_gpio);
+#endif
 	free_irq(info->irq, (void *) info);
+	led_trigger_unregister_simple(info->led);
 	kfree(info);
 
 	return 0;

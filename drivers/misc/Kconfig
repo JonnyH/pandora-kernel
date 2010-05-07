@@ -439,6 +439,12 @@ config ENCLOSURE_SERVICES
 	  driver (SCSI/ATA) which supports enclosures
 	  or a SCSI enclosure device (SES) to use these services.
 
+config PANDORA_GAME_CONSOLE
+	tristate "Pandora Game Console additional hardware control"
+	depends on MACH_OMAP3_PANDORA
+	---help---
+	Currently only exports some stuff through /proc/pandora.
+
 config SGI_XP
 	tristate "Support communication between SGI SSIs"
 	depends on NET

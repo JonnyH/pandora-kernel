@@ -15,6 +15,12 @@
  * kind, whether express or implied.
  */
 
+/* for now we always want verbose error logs */
+#undef DEBUG
+#define DEBUG
+#undef CONFIG_MMC_DEBUG
+#define CONFIG_MMC_DEBUG
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -64,6 +70,9 @@
 #define ICS			0x2
 #define CEN			(1<<2)
 #define CLKD_MASK		0x0000FFC0
+#define CLKD_SHIFT		6
+#define DTO_MASK		0x000F0000
+#define DTO_SHIFT		16
 #define INT_EN_MASK		0x307F0033
 #define INIT_STREAM		(1<<1)
 #define DP_SELECT		(1<<21)
@@ -81,6 +90,9 @@
 #define CMD_CRC			(1 << 17)
 #define DATA_CRC		(1 << 21)
 #define CARD_ERR		(1 << 28)
+#define STAT_DEB		(1 << 22)
+#define STAT_CIE		(1 << 19)
+#define STAT_CEB		(1 << 18)
 #define STAT_CLEAR		0xFFFFFFFF
 #define INIT_STREAM_CMD		0x00000000
 #define DUAL_VOLT_OCR_BIT	7
@@ -147,6 +159,26 @@ struct mmc_omap_host {
 	int			dbclk_enabled;
 	struct	omap_mmc_platform_data	*pdata;
 };
+
+/*
+ * A hack to have fake detect events on MMC3
+ * (needed for board embedded chip init)
+ */
+static struct mmc_omap_host *mmc3_host;
+
+void omap_mmc_fake_detect_mmc3(int is_in)
+{
+	if (mmc3_host) {
+		printk(KERN_INFO "Sending %s event for MMC3...\n",
+			is_in ? "insert" : "remove");
+		mmc3_host->carddetect = !is_in;
+		schedule_work(&mmc3_host->mmc_carddetect_work);
+	} else
+		printk(KERN_ERR "Can't scan MMC3, host not registered "
+				"with driver.\n");
+}
+
+EXPORT_SYMBOL(omap_mmc_fake_detect_mmc3);
 
 /*
  * Stop clock to the card
@@ -225,8 +257,8 @@ mmc_omap_start_command(struct mmc_omap_host *host, struct mmc_command *cmd,
 {
 	int cmdreg = 0, resptype = 0, cmdtype = 0;
 
-	dev_dbg(mmc_dev(host->mmc), "%s: CMD%d, argument 0x%08x\n",
-		mmc_hostname(host->mmc), cmd->opcode, cmd->arg);
+	//dev_dbg(mmc_dev(host->mmc), "%s: CMD%d, argument 0x%08x\n",
+	//	mmc_hostname(host->mmc), cmd->opcode, cmd->arg);
 	host->cmd = cmd;
 
 	/*
@@ -323,9 +355,9 @@ mmc_omap_cmd_done(struct mmc_omap_host *host, struct mmc_command *cmd)
 /*
  * DMA clean up for command errors
  */
-static void mmc_dma_cleanup(struct mmc_omap_host *host)
+static void mmc_dma_cleanup(struct mmc_omap_host *host, int errno)
 {
-	host->data->error = -ETIMEDOUT;
+	host->data->error = errno;
 
 	if (host->use_dma && host->dma_ch != -1) {
 		dma_unmap_sg(mmc_dev(host->mmc), host->data->sg, host->dma_len,
@@ -336,6 +368,33 @@ static void mmc_dma_cleanup(struct mmc_omap_host *host)
 	}
 	host->data = NULL;
 	host->datadir = OMAP_MMC_DATADIR_NONE;
+}
+
+/*
+ * MMC controller internal state machines reset
+ *
+ * Used to reset command or data internal state machines, using respectively
+ *  SRC or SRD bit of SYSCTL register
+ * Can be called from interrupt context
+ */
+static inline void omap_hsmmc_reset_controller_fsm(struct mmc_omap_host *host,
+						   unsigned long bit)
+{
+	unsigned long i = 0;
+	unsigned long limit = (loops_per_jiffy *
+				msecs_to_jiffies(MMC_TIMEOUT_MS));
+
+	OMAP_HSMMC_WRITE(host->base, SYSCTL,
+			 OMAP_HSMMC_READ(host->base, SYSCTL) | bit);
+
+	while ((OMAP_HSMMC_READ(host->base, SYSCTL) & bit) &&
+		(i++ < limit))
+		cpu_relax();
+
+	if (OMAP_HSMMC_READ(host->base, SYSCTL) & bit)
+		dev_err(mmc_dev(host->mmc),
+			"Timeout waiting on controller reset in %s\n",
+			__func__);
 }
 
 /*
@@ -381,42 +440,52 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 	if (host->cmd == NULL && host->data == NULL) {
 		OMAP_HSMMC_WRITE(host->base, STAT,
 			OMAP_HSMMC_READ(host->base, STAT));
+		/* Flush posted write */
+		OMAP_HSMMC_READ(host->base, STAT);
 		return IRQ_HANDLED;
 	}
 
 	data = host->data;
 	status = OMAP_HSMMC_READ(host->base, STAT);
-	dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
+	//dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
 
 	if (status & ERR) {
 #ifdef CONFIG_MMC_DEBUG
-		mmc_omap_report_irq(host, status);
+		if (!(status & CMD_TIMEOUT) || host->data)
+			mmc_omap_report_irq(host, status);
 #endif
-		if ((status & CMD_TIMEOUT) ||
-			(status & CMD_CRC)) {
+		if (status & CMD_TIMEOUT) {
+			omap_hsmmc_reset_controller_fsm(host, SRC);
 			if (host->cmd) {
-				if (status & CMD_TIMEOUT) {
-					OMAP_HSMMC_WRITE(host->base, SYSCTL,
-						OMAP_HSMMC_READ(host->base,
-								SYSCTL) | SRC);
-					while (OMAP_HSMMC_READ(host->base,
-								SYSCTL) & SRC) ;
-					host->cmd->error = -ETIMEDOUT;
-				} else {
-					host->cmd->error = -EILSEQ;
-				}
+				host->cmd->error = -ETIMEDOUT;
 				end_cmd = 1;
 			}
-			if (host->data)
-				mmc_dma_cleanup(host);
-		}
-		if ((status & DATA_TIMEOUT) ||
-			(status & DATA_CRC)) {
 			if (host->data) {
-				if (status & DATA_TIMEOUT)
-					mmc_dma_cleanup(host);
-				else
-					host->data->error = -EILSEQ;
+				mmc_dma_cleanup(host, -ETIMEDOUT);
+				omap_hsmmc_reset_controller_fsm(host, SRD);
+			}
+		}
+		if (status & (CMD_CRC | STAT_CIE | STAT_CEB)) {
+			if (host->cmd) {
+				host->cmd->error = -EILSEQ;
+				end_cmd = 1;
+			}
+			if (host->data) {
+				mmc_dma_cleanup(host, -EILSEQ);
+				omap_hsmmc_reset_controller_fsm(host, SRD);
+			}
+		}
+		if (status & DATA_TIMEOUT) {
+			omap_hsmmc_reset_controller_fsm(host, SRD);
+			if (host->data) {
+				mmc_dma_cleanup(host, -ETIMEDOUT);
+				end_trans = 1;
+			}
+		}
+		if (status & (DATA_CRC | STAT_DEB)) {
+			omap_hsmmc_reset_controller_fsm(host, SRD);
+			if (host->data) {
+				mmc_dma_cleanup(host, -EILSEQ);
 				end_trans = 1;
 			}
 		}
@@ -431,10 +500,12 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 	}
 
 	OMAP_HSMMC_WRITE(host->base, STAT, status);
+	/* Flush posted write */
+	OMAP_HSMMC_READ(host->base, STAT);
 
-	if (end_cmd || (status & CC))
+	if (host->cmd != NULL && (end_cmd || (status & CC)))
 		mmc_omap_cmd_done(host, host->cmd);
-	if (end_trans || (status & TC))
+	if (data != NULL && (end_trans || (status & TC)))
 		mmc_omap_xfer_done(host, data);
 
 	return IRQ_HANDLED;
@@ -506,6 +577,7 @@ static void mmc_omap_detect(struct work_struct *work)
 
 	sysfs_notify(&host->mmc->class_dev.kobj, NULL, "cover_switch");
 	if (host->carddetect) {
+#if 0 /* this code kills mmc host on Pandora! */
 		if (!(OMAP_HSMMC_READ(host->base, HCTL) & SDVSDET)) {
 			/*
 			 * Set the VDD back to 3V when the card is removed
@@ -515,6 +587,10 @@ static void mmc_omap_detect(struct work_struct *work)
 			if (omap_mmc_switch_opcond(host, vdd) != 0)
 				host->mmc->ios.vdd = vdd;
 		}
+#else
+		vdd = fls(host->mmc->ocr_avail) - 1;
+		host->mmc->ios.vdd = vdd;
+#endif
 		mmc_detect_change(host->mmc, (HZ * 200) / 1000);
 	} else {
 		OMAP_HSMMC_WRITE(host->base, SYSCTL,
@@ -614,14 +690,18 @@ mmc_omap_start_dma_transfer(struct mmc_omap_host *host, struct mmc_request *req)
 		host->dma_dir = DMA_FROM_DEVICE;
 		if (host->id == OMAP_MMC1_DEVID)
 			sync_dev = OMAP24XX_DMA_MMC1_RX;
-		else
+		else if (host->id == OMAP_MMC2_DEVID)
 			sync_dev = OMAP24XX_DMA_MMC2_RX;
+		else
+			sync_dev = OMAP34XX_DMA_MMC3_RX;
 	} else {
 		host->dma_dir = DMA_TO_DEVICE;
 		if (host->id == OMAP_MMC1_DEVID)
 			sync_dev = OMAP24XX_DMA_MMC1_TX;
-		else
+		else if (host->id == OMAP_MMC2_DEVID)
 			sync_dev = OMAP24XX_DMA_MMC2_TX;
+		else
+			sync_dev = OMAP34XX_DMA_MMC3_TX;
 	}
 
 	ret = omap_request_dma(sync_dev, "MMC/SD", mmc_omap_dma_cb,
@@ -656,6 +736,42 @@ mmc_omap_start_dma_transfer(struct mmc_omap_host *host, struct mmc_request *req)
 	return 0;
 }
 
+static void set_data_timeout(struct mmc_omap_host *host,
+			     struct mmc_request *req)
+{
+	unsigned int timeout, cycle_ns;
+	uint32_t reg, clkd, dto = 0;
+
+	reg = OMAP_HSMMC_READ(host->base, SYSCTL);
+	clkd = (reg & CLKD_MASK) >> CLKD_SHIFT;
+	if (clkd == 0)
+		clkd = 1;
+
+	cycle_ns = 1000000000 / (clk_get_rate(host->fclk) / clkd);
+	timeout = req->data->timeout_ns / cycle_ns;
+	timeout += req->data->timeout_clks;
+	if (timeout) {
+		while ((timeout & 0x80000000) == 0) {
+			dto += 1;
+			timeout <<= 1;
+		}
+		dto = 31 - dto;
+		timeout <<= 1;
+		if (timeout && dto)
+			dto += 1;
+		if (dto >= 13)
+			dto -= 13;
+		else
+			dto = 0;
+		if (dto > 14)
+			dto = 14;
+	}
+
+	reg &= ~DTO_MASK;
+	reg |= dto << DTO_SHIFT;
+	OMAP_HSMMC_WRITE(host->base, SYSCTL, reg);
+}
+
 /*
  * Configure block length for MMC/SD cards and initiate the transfer.
  */
@@ -673,6 +789,7 @@ mmc_omap_prepare_data(struct mmc_omap_host *host, struct mmc_request *req)
 
 	OMAP_HSMMC_WRITE(host->base, BLK, (req->data->blksz)
 					| (req->data->blocks << 16));
+	set_data_timeout(host, req);
 
 	host->datadir = (req->data->flags & MMC_DATA_WRITE) ?
 			OMAP_MMC_DATADIR_WRITE : OMAP_MMC_DATADIR_READ;
@@ -743,6 +860,12 @@ static void omap_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					dev_dbg(mmc_dev(host->mmc),
 						"Switch operation failed\n");
 		}
+	}
+	else if (host->id == OMAP_MMC2_DEVID && ios->vdd == DUAL_VOLT_OCR_BIT &&
+		ios->power_mode != MMC_POWER_OFF &&
+		ios->power_mode != MMC_POWER_ON) {
+			/* see above comment.. */
+			omap_mmc_switch_opcond(host, ios->vdd);
 	}
 
 	if (ios->clock) {
@@ -838,6 +961,15 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	mmc->f_max	= 52000000;
 
 	sema_init(&host->sem, 1);
+
+#ifdef CONFIG_MMC_EMBEDDED_SDIO
+	if (pdata->embedded_sdio)
+		mmc_set_embedded_sdio_data(mmc,
+					   &pdata->embedded_sdio->cis,
+					   &pdata->embedded_sdio->cccr,
+					   pdata->embedded_sdio->funcs,
+					   pdata->embedded_sdio->num_funcs);
+#endif
 
 	host->iclk = clk_get(&pdev->dev, "mmchs_ick");
 	if (IS_ERR(host->iclk)) {
@@ -966,6 +1098,9 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 			goto err_cover_switch;
 	}
 
+	if (host->id == OMAP_MMC2_DEVID + 1)
+		mmc3_host = host;
+
 	return 0;
 
 err_cover_switch:
@@ -1034,6 +1169,9 @@ static int omap_mmc_remove(struct platform_device *pdev)
 			clk_disable(host->dbclk);
 			clk_put(host->dbclk);
 		}
+
+		if (host->id == OMAP_MMC2_DEVID + 1)
+			mmc3_host = NULL;
 
 		mmc_free_host(host->mmc);
 		iounmap(host->base);

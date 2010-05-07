@@ -468,7 +468,15 @@ static int add_children(struct twl4030_platform_data *pdata)
 					status);
 				platform_device_put(pdev);
 				goto err;
+			} else {
+				struct resource	r = {
+					.start = pdata->irq_base + 1,
+					.flags = IORESOURCE_IRQ,
+				};
+
+				status = platform_device_add_resources(pdev, &r, 1);
 			}
+
 			status = platform_device_add(pdev);
 			if (status < 0) {
 				platform_device_put(pdev);

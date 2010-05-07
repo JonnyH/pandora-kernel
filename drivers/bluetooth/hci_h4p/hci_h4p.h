@@ -22,6 +22,9 @@
  */
 
 #include <mach/board.h>
+#include <mach/board-nokia.h>
+
+#include <linux/leds.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -57,20 +60,10 @@
 
 #if 0
 #define NBT_DBG_TRANSFER(fmt, arg...)  printk("%s: " fmt "" , __FUNCTION__ , ## arg)
-#else
-#define NBT_DBG_TRANSFER(...)
-#endif
-
-#if 0
 #define NBT_DBG_TRANSFER_NF(fmt, arg...)  printk(fmt "" , ## arg)
 #else
+#define NBT_DBG_TRANSFER(...)
 #define NBT_DBG_TRANSFER_NF(...)
-#endif
-
-#if 0
-#define NBT_DBG_DMA(fmt, arg...)  printk("%s: " fmt "" , __FUNCTION__ , ## arg)
-#else
-#define NBT_DBG_DMA(...)
 #endif
 
 struct hci_h4p_info {
@@ -96,6 +89,9 @@ struct hci_h4p_info {
 	int fw_error;
 	int init_error;
 
+	int rx_timed_out;
+	int rx_calls;
+
 	struct sk_buff_head txq;
 	struct tasklet_struct tx_task;
 
@@ -116,6 +112,12 @@ struct hci_h4p_info {
 	spinlock_t clocks_lock;
 	struct clk *uart_iclk;
 	struct clk *uart_fclk;
+#ifdef CONFIG_LEDS_TRIGGERS
+	struct led_trigger	*led;		/* activity led */
+	struct timer_list led_timer;
+	unsigned long led_next_change;
+	int led_state;
+#endif
 };
 
 #define MAX_BAUD_RATE		921600

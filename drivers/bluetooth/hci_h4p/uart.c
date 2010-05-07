@@ -4,6 +4,7 @@
  * Copyright (C) 2005, 2006 Nokia Corporation.
  *
  * Contact: Ville Tervo <ville.tervo@nokia.com>
+ * Hacked by Gražvydas Ignotas for Pandora handheld console
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -99,10 +100,35 @@ void hci_h4p_set_auto_ctsrts(struct hci_h4p_info *info, int on, u8 which)
 	spin_unlock_irqrestore(&info->lock, flags);
 }
 
+static void hci_h4p_setup_uart(struct hci_h4p_info *info, u8 mode)
+{
+	hci_h4p_outb(info, UART_OMAP_MDR1, mode); /* Make sure UART mode is enabled */
+
+	hci_h4p_outb(info, UART_LCR, 0xbf); /* conf_mode_B */
+	hci_h4p_outb(info, UART_EFR, UART_EFR_ECB);
+
+	hci_h4p_outb(info, UART_LCR, 0x80 | UART_LCR_WLEN8); /* conf_mode_A */
+	hci_h4p_outb(info, UART_MCR, UART_MCR_TCRTLR);
+	hci_h4p_outb(info, UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR |
+		     UART_FCR_CLEAR_XMIT | UART_FCR_R_TRIG_00);
+	hci_h4p_outb(info, UART_TI752_TLR, 0xef);
+	hci_h4p_outb(info, UART_TI752_TCR, 0xef);
+
+	/* must switch some reg. access bits off,
+	 * or else some things start not to work */
+	hci_h4p_outb(info, UART_MCR, 0); /* no TCL TLR */
+	hci_h4p_outb(info, UART_LCR, 0xbf); /* conf_mode_B */
+	hci_h4p_outb(info, UART_EFR, 0); /* no enh. bit */
+
+	hci_h4p_outb(info, UART_LCR, UART_LCR_WLEN8);	/* operation_mode */
+	/* timeout is used to detect tx transmission end */
+	hci_h4p_outb(info, UART_IER, UART_IER_RDI|UART_IER_RLSI);
+}
+
 void hci_h4p_change_speed(struct hci_h4p_info *info, unsigned long speed)
 {
 	unsigned int divisor;
-	u8 lcr, mdr1;
+	u8 mdr1;
 
 	NBT_DBG("Setting speed %lu\n", speed);
 
@@ -115,12 +141,11 @@ void hci_h4p_change_speed(struct hci_h4p_info *info, unsigned long speed)
 	}
 
 	hci_h4p_outb(info, UART_OMAP_MDR1, 7); /* Make sure UART mode is disabled */
-	lcr = hci_h4p_inb(info, UART_LCR);
 	hci_h4p_outb(info, UART_LCR, UART_LCR_DLAB);     /* Set DLAB */
 	hci_h4p_outb(info, UART_DLL, divisor & 0xff);    /* Set speed */
 	hci_h4p_outb(info, UART_DLM, divisor >> 8);
-	hci_h4p_outb(info, UART_LCR, lcr);
-	hci_h4p_outb(info, UART_OMAP_MDR1, mdr1); /* Make sure UART mode is enabled */
+
+	hci_h4p_setup_uart(info, mdr1);
 }
 
 int hci_h4p_reset_uart(struct hci_h4p_info *info)
@@ -148,17 +173,7 @@ int hci_h4p_init_uart(struct hci_h4p_info *info)
 	if (err < 0)
 		return err;
 
-	/* Enable and setup FIFO */
-	hci_h4p_outb(info, UART_LCR, UART_LCR_WLEN8);
-	hci_h4p_outb(info, UART_OMAP_MDR1, 0x00); /* Make sure UART mode is enabled */
-	hci_h4p_outb(info, UART_OMAP_SCR, 0x80);
-	hci_h4p_outb(info, UART_EFR, UART_EFR_ECB);
-	hci_h4p_outb(info, UART_MCR, UART_MCR_TCRTLR);
-	hci_h4p_outb(info, UART_TI752_TLR, 0x1f);
-	hci_h4p_outb(info, UART_TI752_TCR, 0xef);
-	hci_h4p_outb(info, UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR |
-		     UART_FCR_CLEAR_XMIT | UART_FCR_R_TRIG_00);
-	hci_h4p_outb(info, UART_IER, UART_IER_RDI);
+	hci_h4p_setup_uart(info, 0);
 
 	return 0;
 }

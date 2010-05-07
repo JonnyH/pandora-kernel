@@ -4,6 +4,7 @@
  * Copyright (C) 2005, 2006 Nokia Corporation.
  *
  * Contact: Ville Tervo <ville.tervo@nokia.com>
+ * Hacked by Gražvydas Ignotas for Pandora handheld console
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -41,7 +42,8 @@ static int hci_h4p_open_firmware(struct hci_h4p_info *info,
 	NBT_DBG_FW("Opening %d firmware\n", info->chip_type);
 	switch (info->chip_type) {
 	case BT_CHIP_TI:
-		err = request_firmware(fw_entry, "brf6150fw.bin", info->dev);
+//		err = request_firmware(fw_entry, "brf6150fw.bin", info->dev);
+		err = request_firmware(fw_entry, "brf6300.bin", info->dev);
 		break;
 	case BT_CHIP_CSR:
 		err = request_firmware(fw_entry, "bc4fw.bin", info->dev);
@@ -60,21 +62,38 @@ static void hci_h4p_close_firmware(const struct firmware *fw_entry)
 	release_firmware(fw_entry);
 }
 
+typedef struct {
+	u8	type;
+	u16	opcode;         /* OCF & OGF */
+	u8	plen;
+} __attribute__ ((packed))      hci_command_hdr;
+
 /* Read fw. Return length of the command. If no more commands in
  * fw 0 is returned. In error case return value is negative.
  */
 static int hci_h4p_read_fw_cmd(struct hci_h4p_info *info, struct sk_buff **skb,
 			       const struct firmware *fw_entry, int how)
 {
-	unsigned int cmd_len;
+	hci_command_hdr *hdr;
+	int cmd_len;
 
 	if (fw_pos >= fw_entry->size) {
 		return 0;
 	}
 
-	cmd_len = fw_entry->data[fw_pos++];
-	if (!cmd_len)
-		return 0;
+	if (fw_pos + 4 > fw_entry->size) {
+		dev_err(info->dev, "Corrupted firmware image\n");
+		return -EMSGSIZE;
+	}
+
+	hdr = (void *) &fw_entry->data[fw_pos];
+
+	if (hdr->type != 1) { // HCI_COMMAND_PKT
+		dev_err(info->dev, "firmware offset %i: bad type %u\n", fw_pos, hdr->type);
+		return -EINVAL;
+	}
+
+	cmd_len = 4 + hdr->plen;
 
 	if (fw_pos + cmd_len > fw_entry->size) {
 		dev_err(info->dev, "Corrupted firmware image\n");
@@ -146,7 +165,6 @@ void hci_h4p_parse_fw_event(struct hci_h4p_info *info, struct sk_buff *skb)
 	default:
 		dev_err(info->dev, "Don't know how to parse fw event\n");
 		info->fw_error = -EINVAL;
+		kfree_skb(skb);
 	}
-
-	return;
 }

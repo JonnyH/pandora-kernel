@@ -27,9 +27,9 @@
 #include <linux/platform_device.h>
 #include <linux/mm.h>
 #include <linux/uaccess.h>
+#include <linux/omapfb.h>
 
 #include <mach/dma.h>
-#include <mach/omapfb.h>
 
 #include "lcdc.h"
 #include "dispc.h"
@@ -1408,7 +1408,7 @@ static struct attribute *panel_attrs[] = {
 };
 
 static struct attribute_group panel_attr_grp = {
-	.name  = "panel",
+	.name  = "panel_",
 	.attrs = panel_attrs,
 };
 

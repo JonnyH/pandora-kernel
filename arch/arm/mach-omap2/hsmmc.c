@@ -146,6 +146,8 @@ static int hsmmc_set_power(struct device *dev, int slot, int power_on,
 	u32 vdd_sel = 0, devconf = 0, reg = 0;
 	int ret = 0;
 
+	dev_dbg(dev, "power %s, vdd %i\n", power_on ? "on" : "off", vdd);
+
 	/* REVISIT: Using address directly till the control.h defines
 	 * are settled.
 	 */
@@ -264,11 +266,174 @@ static struct omap_mmc_platform_data mmc1_data = {
 	},
 };
 
+/* ************************************************************************* */
+
+#define VMMC2_DEV_GRP		0x2B
+#define VMMC2_DEDICATED		0x2E
+
+#define mmc2_cd_gpio (mmc1_cd_gpio + 1)
+
+static int hsmmc2_card_detect(int irq)
+{
+	return gpio_get_value_cansleep(mmc2_cd_gpio);
+}
+
+static int hsmmc2_late_init(struct device *dev)
+{
+	int ret = 0;
+
+	ret = gpio_request(mmc2_cd_gpio, "mmc1_cd");
+	if (ret)
+		goto err;
+
+	ret = twl4030_set_gpio_debounce(1, true);
+	if (ret)
+		goto err;
+
+	return ret;
+
+err:
+	dev_err(dev, "Failed to configure TWL4030 GPIO IRQ for MMC2\n");
+	return ret;
+}
+
+static void hsmmc2_cleanup(struct device *dev)
+{
+	gpio_free(mmc2_cd_gpio);
+}
+
+static int hsmmc2_set_power(struct device *dev, int slot, int power_on,
+				int vdd)
+{
+	u32 vdd_sel = 0, ret = 0;
+
+	dev_dbg(dev, "power %s, vdd %i\n", power_on ? "on" : "off", vdd);
+
+	if (power_on) {
+		switch (1 << vdd) {
+		case MMC_VDD_33_34:
+		case MMC_VDD_32_33:
+			vdd_sel = 0x0b;
+			break;
+		case MMC_VDD_165_195:
+			vdd_sel = 0x05;
+			break;
+		default:
+			dev_err(dev, "Bad vdd request %i for MMC2\n", vdd);
+			goto err;
+		}
+
+		ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+						P1_DEV_GRP, VMMC2_DEV_GRP);
+		if (ret)
+			goto err;
+
+		ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+						vdd_sel, VMMC2_DEDICATED);
+		if (ret)
+			goto err;
+
+		msleep(100);
+	} else {
+		/* Power OFF */
+		ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+						LDO_CLR, VMMC2_DEV_GRP);
+		if (ret)
+			goto err;
+
+		ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
+						VSEL_S2_CLR, VMMC2_DEDICATED);
+		if (ret)
+			goto err;
+	}
+
+	return 0;
+
+err:
+	return ret;
+}
+
+static struct omap_mmc_platform_data mmc2_data = {
+	.nr_slots			= 1,
+	.init				= hsmmc2_late_init,
+	.cleanup			= hsmmc2_cleanup,
+	/* TODO: .suspend, .resume */
+	.dma_mask			= 0xffffffff,
+	.slots[0] = {
+		.wire4			= 1,
+		.set_power		= hsmmc2_set_power,
+		.ocr_mask		= MMC_VDD_32_33 | MMC_VDD_33_34 |
+						MMC_VDD_165_195,
+		.name			= "second slot",
+
+		.card_detect_irq        = TWL4030_GPIO_IRQ_NO(1),
+		.card_detect            = hsmmc2_card_detect,
+	},
+};
+
+/* ************************************************************************* */
+
+static int hsmmc3_set_power(struct device *dev, int slot, int power_on,
+		int vdd)
+{
+	/* nothing to do for MMC3 */
+	return 0;
+}
+
+/*
+ * Hack: Hardcoded WL1251 embedded data for Pandora
+ * - passed up via a dirty hack to the MMC platform data.
+ */
+
+#include <linux/mmc/host.h>
+#include <linux/mmc/card.h>
+#include <linux/mmc/sdio_func.h>
+#include <linux/mmc/sdio_ids.h>
+
+static struct sdio_embedded_func wifi_func = {
+	.f_class	= SDIO_CLASS_WLAN,
+	.f_maxblksize	= 512,
+};
+
+static struct embedded_sdio_data pandora_wifi_emb_data = {
+	.cis	= {
+		.vendor		= 0x104c,
+		.device		= 0x9066,
+		.blksize	= 512,
+		.max_dtr	= 20000000,
+	},
+	.cccr	= {
+		.multi_block	= 0,
+		.low_speed	= 0,
+		.wide_bus	= 1,
+		.high_power	= 0,
+		.high_speed	= 0,
+	},
+	.funcs	= &wifi_func,
+	.num_funcs = 1,
+};
+
+static struct omap_mmc_platform_data mmc3_data = {
+	.nr_slots                       = 1,
+	.dma_mask                       = 0xffffffff,
+	.embedded_sdio                  = &pandora_wifi_emb_data,
+	.slots[0] = {
+		.wire4                  = 1,
+		.set_power              = hsmmc3_set_power,
+		.ocr_mask               = MMC_VDD_165_195 | MMC_VDD_20_21,
+		.name                   = "third slot",
+	},
+};
+
+/* ************************************************************************* */
+
 static struct omap_mmc_platform_data *hsmmc_data[OMAP34XX_NR_MMC];
 
 void __init hsmmc_init(void)
 {
 	hsmmc_data[0] = &mmc1_data;
+	hsmmc_data[1] = &mmc2_data;
+	hsmmc_data[2] = &mmc3_data;
 	omap2_init_mmc(hsmmc_data, OMAP34XX_NR_MMC);
 }
 

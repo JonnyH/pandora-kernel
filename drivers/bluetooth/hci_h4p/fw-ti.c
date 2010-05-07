@@ -4,6 +4,7 @@
  * Copyright (C) 2005, 2006 Nokia Corporation.
  *
  * Contact: Ville Tervo <ville.tervo@nokia.com>
+ * Hacked by Gražvydas Ignotas for Pandora handheld console
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,7 +29,7 @@
 void hci_h4p_brf6150_parse_fw_event(struct hci_h4p_info *info,
 				    struct sk_buff *skb)
 {
-	struct hci_fw_event *ev;
+	struct hci_fw_event *ev = NULL;
 	int err = 0;
 
 	if (bt_cb(skb)->pkt_type != H4_EVT_PKT) {
@@ -50,37 +51,46 @@ void hci_h4p_brf6150_parse_fw_event(struct hci_h4p_info *info,
 		goto ret;
 	}
 
+	NBT_DBG("fw_event, opcode %04x\n", ev->cmd.opcode);
 ret:
-	info->fw_error = err;
-	complete(&info->fw_completion);
+	if (unlikely(ev != NULL && ev->cmd.opcode == 0xff36)) {
+		/* speed change command */
+		info->init_error = err;
+		complete(&info->init_completion);
+	} else {
+		info->fw_error = err;
+		complete(&info->fw_completion);
+	}
+	kfree_skb(skb);
 }
 
 int hci_h4p_brf6150_send_fw(struct hci_h4p_info *info, struct sk_buff_head *fw_queue)
 {
 	struct sk_buff *skb;
-	int err = 0;
 
 	info->fw_error = 0;
 
 	while ((skb = skb_dequeue(fw_queue)) != NULL) {
+#if 0
 		/* We should allways send word aligned data to h4+ devices */
+		int err = 0;
 		if (skb->len % 2) {
 			err = skb_pad(skb, 1);
 		}
 		if (err)
 			return err;
-
+#endif
 		init_completion(&info->fw_completion);
 		skb_queue_tail(&info->txq, skb);
 		tasklet_schedule(&info->tx_task);
 
 		if (!wait_for_completion_timeout(&info->fw_completion, HZ)) {
-			dev_err(info->dev, "Timeout while sending brf6150 fw\n");
+			dev_err(info->dev, "Timeout while sending fw\n");
 			return -ETIMEDOUT;
 		}
 
 		if (info->fw_error) {
-			dev_err(info->dev, "There was fw_error while sending bfr6150 fw\n");
+			dev_err(info->dev, "There was fw_error while sending fw\n");
 			return -EPROTO;
 		}
 	}

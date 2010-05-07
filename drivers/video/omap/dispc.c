@@ -24,9 +24,9 @@
 #include <linux/vmalloc.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/omapfb.h>
 
 #include <mach/sram.h>
-#include <mach/omapfb.h>
 #include <mach/board.h>
 
 #include "dispc.h"
@@ -1398,9 +1398,30 @@ static int omap_dispc_init(struct omapfb_device *fbdev, int ext_mode,
 	}
 #endif
 
+	l = dispc_read_reg(DISPC_IRQSTATUS);
+	dispc_write_reg(DISPC_IRQSTATUS, l);
+
+	recalc_irq_mask();
+
+	if ((r = request_irq(INT_24XX_DSS_IRQ, omap_dispc_irq_handler,
+			   0, MODULE_NAME, fbdev)) < 0) {
+		dev_err(dispc.fbdev->dev, "can't get DSS IRQ\n");
+		goto fail1;
+	}
+
 	if (!skip_init) {
 		/* Reset monitoring works only w/ the 54M clk */
 		enable_digit_clocks(1);
+
+		/* We have to wait here to avoid occasional SYNC LOST errors */
+		MOD_REG_FLD(DISPC_IRQENABLE, 1, 1);
+		omap_dispc_enable_lcd_out(0);	/* if bootloader enabled it */
+		if (!wait_for_completion_timeout(&dispc.frame_done,
+				msecs_to_jiffies(400))) {
+			dev_err(dispc.fbdev->dev,
+				"timeout waiting for FRAME DONE\n");
+		}
+		MOD_REG_FLD(DISPC_IRQENABLE, 1, 0);
 
 		/* Soft reset */
 		MOD_REG_FLD(DISPC_SYSCONFIG, 1 << 1, 1 << 1);
@@ -1410,7 +1431,7 @@ static int omap_dispc_init(struct omapfb_device *fbdev, int ext_mode,
 				dev_err(dispc.fbdev->dev, "soft reset failed\n");
 				r = -ENODEV;
 				enable_digit_clocks(0);
-				goto fail1;
+				goto fail2;
 			}
 		}
 
@@ -1429,16 +1450,6 @@ static int omap_dispc_init(struct omapfb_device *fbdev, int ext_mode,
 	l |= 1 << 9;
 	dispc_write_reg(DISPC_CONFIG, l);
 
-	l = dispc_read_reg(DISPC_IRQSTATUS);
-	dispc_write_reg(DISPC_IRQSTATUS, l);
-
-	recalc_irq_mask();
-
-	if ((r = request_irq(INT_24XX_DSS_IRQ, omap_dispc_irq_handler,
-			   0, MODULE_NAME, fbdev)) < 0) {
-		dev_err(dispc.fbdev->dev, "can't get DSS IRQ\n");
-		goto fail1;
-	}
 
 	/* L3 firewall setting: enable access to OCM RAM */
 	__raw_writel(0x402000b0, IO_ADDRESS(0x680050a0));

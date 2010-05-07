@@ -33,6 +33,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
+#include <sound/tlv.h>
 
 #include "twl4030.h"
 
@@ -45,9 +46,9 @@ static const u8 twl4030_reg[TWL4030_CACHEREGNUM] = {
 	0xc3, /* REG_OPTION		(0x2)	*/
 	0x00, /* REG_UNKNOWN		(0x3)	*/
 	0x00, /* REG_MICBIAS_CTL	(0x4)	*/
-	0x24, /* REG_ANAMICL		(0x5)	*/
-	0x04, /* REG_ANAMICR		(0x6)	*/
-	0x0a, /* REG_AVADC_CTL		(0x7)	*/
+	0x20, /* REG_ANAMICL		(0x5)	*/
+	0x00, /* REG_ANAMICR		(0x6)	*/
+	0x00, /* REG_AVADC_CTL		(0x7)	*/
 	0x00, /* REG_ADCMICSEL		(0x8)	*/
 	0x00, /* REG_DIGMIXING		(0x9)	*/
 	0x0c, /* REG_ATXL1PGA		(0xA)	*/
@@ -189,13 +190,184 @@ static void twl4030_init_chip(struct snd_soc_codec *codec)
 
 }
 
+static int twl4030_get_left_input(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = kcontrol->private_data;
+	u8 reg = twl4030_read_reg_cache(codec, TWL4030_REG_ANAMICL);
+	int result = 0;
+
+	/* one bit must be set a time */
+	reg &= TWL4030_CKMIC_EN | TWL4030_AUXL_EN | TWL4030_HSMIC_EN
+			| TWL4030_MAINMIC_EN;
+	if (reg != 0) {
+		result++;
+		while ((reg & 1) == 0) {
+			result++;
+			reg >>= 1;
+		}
+	}
+
+	ucontrol->value.integer.value[0] = result;
+	return 0;
+}
+
+static int twl4030_put_left_input(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+	u8 anamicl, micbias, avadc_ctl;
+
+	anamicl = twl4030_read_reg_cache(codec, TWL4030_REG_ANAMICL);
+	anamicl &= ~(TWL4030_CKMIC_EN | TWL4030_AUXL_EN | TWL4030_HSMIC_EN
+			| TWL4030_MAINMIC_EN);
+	micbias = twl4030_read_reg_cache(codec, TWL4030_REG_MICBIAS_CTL);
+	micbias &= ~(TWL4030_HSMICBIAS_EN | TWL4030_MICBIAS1_EN);
+	avadc_ctl = twl4030_read_reg_cache(codec, TWL4030_REG_AVADC_CTL);
+
+	switch (value) {
+	case 1:
+		anamicl |= TWL4030_MAINMIC_EN;
+		micbias |= TWL4030_MICBIAS1_EN;
+		break;
+	case 2:
+		anamicl |= TWL4030_HSMIC_EN;
+		micbias |= TWL4030_HSMICBIAS_EN;
+		break;
+	case 3:
+		anamicl |= TWL4030_AUXL_EN;
+		break;
+	case 4:
+		anamicl |= TWL4030_CKMIC_EN;
+		break;
+	default:
+		break;
+	}
+
+	/* If some input is selected, enable amp and ADC */
+	if (value != 0) {
+		anamicl |= TWL4030_MICAMPL_EN;
+		avadc_ctl |= TWL4030_ADCL_EN;
+	} else {
+		anamicl &= ~TWL4030_MICAMPL_EN;
+		avadc_ctl &= ~TWL4030_ADCL_EN;
+	}
+
+	twl4030_write(codec, TWL4030_REG_ANAMICL, anamicl);
+	twl4030_write(codec, TWL4030_REG_MICBIAS_CTL, micbias);
+	twl4030_write(codec, TWL4030_REG_AVADC_CTL, avadc_ctl);
+
+	return 1;
+}
+
+static int twl4030_get_right_input(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = kcontrol->private_data;
+	u8 reg = twl4030_read_reg_cache(codec, TWL4030_REG_ANAMICR);
+	int value = 0;
+
+	reg &= TWL4030_SUBMIC_EN|TWL4030_AUXR_EN;
+	switch (reg) {
+	case TWL4030_SUBMIC_EN:
+		value = 1;
+		break;
+	case TWL4030_AUXR_EN:
+		value = 2;
+		break;
+	default:
+		break;
+	}
+
+	ucontrol->value.integer.value[0] = value;
+	return 0;
+}
+
+static int twl4030_put_right_input(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+	u8 anamicr, micbias, avadc_ctl;
+
+	anamicr = twl4030_read_reg_cache(codec, TWL4030_REG_ANAMICR);
+	anamicr &= ~(TWL4030_SUBMIC_EN|TWL4030_AUXR_EN);
+	micbias = twl4030_read_reg_cache(codec, TWL4030_REG_MICBIAS_CTL);
+	micbias &= ~TWL4030_MICBIAS2_EN;
+	avadc_ctl = twl4030_read_reg_cache(codec, TWL4030_REG_AVADC_CTL);
+
+	switch (value) {
+	case 1:
+		anamicr |= TWL4030_SUBMIC_EN;
+		micbias |= TWL4030_MICBIAS2_EN;
+		break;
+	case 2:
+		anamicr |= TWL4030_AUXR_EN;
+		break;
+	default:
+		break;
+	}
+
+	if (value != 0) {
+		anamicr |= TWL4030_MICAMPR_EN;
+		avadc_ctl |= TWL4030_ADCR_EN;
+	} else {
+		anamicr &= ~TWL4030_MICAMPR_EN;
+		avadc_ctl &= ~TWL4030_ADCR_EN;
+	}
+
+	twl4030_write(codec, TWL4030_REG_ANAMICR, anamicr);
+	twl4030_write(codec, TWL4030_REG_MICBIAS_CTL, micbias);
+	twl4030_write(codec, TWL4030_REG_AVADC_CTL, avadc_ctl);
+
+	return 1;
+}
+
+static const char *twl4030_left_in_sel[] = {
+	"None",
+	"Main Mic",
+	"Headset Mic",
+	"Line In",
+	"Carkit Mic",
+};
+
+static const char *twl4030_right_in_sel[] = {
+	"None",
+	"Sub Mic",
+	"Line In",
+};
+
+static const struct soc_enum twl4030_left_input_mux =
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(twl4030_left_in_sel),
+		twl4030_left_in_sel);
+
+static const struct soc_enum twl4030_right_input_mux =
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(twl4030_right_in_sel),
+		twl4030_right_in_sel);
+
+/*
+ * Capture gain after the ADCs
+ * from 0 dB to 31 dB in 1 dB steps
+ */
+static DECLARE_TLV_DB_SCALE(digital_capture_tlv, 0, 100, 0);
+
+/*
+ * Gain control for input amplifiers
+ * 0 dB to 30 dB in 6 dB steps
+ */
+static DECLARE_TLV_DB_SCALE(input_gain_tlv, 0, 600, 0);
+
 static const struct snd_kcontrol_new twl4030_snd_controls[] = {
-	SOC_DOUBLE_R("Master Playback Volume",
-		 TWL4030_REG_ARXL2PGA, TWL4030_REG_ARXR2PGA,
-		0, 127, 0),
-	SOC_DOUBLE_R("Capture Volume",
-		 TWL4030_REG_ATXL1PGA, TWL4030_REG_ATXR1PGA,
-		0, 127, 0),
+	SOC_DOUBLE_R_TLV("Capture Volume",
+		TWL4030_REG_ATXL1PGA, TWL4030_REG_ATXR1PGA,
+		0, 0x1f, 0, digital_capture_tlv),
+	SOC_DOUBLE_TLV("Input Boost Volume", TWL4030_REG_ANAMIC_GAIN,
+		0, 3, 5, 0, input_gain_tlv),
+	SOC_ENUM_EXT("Left Input Source", twl4030_left_input_mux,
+		twl4030_get_left_input, twl4030_put_left_input),
+	SOC_ENUM_EXT("Right Input Source", twl4030_right_input_mux,
+		twl4030_get_right_input, twl4030_put_right_input),
 };
 
 /* add non dapm controls */
@@ -469,11 +641,11 @@ static int twl4030_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBM_CFM:
 		format &= ~(TWL4030_AIF_SLAVE_EN);
-		format |= TWL4030_CLK256FS_EN;
+		format &= ~(TWL4030_CLK256FS_EN);
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
-		format &= ~(TWL4030_CLK256FS_EN);
 		format |= TWL4030_AIF_SLAVE_EN;
+		format |= TWL4030_CLK256FS_EN;
 		break;
 	default:
 		return -EINVAL;
@@ -504,7 +676,7 @@ static int twl4030_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	return 0;
 }
 
-#define TWL4030_RATES	 (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000)
+#define TWL4030_RATES	 (SNDRV_PCM_RATE_8000_48000)
 #define TWL4030_FORMATS	 (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FORMAT_S24_LE)
 
 struct snd_soc_dai twl4030_dai = {
