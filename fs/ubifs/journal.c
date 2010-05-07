@@ -114,7 +114,7 @@ static inline void zero_trun_node_unused(struct ubifs_trun_node *trun)
  */
 static int reserve_space(struct ubifs_info *c, int jhead, int len)
 {
-	int err = 0, err1, retries = 0, avail, lnum, offs, free, squeeze;
+	int err = 0, err1, retries = 0, avail, lnum, offs, squeeze;
 	struct ubifs_wbuf *wbuf = &c->jheads[jhead].wbuf;
 
 	/*
@@ -139,10 +139,9 @@ again:
 	 * Write buffer wasn't seek'ed or there is no enough space - look for an
 	 * LEB with some empty space.
 	 */
-	lnum = ubifs_find_free_space(c, len, &free, squeeze);
+	lnum = ubifs_find_free_space(c, len, &offs, squeeze);
 	if (lnum >= 0) {
 		/* Found an LEB, add it to the journal head */
-		offs = c->leb_size - free;
 		err = ubifs_add_bud_to_log(c, jhead, lnum, offs);
 		if (err)
 			goto out_return;
@@ -159,7 +158,7 @@ again:
 	 * some. But the write-buffer mutex has to be unlocked because
 	 * GC also takes it.
 	 */
-	dbg_jnl("no free space  jhead %d, run GC", jhead);
+	dbg_jnl("no free space in jhead %s, run GC", dbg_jhead(jhead));
 	mutex_unlock(&wbuf->io_mutex);
 
 	lnum = ubifs_garbage_collect(c, 0);
@@ -174,7 +173,8 @@ again:
 		 * because we dropped @wbuf->io_mutex, so try once
 		 * again.
 		 */
-		dbg_jnl("GC couldn't make a free LEB for jhead %d", jhead);
+		dbg_jnl("GC couldn't make a free LEB for jhead %s",
+			dbg_jhead(jhead));
 		if (retries++ < 2) {
 			dbg_jnl("retry (%d)", retries);
 			goto again;
@@ -185,7 +185,7 @@ again:
 	}
 
 	mutex_lock_nested(&wbuf->io_mutex, wbuf->jhead);
-	dbg_jnl("got LEB %d for jhead %d", lnum, jhead);
+	dbg_jnl("got LEB %d for jhead %s", lnum, dbg_jhead(jhead));
 	avail = c->leb_size - wbuf->offs - wbuf->used;
 
 	if (wbuf->lnum != -1 && avail >= len) {
@@ -208,7 +208,7 @@ again:
 	offs = 0;
 
 out:
-	err = ubifs_wbuf_seek_nolock(wbuf, lnum, offs, UBI_SHORTTERM);
+	err = ubifs_wbuf_seek_nolock(wbuf, lnum, offs, wbuf->dtype);
 	if (err)
 		goto out_unlock;
 
@@ -256,7 +256,8 @@ static int write_node(struct ubifs_info *c, int jhead, void *node, int len,
 	*lnum = c->jheads[jhead].wbuf.lnum;
 	*offs = c->jheads[jhead].wbuf.offs + c->jheads[jhead].wbuf.used;
 
-	dbg_jnl("jhead %d, LEB %d:%d, len %d", jhead, *lnum, *offs, len);
+	dbg_jnl("jhead %s, LEB %d:%d, len %d",
+		dbg_jhead(jhead), *lnum, *offs, len);
 	ubifs_prepare_node(c, node, len, 0);
 
 	return ubifs_wbuf_write_nolock(wbuf, node, len);
@@ -286,7 +287,8 @@ static int write_head(struct ubifs_info *c, int jhead, void *buf, int len,
 
 	*lnum = c->jheads[jhead].wbuf.lnum;
 	*offs = c->jheads[jhead].wbuf.offs + c->jheads[jhead].wbuf.used;
-	dbg_jnl("jhead %d, LEB %d:%d, len %d", jhead, *lnum, *offs, len);
+	dbg_jnl("jhead %s, LEB %d:%d, len %d",
+		dbg_jhead(jhead), *lnum, *offs, len);
 
 	err = ubifs_wbuf_write_nolock(wbuf, buf, len);
 	if (err)
@@ -690,8 +692,9 @@ int ubifs_jnl_write_data(struct ubifs_info *c, const struct inode *inode,
 	int dlen = UBIFS_DATA_NODE_SZ + UBIFS_BLOCK_SIZE * WORST_COMPR_FACTOR;
 	struct ubifs_inode *ui = ubifs_inode(inode);
 
-	dbg_jnl("ino %lu, blk %u, len %d, key %s", key_inum(c, key),
-		key_block(c, key), len, DBGKEY(key));
+	dbg_jnl("ino %lu, blk %u, len %d, key %s",
+		(unsigned long)key_inum(c, key), key_block(c, key), len,
+		DBGKEY(key));
 	ubifs_assert(len <= UBIFS_BLOCK_SIZE);
 
 	data = kmalloc(dlen, GFP_NOFS);
@@ -703,7 +706,7 @@ int ubifs_jnl_write_data(struct ubifs_info *c, const struct inode *inode,
 	data->size = cpu_to_le32(len);
 	zero_data_node_unused(data);
 
-	if (!(ui->flags && UBIFS_COMPR_FL))
+	if (!(ui->flags & UBIFS_COMPR_FL))
 		/* Compression is disabled for this inode */
 		compr_type = UBIFS_COMPR_NONE;
 	else
@@ -1128,7 +1131,8 @@ int ubifs_jnl_truncate(struct ubifs_info *c, const struct inode *inode,
 	ino_t inum = inode->i_ino;
 	unsigned int blk;
 
-	dbg_jnl("ino %lu, size %lld -> %lld", inum, old_size, new_size);
+	dbg_jnl("ino %lu, size %lld -> %lld",
+		(unsigned long)inum, old_size, new_size);
 	ubifs_assert(!ui->data_len);
 	ubifs_assert(S_ISREG(inode->i_mode));
 	ubifs_assert(mutex_is_locked(&ui->ui_mutex));
@@ -1218,7 +1222,7 @@ int ubifs_jnl_truncate(struct ubifs_info *c, const struct inode *inode,
 	data_key_init(c, &key, inum, blk);
 
 	bit = old_size & (UBIFS_BLOCK_SIZE - 1);
-	blk = (old_size >> UBIFS_BLOCK_SHIFT) - (bit ? 0: 1);
+	blk = (old_size >> UBIFS_BLOCK_SHIFT) - (bit ? 0 : 1);
 	data_key_init(c, &to_key, inum, blk);
 
 	err = ubifs_tnc_remove_range(c, &key, &to_key);
@@ -1364,7 +1368,7 @@ out_ro:
  * @host: host inode
  *
  * This function writes the updated version of an extended attribute inode and
- * the host inode tho the journal (to the base head). The host inode is written
+ * the host inode to the journal (to the base head). The host inode is written
  * after the extended attribute inode in order to guarantee that the extended
  * attribute will be flushed when the inode is synchronized by 'fsync()' and
  * consequently, the write-buffer is synchronized. This function returns zero

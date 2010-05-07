@@ -41,6 +41,7 @@
 #include <linux/miscdevice.h>
 #include <linux/log2.h>
 #include <linux/kthread.h>
+#include <linux/reboot.h>
 #include "ubi.h"
 
 /* Maximum length of the 'mtd=' parameter */
@@ -120,6 +121,94 @@ static struct device_attribute dev_bgt_enabled =
 	__ATTR(bgt_enabled, S_IRUGO, dev_attribute_show, NULL);
 static struct device_attribute dev_mtd_num =
 	__ATTR(mtd_num, S_IRUGO, dev_attribute_show, NULL);
+
+/**
+ * ubi_volume_notify - send a volume change notification.
+ * @ubi: UBI device description object
+ * @vol: volume description object of the changed volume
+ * @ntype: notification type to send (%UBI_VOLUME_ADDED, etc)
+ *
+ * This is a helper function which notifies all subscribers about a volume
+ * change event (creation, removal, re-sizing, re-naming, updating). Returns
+ * zero in case of success and a negative error code in case of failure.
+ */
+int ubi_volume_notify(struct ubi_device *ubi, struct ubi_volume *vol, int ntype)
+{
+	struct ubi_notification nt;
+
+	ubi_do_get_device_info(ubi, &nt.di);
+	ubi_do_get_volume_info(ubi, vol, &nt.vi);
+	return blocking_notifier_call_chain(&ubi_notifiers, ntype, &nt);
+}
+
+/**
+ * ubi_notify_all - send a notification to all volumes.
+ * @ubi: UBI device description object
+ * @ntype: notification type to send (%UBI_VOLUME_ADDED, etc)
+ * @nb: the notifier to call
+ *
+ * This function walks all volumes of UBI device @ubi and sends the @ntype
+ * notification for each volume. If @nb is %NULL, then all registered notifiers
+ * are called, otherwise only the @nb notifier is called. Returns the number of
+ * sent notifications.
+ */
+int ubi_notify_all(struct ubi_device *ubi, int ntype, struct notifier_block *nb)
+{
+	struct ubi_notification nt;
+	int i, count = 0;
+
+	ubi_do_get_device_info(ubi, &nt.di);
+
+	mutex_lock(&ubi->device_mutex);
+	for (i = 0; i < ubi->vtbl_slots; i++) {
+		/*
+		 * Since the @ubi->device is locked, and we are not going to
+		 * change @ubi->volumes, we do not have to lock
+		 * @ubi->volumes_lock.
+		 */
+		if (!ubi->volumes[i])
+			continue;
+
+		ubi_do_get_volume_info(ubi, ubi->volumes[i], &nt.vi);
+		if (nb)
+			nb->notifier_call(nb, ntype, &nt);
+		else
+			blocking_notifier_call_chain(&ubi_notifiers, ntype,
+						     &nt);
+		count += 1;
+	}
+	mutex_unlock(&ubi->device_mutex);
+
+	return count;
+}
+
+/**
+ * ubi_enumerate_volumes - send "add" notification for all existing volumes.
+ * @nb: the notifier to call
+ *
+ * This function walks all UBI devices and volumes and sends the
+ * %UBI_VOLUME_ADDED notification for each volume. If @nb is %NULL, then all
+ * registered notifiers are called, otherwise only the @nb notifier is called.
+ * Returns the number of sent notifications.
+ */
+int ubi_enumerate_volumes(struct notifier_block *nb)
+{
+	int i, count = 0;
+
+	/*
+	 * Since the @ubi_devices_mutex is locked, and we are not going to
+	 * change @ubi_devices, we do not have to lock @ubi_devices_lock.
+	 */
+	for (i = 0; i < UBI_MAX_DEVICES; i++) {
+		struct ubi_device *ubi = ubi_devices[i];
+
+		if (!ubi)
+			continue;
+		count += ubi_notify_all(ubi, UBI_VOLUME_ADDED, nb);
+	}
+
+	return count;
+}
 
 /**
  * ubi_get_device - get UBI device.
@@ -263,8 +352,12 @@ static ssize_t dev_attribute_show(struct device *dev,
 	return ret;
 }
 
-/* Fake "release" method for UBI devices */
-static void dev_release(struct device *dev) { }
+static void dev_release(struct device *dev)
+{
+	struct ubi_device *ubi = container_of(dev, struct ubi_device, dev);
+
+	kfree(ubi);
+}
 
 /**
  * ubi_sysfs_init - initialize sysfs for an UBI device.
@@ -376,11 +469,11 @@ static void free_user_volumes(struct ubi_device *ubi)
  * @ubi: UBI device description object
  *
  * This function returns zero in case of success and a negative error code in
- * case of failure. Note, this function destroys all volumes if it failes.
+ * case of failure. Note, this function destroys all volumes if it fails.
  */
 static int uif_init(struct ubi_device *ubi)
 {
-	int i, err, do_free = 0;
+	int i, err;
 	dev_t dev;
 
 	sprintf(ubi->ubi_name, UBI_NAME_STR "%d", ubi->ubi_num);
@@ -427,13 +520,10 @@ static int uif_init(struct ubi_device *ubi)
 
 out_volumes:
 	kill_volumes(ubi);
-	do_free = 0;
 out_sysfs:
 	ubi_sysfs_close(ubi);
 	cdev_del(&ubi->cdev);
 out_unreg:
-	if (do_free)
-		free_user_volumes(ubi);
 	unregister_chrdev_region(ubi->cdev.dev, ubi->vtbl_slots + 1);
 	ubi_err("cannot initialize UBI %s, error %d", ubi->ubi_name, err);
 	return err;
@@ -567,6 +657,11 @@ static int io_init(struct ubi_device *ubi)
 	if (ubi->mtd->block_isbad && ubi->mtd->block_markbad)
 		ubi->bad_allowed = 1;
 
+	if (ubi->mtd->type == MTD_NORFLASH) {
+		ubi_assert(ubi->mtd->writesize == 1);
+		ubi->nor_flash = 1;
+	}
+
 	ubi->min_io_size = ubi->mtd->writesize;
 	ubi->hdrs_min_io_size = ubi->mtd->writesize >> ubi->mtd->subpage_sft;
 
@@ -630,6 +725,15 @@ static int io_init(struct ubi_device *ubi)
 			ubi->vid_hdr_offset, ubi->leb_start);
 		return -EINVAL;
 	}
+
+	/*
+	 * Set maximum amount of physical erroneous eraseblocks to be 10%.
+	 * Erroneous PEB are those which have read errors.
+	 */
+	ubi->max_erroneous = ubi->peb_count / 10;
+	if (ubi->max_erroneous < 16)
+		ubi->max_erroneous = 16;
+	dbg_msg("max_erroneous    %d", ubi->max_erroneous);
 
 	/*
 	 * It may happen that EC and VID headers are situated in one minimal
@@ -725,6 +829,34 @@ static int autoresize(struct ubi_device *ubi, int vol_id)
 }
 
 /**
+ * ubi_reboot_notifier - halt UBI transactions immediately prior to a reboot.
+ * @n: reboot notifier object
+ * @state: SYS_RESTART, SYS_HALT, or SYS_POWER_OFF
+ * @cmd: pointer to command string for RESTART2
+ *
+ * This function stops the UBI background thread so that the flash device
+ * remains quiescent when Linux restarts the system. Any queued work will be
+ * discarded, but this function will block until do_work() finishes if an
+ * operation is already in progress.
+ *
+ * This function solves a real-life problem observed on NOR flashes when an
+ * PEB erase operation starts, then the system is rebooted before the erase is
+ * finishes, and the boot loader gets confused and dies. So we prefer to finish
+ * the ongoing operation before rebooting.
+ */
+static int ubi_reboot_notifier(struct notifier_block *n, unsigned long state,
+			       void *cmd)
+{
+	struct ubi_device *ubi;
+
+	ubi = container_of(n, struct ubi_device, reboot_notifier);
+	if (ubi->bgt_thread)
+		kthread_stop(ubi->bgt_thread);
+	ubi_sync(ubi->ubi_num);
+	return NOTIFY_DONE;
+}
+
+/**
  * ubi_attach_mtd_dev - attach an MTD device.
  * @mtd: MTD device description object
  * @ubi_num: number to assign to the new UBI device
@@ -805,8 +937,7 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 
 	mutex_init(&ubi->buf_mutex);
 	mutex_init(&ubi->ckvol_mutex);
-	mutex_init(&ubi->mult_mutex);
-	mutex_init(&ubi->volumes_mutex);
+	mutex_init(&ubi->device_mutex);
 	spin_lock_init(&ubi->volumes_lock);
 
 	ubi_msg("attaching mtd%d to ubi%d", mtd->index, ubi_num);
@@ -815,19 +946,20 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 	if (err)
 		goto out_free;
 
+	err = -ENOMEM;
 	ubi->peb_buf1 = vmalloc(ubi->peb_size);
 	if (!ubi->peb_buf1)
 		goto out_free;
 
 	ubi->peb_buf2 = vmalloc(ubi->peb_size);
 	if (!ubi->peb_buf2)
-		 goto out_free;
+		goto out_free;
 
-#ifdef CONFIG_MTD_UBI_DEBUG
+#ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
 	mutex_init(&ubi->dbg_buf_mutex);
 	ubi->dbg_peb_buf = vmalloc(ubi->peb_size);
 	if (!ubi->dbg_peb_buf)
-		 goto out_free;
+		goto out_free;
 #endif
 
 	err = attach_by_scanning(ubi);
@@ -869,12 +1001,25 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 	ubi_msg("number of PEBs reserved for bad PEB handling: %d",
 		ubi->beb_rsvd_pebs);
 	ubi_msg("max/mean erase counter: %d/%d", ubi->max_ec, ubi->mean_ec);
+	ubi_msg("image sequence number: %d", ubi->image_seq);
 
+	/*
+	 * The below lock makes sure we do not race with 'ubi_thread()' which
+	 * checks @ubi->thread_enabled. Otherwise we may fail to wake it up.
+	 */
+	spin_lock(&ubi->wl_lock);
 	if (!DBG_DISABLE_BGT)
 		ubi->thread_enabled = 1;
 	wake_up_process(ubi->bgt_thread);
+	spin_unlock(&ubi->wl_lock);
+
+	/* Flash device priority is 0 - UBI needs to shut down first */
+	ubi->reboot_notifier.priority = 1;
+	ubi->reboot_notifier.notifier_call = ubi_reboot_notifier;
+	register_reboot_notifier(&ubi->reboot_notifier);
 
 	ubi_devices[ubi_num] = ubi;
+	ubi_notify_all(ubi, UBI_VOLUME_ADDED, NULL);
 	return ubi_num;
 
 out_uif:
@@ -890,7 +1035,7 @@ out_detach:
 out_free:
 	vfree(ubi->peb_buf1);
 	vfree(ubi->peb_buf2);
-#ifdef CONFIG_MTD_UBI_DEBUG
+#ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
 	vfree(ubi->dbg_peb_buf);
 #endif
 	kfree(ubi);
@@ -917,13 +1062,13 @@ int ubi_detach_mtd_dev(int ubi_num, int anyway)
 	if (ubi_num < 0 || ubi_num >= UBI_MAX_DEVICES)
 		return -EINVAL;
 
-	spin_lock(&ubi_devices_lock);
-	ubi = ubi_devices[ubi_num];
-	if (!ubi) {
-		spin_unlock(&ubi_devices_lock);
+	ubi = ubi_get_device(ubi_num);
+	if (!ubi)
 		return -EINVAL;
-	}
 
+	spin_lock(&ubi_devices_lock);
+	put_device(&ubi->dev);
+	ubi->ref_count -= 1;
 	if (ubi->ref_count) {
 		if (!anyway) {
 			spin_unlock(&ubi_devices_lock);
@@ -937,14 +1082,22 @@ int ubi_detach_mtd_dev(int ubi_num, int anyway)
 	spin_unlock(&ubi_devices_lock);
 
 	ubi_assert(ubi_num == ubi->ubi_num);
+	ubi_notify_all(ubi, UBI_VOLUME_REMOVED, NULL);
 	dbg_msg("detaching mtd%d from ubi%d", ubi->mtd->index, ubi_num);
 
 	/*
 	 * Before freeing anything, we have to stop the background thread to
 	 * prevent it from doing anything on this device while we are freeing.
 	 */
+	unregister_reboot_notifier(&ubi->reboot_notifier);
 	if (ubi->bgt_thread)
 		kthread_stop(ubi->bgt_thread);
+
+	/*
+	 * Get a reference to the device in order to prevent 'dev_release()'
+	 * from freeing @ubi object.
+	 */
+	get_device(&ubi->dev);
 
 	uif_close(ubi);
 	ubi_wl_close(ubi);
@@ -953,11 +1106,11 @@ int ubi_detach_mtd_dev(int ubi_num, int anyway)
 	put_mtd_device(ubi->mtd);
 	vfree(ubi->peb_buf1);
 	vfree(ubi->peb_buf2);
-#ifdef CONFIG_MTD_UBI_DEBUG
+#ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
 	vfree(ubi->dbg_peb_buf);
 #endif
 	ubi_msg("mtd%d is detached from ubi%d", ubi->mtd->index, ubi->ubi_num);
-	kfree(ubi);
+	put_device(&ubi->dev);
 	return 0;
 }
 

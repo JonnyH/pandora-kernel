@@ -29,7 +29,7 @@
  * would have been wasted for padding to the nearest minimal I/O unit boundary.
  * Instead, data first goes to the write-buffer and is flushed when the
  * buffer is full or when it is not used for some time (by timer). This is
- * similarto the mechanism is used by JFFS2.
+ * similar to the mechanism is used by JFFS2.
  *
  * Write-buffers are defined by 'struct ubifs_wbuf' objects and protected by
  * mutexes defined inside these objects. Since sometimes upper-level code
@@ -62,6 +62,7 @@ void ubifs_ro_mode(struct ubifs_info *c, int err)
 {
 	if (!c->ro_media) {
 		c->ro_media = 1;
+		c->no_chk_data_crc = 0;
 		ubifs_warn("switched to read-only mode, error %d", err);
 		dbg_dump_stack();
 	}
@@ -74,6 +75,7 @@ void ubifs_ro_mode(struct ubifs_info *c, int err)
  * @lnum: logical eraseblock number
  * @offs: offset within the logical eraseblock
  * @quiet: print no messages
+ * @must_chk_crc: indicates whether to always check the CRC
  *
  * This function checks node magic number and CRC checksum. This function also
  * validates node length to prevent UBIFS from becoming crazy when an attacker
@@ -81,11 +83,17 @@ void ubifs_ro_mode(struct ubifs_info *c, int err)
  * node length in the common header could cause UBIFS to read memory outside of
  * allocated buffer when checking the CRC checksum.
  *
- * This function returns zero in case of success %-EUCLEAN in case of bad CRC
- * or magic.
+ * This function may skip data nodes CRC checking if @c->no_chk_data_crc is
+ * true, which is controlled by corresponding UBIFS mount option. However, if
+ * @must_chk_crc is true, then @c->no_chk_data_crc is ignored and CRC is
+ * checked. Similarly, if @c->always_chk_crc is true, @c->no_chk_data_crc is
+ * ignored and CRC is checked.
+ *
+ * This function returns zero in case of success and %-EUCLEAN in case of bad
+ * CRC or magic.
  */
 int ubifs_check_node(const struct ubifs_info *c, const void *buf, int lnum,
-		     int offs, int quiet)
+		     int offs, int quiet, int must_chk_crc)
 {
 	int err = -EINVAL, type, node_len;
 	uint32_t crc, node_crc, magic;
@@ -120,6 +128,10 @@ int ubifs_check_node(const struct ubifs_info *c, const void *buf, int lnum,
 	} else if (node_len < c->ranges[type].min_len ||
 		   node_len > c->ranges[type].max_len)
 		goto out_len;
+
+	if (!must_chk_crc && type == UBIFS_DATA_NODE && !c->always_chk_crc &&
+	     c->no_chk_data_crc)
+		return 0;
 
 	crc = crc32(UBIFS_CRC32_INIT, buf + 8, node_len - 8);
 	node_crc = le32_to_cpu(ch->crc);
@@ -281,13 +293,15 @@ void ubifs_prep_grp_node(struct ubifs_info *c, void *node, int len, int last)
  *
  * This function is called when the write-buffer timer expires.
  */
-static void wbuf_timer_callback_nolock(unsigned long data)
+static enum hrtimer_restart wbuf_timer_callback_nolock(struct hrtimer *timer)
 {
-	struct ubifs_wbuf *wbuf = (struct ubifs_wbuf *)data;
+	struct ubifs_wbuf *wbuf = container_of(timer, struct ubifs_wbuf, timer);
 
+	dbg_io("jhead %s", dbg_jhead(wbuf->jhead));
 	wbuf->need_sync = 1;
 	wbuf->c->need_wbuf_sync = 1;
 	ubifs_wake_up_bgt(wbuf->c);
+	return HRTIMER_NORESTART;
 }
 
 /**
@@ -296,13 +310,14 @@ static void wbuf_timer_callback_nolock(unsigned long data)
  */
 static void new_wbuf_timer_nolock(struct ubifs_wbuf *wbuf)
 {
-	ubifs_assert(!timer_pending(&wbuf->timer));
+	ubifs_assert(!hrtimer_active(&wbuf->timer));
 
-	if (!wbuf->timeout)
+	if (!ktime_to_ns(wbuf->hardlimit))
 		return;
 
-	wbuf->timer.expires = jiffies + wbuf->timeout;
-	add_timer(&wbuf->timer);
+	dbg_io("set timer for jhead %s, %llu millisecs", dbg_jhead(wbuf->jhead),
+	       div_u64(ktime_to_ns(wbuf->hardlimit), USEC_PER_SEC));
+	hrtimer_start(&wbuf->timer, wbuf->hardlimit, HRTIMER_MODE_REL);
 }
 
 /**
@@ -311,13 +326,10 @@ static void new_wbuf_timer_nolock(struct ubifs_wbuf *wbuf)
  */
 static void cancel_wbuf_timer_nolock(struct ubifs_wbuf *wbuf)
 {
-	/*
-	 * If the syncer is waiting for the lock (from the background thread's
-	 * context) and another task is changing write-buffer then the syncing
-	 * should be canceled.
-	 */
+	if (wbuf->no_timer)
+		return;
 	wbuf->need_sync = 0;
-	del_timer(&wbuf->timer);
+	hrtimer_cancel(&wbuf->timer);
 }
 
 /**
@@ -337,8 +349,8 @@ int ubifs_wbuf_sync_nolock(struct ubifs_wbuf *wbuf)
 		/* Write-buffer is empty or not seeked */
 		return 0;
 
-	dbg_io("LEB %d:%d, %d bytes",
-	       wbuf->lnum, wbuf->offs, wbuf->used);
+	dbg_io("LEB %d:%d, %d bytes, jhead %s",
+	       wbuf->lnum, wbuf->offs, wbuf->used, dbg_jhead(wbuf->jhead));
 	ubifs_assert(!(c->vfs_sb->s_flags & MS_RDONLY));
 	ubifs_assert(!(wbuf->avail & 7));
 	ubifs_assert(wbuf->offs + c->min_io_size <= c->leb_size);
@@ -378,7 +390,7 @@ int ubifs_wbuf_sync_nolock(struct ubifs_wbuf *wbuf)
  * @offs: logical eraseblock offset to seek to
  * @dtype: data type
  *
- * This function targets the write buffer to logical eraseblock @lnum:@offs.
+ * This function targets the write-buffer to logical eraseblock @lnum:@offs.
  * The write-buffer is synchronized if it is not empty. Returns zero in case of
  * success and a negative error code in case of failure.
  */
@@ -387,7 +399,7 @@ int ubifs_wbuf_seek_nolock(struct ubifs_wbuf *wbuf, int lnum, int offs,
 {
 	const struct ubifs_info *c = wbuf->c;
 
-	dbg_io("LEB %d:%d", lnum, offs);
+	dbg_io("LEB %d:%d, jhead %s", lnum, offs, dbg_jhead(wbuf->jhead));
 	ubifs_assert(lnum >= 0 && lnum < c->leb_cnt);
 	ubifs_assert(offs >= 0 && offs <= c->leb_size);
 	ubifs_assert(offs % c->min_io_size == 0 && !(offs & 7));
@@ -494,9 +506,9 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 	struct ubifs_info *c = wbuf->c;
 	int err, written, n, aligned_len = ALIGN(len, 8), offs;
 
-	dbg_io("%d bytes (%s) to wbuf at LEB %d:%d", len,
-	       dbg_ntype(((struct ubifs_ch *)buf)->node_type), wbuf->lnum,
-	       wbuf->offs + wbuf->used);
+	dbg_io("%d bytes (%s) to jhead %s wbuf at LEB %d:%d", len,
+	       dbg_ntype(((struct ubifs_ch *)buf)->node_type),
+	       dbg_jhead(wbuf->jhead), wbuf->lnum, wbuf->offs + wbuf->used);
 	ubifs_assert(len > 0 && wbuf->lnum >= 0 && wbuf->lnum < c->leb_cnt);
 	ubifs_assert(wbuf->offs >= 0 && wbuf->offs % c->min_io_size == 0);
 	ubifs_assert(!(wbuf->offs & 7) && wbuf->offs <= c->leb_size);
@@ -521,8 +533,8 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 		memcpy(wbuf->buf + wbuf->used, buf, len);
 
 		if (aligned_len == wbuf->avail) {
-			dbg_io("flush wbuf to LEB %d:%d", wbuf->lnum,
-				wbuf->offs);
+			dbg_io("flush jhead %s wbuf to LEB %d:%d",
+			       dbg_jhead(wbuf->jhead), wbuf->lnum, wbuf->offs);
 			err = ubi_leb_write(c->ubi, wbuf->lnum, wbuf->buf,
 					    wbuf->offs, c->min_io_size,
 					    wbuf->dtype);
@@ -550,7 +562,8 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 	 * minimal I/O unit. We have to fill and flush write-buffer and switch
 	 * to the next min. I/O unit.
 	 */
-	dbg_io("flush wbuf to LEB %d:%d", wbuf->lnum, wbuf->offs);
+	dbg_io("flush jhead %s wbuf to LEB %d:%d",
+	       dbg_jhead(wbuf->jhead), wbuf->lnum, wbuf->offs);
 	memcpy(wbuf->buf + wbuf->used, buf, wbuf->avail);
 	err = ubi_leb_write(c->ubi, wbuf->lnum, wbuf->buf, wbuf->offs,
 			    c->min_io_size, wbuf->dtype);
@@ -683,7 +696,8 @@ int ubifs_read_node_wbuf(struct ubifs_wbuf *wbuf, void *buf, int type, int len,
 	int err, rlen, overlap;
 	struct ubifs_ch *ch = buf;
 
-	dbg_io("LEB %d:%d, %s, length %d", lnum, offs, dbg_ntype(type), len);
+	dbg_io("LEB %d:%d, %s, length %d, jhead %s", lnum, offs,
+	       dbg_ntype(type), len, dbg_jhead(wbuf->jhead));
 	ubifs_assert(wbuf && lnum >= 0 && lnum < c->leb_cnt && offs >= 0);
 	ubifs_assert(!(offs & 7) && offs < c->leb_size);
 	ubifs_assert(type >= 0 && type < UBIFS_NODE_TYPES_CNT);
@@ -722,7 +736,7 @@ int ubifs_read_node_wbuf(struct ubifs_wbuf *wbuf, void *buf, int type, int len,
 		goto out;
 	}
 
-	err = ubifs_check_node(c, buf, lnum, offs, 0);
+	err = ubifs_check_node(c, buf, lnum, offs, 0, 0);
 	if (err) {
 		ubifs_err("expected node type %d", type);
 		return err;
@@ -781,7 +795,7 @@ int ubifs_read_node(const struct ubifs_info *c, void *buf, int type, int len,
 		goto out;
 	}
 
-	err = ubifs_check_node(c, buf, lnum, offs, 0);
+	err = ubifs_check_node(c, buf, lnum, offs, 0, 0);
 	if (err) {
 		ubifs_err("expected node type %d", type);
 		return err;
@@ -807,7 +821,7 @@ out:
  * @c: UBIFS file-system description object
  * @wbuf: write-buffer to initialize
  *
- * This function initializes write buffer. Returns zero in case of success
+ * This function initializes write-buffer. Returns zero in case of success
  * %-ENOMEM in case of failure.
  */
 int ubifs_wbuf_init(struct ubifs_info *c, struct ubifs_wbuf *wbuf)
@@ -833,20 +847,19 @@ int ubifs_wbuf_init(struct ubifs_info *c, struct ubifs_wbuf *wbuf)
 	wbuf->sync_callback = NULL;
 	mutex_init(&wbuf->io_mutex);
 	spin_lock_init(&wbuf->lock);
-
 	wbuf->c = c;
-	init_timer(&wbuf->timer);
-	wbuf->timer.function = wbuf_timer_callback_nolock;
-	wbuf->timer.data = (unsigned long)wbuf;
-	wbuf->timeout = DEFAULT_WBUF_TIMEOUT;
 	wbuf->next_ino = 0;
 
+	hrtimer_init(&wbuf->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	wbuf->timer.function = wbuf_timer_callback_nolock;
+	wbuf->hardlimit = ktime_set(WBUF_TIMEOUT_HARDLIMIT, 0);
+	wbuf->timer.expires = wbuf->hardlimit;
 	return 0;
 }
 
 /**
  * ubifs_wbuf_add_ino_nolock - add an inode number into the wbuf inode array.
- * @wbuf: the write-buffer whereto add
+ * @wbuf: the write-buffer where to add
  * @inum: the inode number
  *
  * This function adds an inode number to the inode array of the write-buffer.
