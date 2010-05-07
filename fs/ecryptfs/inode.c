@@ -443,6 +443,7 @@ static int ecryptfs_unlink(struct inode *dir, struct dentry *dentry)
 	struct inode *lower_dir_inode = ecryptfs_inode_to_lower(dir);
 	struct dentry *lower_dir_dentry;
 
+	dget(lower_dentry);
 	lower_dir_dentry = lock_parent(lower_dentry);
 	rc = vfs_unlink(lower_dir_inode, lower_dentry);
 	if (rc) {
@@ -456,6 +457,7 @@ static int ecryptfs_unlink(struct inode *dir, struct dentry *dentry)
 	d_drop(dentry);
 out_unlock:
 	unlock_dir(lower_dir_dentry);
+	dput(lower_dentry);
 	return rc;
 }
 
@@ -673,10 +675,11 @@ static void *ecryptfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	ecryptfs_printk(KERN_DEBUG, "Calling readlink w/ "
 			"dentry->d_name.name = [%s]\n", dentry->d_name.name);
 	rc = dentry->d_inode->i_op->readlink(dentry, (char __user *)buf, len);
-	buf[rc] = '\0';
 	set_fs(old_fs);
 	if (rc < 0)
 		goto out_free;
+	else
+		buf[rc] = '\0';
 	rc = 0;
 	nd_set_link(nd, buf);
 	goto out;

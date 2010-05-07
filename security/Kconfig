@@ -122,6 +122,7 @@ config SECURITY_DEFAULT_MMAP_MIN_ADDR
 	  This value can be changed after boot using the
 	  /proc/sys/vm/mmap_min_addr tunable.
 
+	  If you are unsure how to answer this question, answer N.
 
 source security/selinux/Kconfig
 source security/smack/Kconfig
