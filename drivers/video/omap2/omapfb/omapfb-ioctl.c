@@ -76,7 +76,7 @@ static int omapfb_setup_plane(struct fb_info *fbi, struct omapfb_plane_info *pi)
 		goto out;
 
 	if (ovl->manager) {
-		r = ovl->manager->apply(ovl->manager);
+		r = ovl->manager->apply(ovl->manager, 0);
 		if (r)
 			goto out;
 	}

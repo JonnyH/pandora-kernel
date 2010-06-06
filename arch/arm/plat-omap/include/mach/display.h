@@ -412,7 +412,7 @@ struct omap_overlay_manager {
 		struct omap_display *display);
 	int (*unset_display)(struct omap_overlay_manager *mgr);
 
-	int (*apply)(struct omap_overlay_manager *mgr);
+	int (*apply)(struct omap_overlay_manager *mgr, int no_wait);
 
 	void (*set_default_color)(struct omap_overlay_manager *mgr, u32 color);
 	u32 (*get_default_color)(struct omap_overlay_manager *mgr);

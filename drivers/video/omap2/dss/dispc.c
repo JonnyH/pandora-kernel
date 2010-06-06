@@ -482,7 +482,7 @@ static inline void enable_clocks(bool enable)
 		dss_clk_disable(DSS_CLK_ICK | DSS_CLK_FCK1);
 }
 
-void dispc_go(enum omap_channel channel)
+void dispc_go(enum omap_channel channel, int no_wait)
 {
 	int bit;
 	unsigned long tmo;
@@ -503,13 +503,15 @@ void dispc_go(enum omap_channel channel)
 	else
 		bit = 6; /* GODIGIT */
 
-	tmo = jiffies + msecs_to_jiffies(200);
-	while (REG_GET(DISPC_CONTROL, bit, bit) == 1) {
-		if (time_after(jiffies, tmo)) {
-			DSSERR("timeout waiting GO flag\n");
-			goto end;
+	if (!no_wait) {
+		tmo = jiffies + msecs_to_jiffies(200);
+		while (REG_GET(DISPC_CONTROL, bit, bit) == 1) {
+			if (time_after(jiffies, tmo)) {
+				DSSERR("timeout waiting GO flag\n");
+				goto end;
+			}
+			cpu_relax();
 		}
-		cpu_relax();
 	}
 
 	DSSDBG("GO %s\n", channel == OMAP_DSS_CHANNEL_LCD ? "LCD" : "DIGIT");
@@ -2701,7 +2703,7 @@ static void dispc_error_worker(struct work_struct *work)
 
 			if (ovl->id == 0) {
 				dispc_enable_plane(ovl->id, 0);
-				dispc_go(ovl->manager->id);
+				dispc_go(ovl->manager->id, 0);
 				mdelay(50);
 				break;
 			}
@@ -2719,7 +2721,7 @@ static void dispc_error_worker(struct work_struct *work)
 
 			if (ovl->id == 1) {
 				dispc_enable_plane(ovl->id, 0);
-				dispc_go(ovl->manager->id);
+				dispc_go(ovl->manager->id, 0);
 				mdelay(50);
 				break;
 			}
@@ -2737,7 +2739,7 @@ static void dispc_error_worker(struct work_struct *work)
 
 			if (ovl->id == 2) {
 				dispc_enable_plane(ovl->id, 0);
-				dispc_go(ovl->manager->id);
+				dispc_go(ovl->manager->id, 0);
 				mdelay(50);
 				break;
 			}
@@ -2775,7 +2777,7 @@ static void dispc_error_worker(struct work_struct *work)
 					dispc_enable_plane(ovl->id, 0);
 			}
 
-			dispc_go(manager->id);
+			dispc_go(manager->id, 0);
 			mdelay(50);
 			if (enable)
 				manager->display->enable(manager->display);
@@ -2813,7 +2815,7 @@ static void dispc_error_worker(struct work_struct *work)
 					dispc_enable_plane(ovl->id, 0);
 			}
 
-			dispc_go(manager->id);
+			dispc_go(manager->id, 0);
 			mdelay(50);
 			if (enable)
 				manager->display->enable(manager->display);

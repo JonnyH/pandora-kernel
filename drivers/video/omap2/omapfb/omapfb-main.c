@@ -786,7 +786,7 @@ int omapfb_apply_changes(struct fb_info *fbi, int init)
 			/* the fb is not available. disable the overlay */
 			omapfb_overlay_enable(ovl, 0);
 			if (!init && ovl->manager)
-				ovl->manager->apply(ovl->manager);
+				ovl->manager->apply(ovl->manager, 0);
 			continue;
 		}
 
@@ -817,7 +817,7 @@ int omapfb_apply_changes(struct fb_info *fbi, int init)
 			goto err;
 
 		if (!init && ovl->manager)
-			ovl->manager->apply(ovl->manager);
+			ovl->manager->apply(ovl->manager, !init);
 	}
 	return 0;
 err:
@@ -2003,7 +2003,7 @@ static int omapfb_probe(struct platform_device *pdev)
 	for (i = 0; i < fbdev->num_managers; i++) {
 		struct omap_overlay_manager *mgr;
 		mgr = fbdev->managers[i];
-		r = mgr->apply(mgr);
+		r = mgr->apply(mgr, 0);
 		if (r) {
 			dev_err(fbdev->dev, "failed to apply dispc config\n");
 			goto cleanup;

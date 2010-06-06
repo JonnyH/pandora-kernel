@@ -276,7 +276,7 @@ int dispc_setup_plane(enum omap_plane plane, enum omap_channel channel_out,
 		      u8 rotation, bool mirror,
 		      u8 global_alpha);
 
-void dispc_go(enum omap_channel channel);
+void dispc_go(enum omap_channel channel, int no_wait);
 void dispc_enable_lcd_out(bool enable);
 void dispc_enable_digit_out(bool enable);
 int dispc_enable_plane(enum omap_plane plane, bool enable);

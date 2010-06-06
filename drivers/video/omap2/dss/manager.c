@@ -85,7 +85,7 @@ static ssize_t manager_display_store(struct omap_overlay_manager *mgr, const cha
 			return r;
 		}
 
-		r = mgr->apply(mgr);
+		r = mgr->apply(mgr, 0);
 		if (r) {
 			DSSERR("failed to apply dispc config\n");
 			return r;
@@ -391,7 +391,7 @@ static int overlay_enabled(struct omap_overlay *ovl)
 /* We apply settings to both managers here so that we can use optimizations
  * like fifomerge. Shadow registers can be changed first and the non-shadowed
  * should be changed last, at the same time with GO */
-static int omap_dss_mgr_apply(struct omap_overlay_manager *mgr)
+static int omap_dss_mgr_apply(struct omap_overlay_manager *mgr, int no_wait)
 {
 	int i;
 	int ret = 0;
@@ -512,7 +512,7 @@ static int omap_dss_mgr_apply(struct omap_overlay_manager *mgr)
 		if (display->caps & OMAP_DSS_DISPLAY_CAP_MANUAL_UPDATE)
 			continue;
 
-		dispc_go(mgr->id);
+		dispc_go(mgr->id, no_wait);
 	}
 
 	dss_clk_disable(DSS_CLK_ICK | DSS_CLK_FCK1);

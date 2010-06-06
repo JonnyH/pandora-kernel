@@ -260,7 +260,7 @@ static void dpi_set_timings(struct omap_display *display,
 	display->panel->timings = *timings;
 	if (display->state == OMAP_DSS_DISPLAY_ACTIVE) {
 		dpi_set_mode(display);
-		dispc_go(OMAP_DSS_CHANNEL_LCD);
+		dispc_go(OMAP_DSS_CHANNEL_LCD, 0);
 	}
 }
 

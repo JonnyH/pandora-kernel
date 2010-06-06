@@ -92,7 +92,7 @@ static ssize_t overlay_manager_store(struct omap_overlay *ovl, const char *buf, 
 		}
 	}
 
-	if (ovl->manager && (r = ovl->manager->apply(ovl->manager)))
+	if (ovl->manager && (r = ovl->manager->apply(ovl->manager, 0)))
 		return r;
 
 	return size;
@@ -134,7 +134,7 @@ static ssize_t overlay_position_store(struct omap_overlay *ovl,
 	if ((r = ovl->set_overlay_info(ovl, &info)))
 		return r;
 
-	if (ovl->manager && (r = ovl->manager->apply(ovl->manager)))
+	if (ovl->manager && (r = ovl->manager->apply(ovl->manager, 0)))
 		return r;
 
 	return size;
@@ -165,7 +165,7 @@ static ssize_t overlay_output_size_store(struct omap_overlay *ovl,
 	if ((r = ovl->set_overlay_info(ovl, &info)))
 		return r;
 
-	if (ovl->manager && (r = ovl->manager->apply(ovl->manager)))
+	if (ovl->manager && (r = ovl->manager->apply(ovl->manager, 0)))
 		return r;
 
 	return size;
@@ -188,7 +188,7 @@ static ssize_t overlay_enabled_store(struct omap_overlay *ovl, const char *buf, 
 	if ((r = ovl->set_overlay_info(ovl, &info)))
 		return r;
 
-	if (ovl->manager && (r = ovl->manager->apply(ovl->manager)))
+	if (ovl->manager && (r = ovl->manager->apply(ovl->manager, 0)))
 		return r;
 
 	return size;
@@ -219,7 +219,7 @@ static ssize_t overlay_global_alpha_store(struct omap_overlay *ovl,
 	if ((r = ovl->set_overlay_info(ovl, &info)))
 		return r;
 
-	if (ovl->manager && (r = ovl->manager->apply(ovl->manager)))
+	if (ovl->manager && (r = ovl->manager->apply(ovl->manager, 0)))
 		return r;
 
 	return size;
