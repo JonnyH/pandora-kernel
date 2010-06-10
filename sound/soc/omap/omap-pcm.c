@@ -168,6 +168,31 @@ static int omap_pcm_prepare(struct snd_pcm_substream *substream)
 
 	omap_enable_dma_irq(prtd->dma_ch, OMAP_DMA_FRAME_IRQ);
 
+	/*
+	 * To handle realtime streaming sources properly, we need to be sure
+	 * we have at least 2 periods of size larger than FIFO in the buffer
+	 * to start playing without underflowing. This is because DMA is always
+	 * ahead of playback by amount close to FIFO size and needs to have
+	 * next period ready when previous one finishes transfering to FIFO.
+	 */
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
+	    runtime->periods > 1) {
+		struct snd_soc_pcm_runtime *rtd = substream->private_data;
+		int *mcbsp_bus_id = rtd->dai->cpu_dai->private_data;
+		int fifo_samples = (*mcbsp_bus_id == 1) ? 1024 : 256;
+		int period_samples, period_frames;
+		
+		period_samples = bytes_to_samples(runtime,
+				snd_pcm_lib_period_bytes(substream));
+		if (period_samples < fifo_samples + runtime->channels)
+			period_samples = fifo_samples + runtime->channels;
+		period_frames = bytes_to_frames(runtime,
+				samples_to_bytes(runtime, period_samples)) * 2;
+
+		if (runtime->start_threshold < period_frames)
+			runtime->start_threshold = period_frames;
+	}
+
 	return 0;
 }
 
