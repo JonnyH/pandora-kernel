@@ -40,10 +40,15 @@
 
 #define PREFIX "ASoC omap3pandora: "
 
-static int omap3pandora_cmn_hw_params(struct snd_soc_dai *codec_dai,
-	struct snd_soc_dai *cpu_dai, unsigned int fmt)
+static int omap3pandora_hw_params(struct snd_pcm_substream *substream,
+	struct snd_pcm_hw_params *params)
 {
 	int ret;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
+	int fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+		  SND_SOC_DAIFMT_CBS_CFS;
 
 	/* Set codec DAI configuration */
 	ret = snd_soc_dai_set_fmt(codec_dai, fmt);
@@ -82,32 +87,6 @@ static int omap3pandora_cmn_hw_params(struct snd_soc_dai *codec_dai,
 	}
 
 	return 0;
-}
-
-static int omap3pandora_out_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
-
-	return omap3pandora_cmn_hw_params(codec_dai, cpu_dai,
-					  SND_SOC_DAIFMT_I2S |
-					  SND_SOC_DAIFMT_IB_NF |
-					  SND_SOC_DAIFMT_CBS_CFS);
-}
-
-static int omap3pandora_in_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
-
-	return omap3pandora_cmn_hw_params(codec_dai, cpu_dai,
-					  SND_SOC_DAIFMT_I2S |
-					  SND_SOC_DAIFMT_NB_NF |
-					  SND_SOC_DAIFMT_CBS_CFS);
 }
 
 static int omap3pandora_hp_event(struct snd_soc_dapm_widget *w,
@@ -191,12 +170,8 @@ static int omap3pandora_in_init(struct snd_soc_codec *codec)
 	return snd_soc_dapm_sync(codec);
 }
 
-static struct snd_soc_ops omap3pandora_out_ops = {
-	.hw_params = omap3pandora_out_hw_params,
-};
-
-static struct snd_soc_ops omap3pandora_in_ops = {
-	.hw_params = omap3pandora_in_hw_params,
+static struct snd_soc_ops omap3pandora_ops = {
+	.hw_params = omap3pandora_hw_params,
 };
 
 /* Digital audio interface glue - connects codec <--> CPU */
@@ -206,14 +181,14 @@ static struct snd_soc_dai_link omap3pandora_dai[] = {
 		.stream_name = "HiFi Out",
 		.cpu_dai = &omap_mcbsp_dai[0],
 		.codec_dai = &twl4030_dai,
-		.ops = &omap3pandora_out_ops,
+		.ops = &omap3pandora_ops,
 		.init = omap3pandora_out_init,
 	}, {
 		.name = "TWL4030",
 		.stream_name = "Line/Mic In",
 		.cpu_dai = &omap_mcbsp_dai[1],
 		.codec_dai = &twl4030_dai,
-		.ops = &omap3pandora_in_ops,
+		.ops = &omap3pandora_ops,
 		.init = omap3pandora_in_init,
 	}
 };
