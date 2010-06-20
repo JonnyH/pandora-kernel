@@ -35,6 +35,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 #include <linux/regulator/fixed.h>
+#include <linux/i2c/vsense.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -488,8 +489,35 @@ static struct twl4030_platform_data omap3pandora_twldata = {
 	.bci		= &pandora_bci_data,
 };
 
+static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("tps65950", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_34XX_SYS_NIRQ,
+		.platform_data = &omap3pandora_twldata,
+	},
+};
+
+static struct vsense_platform_data omap3pandora_nub1_data = {
+	.gpio_irq	= 161,
+	.gpio_reset	= 156,
+};
+
+static struct vsense_platform_data omap3pandora_nub2_data = {
+	.gpio_irq	= 162,
+	.gpio_reset	= 156,
+};
+
 static struct i2c_board_info __initdata omap3pandora_i2c3_boardinfo[] = {
 	{
+		I2C_BOARD_INFO("vsense", 0x66),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub1_data,
+	}, {
+		I2C_BOARD_INFO("vsense", 0x67),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub2_data,
+	}, {
 		I2C_BOARD_INFO("bq27500", 0x55),
 		.flags = I2C_CLIENT_WAKE,
 	},
