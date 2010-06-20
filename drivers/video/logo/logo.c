@@ -96,6 +96,10 @@ const struct linux_logo * __init_refok fb_find_logo(int depth)
 		/* SuperH Linux logo */
 		logo = &logo_superh_clut224;
 #endif
+#ifdef CONFIG_LOGO_PANDORA_CLUT224
+		/* Pandora Linux logo */
+		logo = &logo_pandora_clut224;
+#endif
 #ifdef CONFIG_LOGO_M32R_CLUT224
 		/* M32R Linux logo */
 		logo = &logo_m32r_clut224;
