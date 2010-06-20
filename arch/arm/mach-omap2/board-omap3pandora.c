@@ -30,6 +30,7 @@
 #include <linux/input/matrix_keypad.h>
 #include <linux/gpio_keys.h>
 #include <linux/spi/wl12xx.h>
+#include <linux/i2c/vsense.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -484,8 +485,26 @@ static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
 	},
 };
 
+static struct vsense_platform_data omap3pandora_nub1_data = {
+	.gpio_irq	= 161,
+	.gpio_reset	= 156,
+};
+
+static struct vsense_platform_data omap3pandora_nub2_data = {
+	.gpio_irq	= 162,
+	.gpio_reset	= 156,
+};
+
 static struct i2c_board_info __initdata omap3pandora_i2c3_boardinfo[] = {
 	{
+		I2C_BOARD_INFO("vsense", 0x66),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub1_data,
+	}, {
+		I2C_BOARD_INFO("vsense", 0x67),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub2_data,
+	}, {
 		I2C_BOARD_INFO("bq27500", 0x55),
 		.flags = I2C_CLIENT_WAKE,
 	},
