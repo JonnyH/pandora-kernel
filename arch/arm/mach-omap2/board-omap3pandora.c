@@ -124,6 +124,11 @@ static struct platform_device pandora_leds_gpio = {
 	},
 };
 
+static struct platform_device pandora_bl = {
+	.name	= "twl4030-pwm0-bl",
+	.id	= -1,
+};
+
 #define GPIO_BUTTON(gpio_num, ev_type, ev_code, act_low, descr)	\
 {								\
 	.gpio		= gpio_num,				\
@@ -686,6 +691,7 @@ fail:
 
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
+	&pandora_bl,
 	&pandora_keys_gpio,
 	&pandora_vwlan_device,
 };
