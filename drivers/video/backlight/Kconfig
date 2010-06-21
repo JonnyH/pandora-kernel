@@ -222,6 +222,12 @@ config BACKLIGHT_PWM
 	  If you have a LCD backlight adjustable by PWM, say Y to enable
 	  this driver.
 
+config BACKLIGHT_PANDORA
+	tristate "Backlight Driver for Pandora"
+	depends on BACKLIGHT_CLASS_DEVICE && TWL4030_CORE
+	help
+	  If you have a Pandora, say Y to enable it's backlight driver.
+
 config BACKLIGHT_DA903X
 	tristate "Backlight Driver for DA9030/DA9034 using WLED"
 	depends on PMIC_DA903X
