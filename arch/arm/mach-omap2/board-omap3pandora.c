@@ -600,6 +600,22 @@ static void __init omap3pandora_init(void)
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
 }
 
+/* HACK: create it here, so that others don't need to bother */
+#ifdef CONFIG_PROC_FS
+#include <linux/proc_fs.h>
+
+static int __init proc_pandora_init(void)
+{
+	struct proc_dir_entry *ret;
+
+	ret = proc_mkdir("pandora", NULL);
+	if (!ret)
+		return -ENOMEM;
+	return 0;
+}
+fs_initcall(proc_pandora_init);
+#endif
+
 MACHINE_START(OMAP3_PANDORA, "Pandora Handheld Console")
 	.atag_offset	= 0x100,
 	.reserve	= omap_reserve,
