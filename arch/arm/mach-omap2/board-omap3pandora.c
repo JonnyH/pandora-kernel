@@ -52,9 +52,6 @@
 #define PANDORA_WIFI_NRESET_GPIO	23
 #define OMAP3_PANDORA_TS_GPIO		94
 
-/* hardware debounce: (value + 1) * 31us */
-#define GPIO_DEBOUNCE_TIME		127
-
 static struct gpio_led pandora_gpio_leds[] = {
 	{
 		.name			= "pandora::sd1",
@@ -97,6 +94,7 @@ static struct platform_device pandora_bl = {
 	.type		= ev_type,				\
 	.code		= ev_code,				\
 	.active_low	= act_low,				\
+	.debounce_interval = 4,					\
 	.desc		= "btn " descr,				\
 }
 
@@ -108,14 +106,14 @@ static struct gpio_keys_button pandora_gpio_keys[] = {
 	GPIO_BUTTON_LOW(103,	KEY_DOWN,	"down"),
 	GPIO_BUTTON_LOW(96,	KEY_LEFT,	"left"),
 	GPIO_BUTTON_LOW(98,	KEY_RIGHT,	"right"),
-	GPIO_BUTTON_LOW(109,	KEY_KP1,	"game 1"),
-	GPIO_BUTTON_LOW(111,	KEY_KP2,	"game 2"),
-	GPIO_BUTTON_LOW(106,	KEY_KP3,	"game 3"),
-	GPIO_BUTTON_LOW(101,	KEY_KP4,	"game 4"),
-	GPIO_BUTTON_LOW(102,	BTN_TL,		"l"),
-	GPIO_BUTTON_LOW(97,	BTN_TL2,	"l2"),
-	GPIO_BUTTON_LOW(105,	BTN_TR,		"r"),
-	GPIO_BUTTON_LOW(107,	BTN_TR2,	"r2"),
+	GPIO_BUTTON_LOW(109,	KEY_PAGEUP,	"game 1"),
+	GPIO_BUTTON_LOW(111,	KEY_END,	"game 2"),
+	GPIO_BUTTON_LOW(106,	KEY_PAGEDOWN,	"game 3"),
+	GPIO_BUTTON_LOW(101,	KEY_HOME,	"game 4"),
+	GPIO_BUTTON_LOW(102,	KEY_RIGHTSHIFT,	"l"),
+	GPIO_BUTTON_LOW(97,	KEY_KPPLUS,	"l2"),
+	GPIO_BUTTON_LOW(105,	KEY_RIGHTCTRL,	"r"),
+	GPIO_BUTTON_LOW(107,	KEY_KPMINUS,	"r2"),
 	GPIO_BUTTON_LOW(104,	KEY_LEFTCTRL,	"ctrl"),
 	GPIO_BUTTON_LOW(99,	KEY_MENU,	"menu"),
 	GPIO_BUTTON_LOW(176,	KEY_COFFEE,	"hold"),
@@ -135,13 +133,6 @@ static struct platform_device pandora_keys_gpio = {
 		.platform_data	= &pandora_gpio_key_info,
 	},
 };
-
-static void __init pandora_keys_gpio_init(void)
-{
-	/* set debounce time for GPIO banks 4 and 6 */
-	gpio_set_debounce(32 * 3, GPIO_DEBOUNCE_TIME);
-	gpio_set_debounce(32 * 5, GPIO_DEBOUNCE_TIME);
-}
 
 static int board_keymap[] = {
 	/* row, col, code */
@@ -690,7 +681,6 @@ static void __init omap3pandora_init(void)
 			ARRAY_SIZE(omap3pandora_spi_board_info));
 	omap3pandora_ads7846_init();
 	usb_ehci_init(&ehci_pdata);
-	pandora_keys_gpio_init();
 	usb_musb_init(&musb_board_data);
 
 	/* Ensure SDRC pins are mux'd for self-refresh */
