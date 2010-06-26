@@ -134,7 +134,10 @@ static struct platform_device pandora_keys_gpio = {
 	},
 };
 
-static int board_keymap[] = {
+/* HACK: this requires patched twl4030_keypad driver */
+#define FNKEY(row, col, code) KEY((row + 8), col, code)
+
+static const uint32_t board_keymap[] = {
 	/* row, col, code */
 	KEY(0, 0, KEY_9),
 	KEY(0, 1, KEY_8),
@@ -179,6 +182,50 @@ static int board_keymap[] = {
 	KEY(7, 2, KEY_Q),
 	KEY(7, 3, KEY_LEFTSHIFT),
 	KEY(7, 4, KEY_COMMA),
+	/* Fn keys */
+	FNKEY(0, 0, KEY_F9),
+	FNKEY(0, 1, KEY_F8),
+	FNKEY(0, 2, KEY_BRIGHTNESSUP),
+	FNKEY(0, 3, KEY_F13),		/* apostrophe, differs from Fn-A? */
+	FNKEY(0, 4, KEY_F22),
+	FNKEY(0, 5, KEY_F23),
+	FNKEY(1, 0, KEY_F10),
+	FNKEY(1, 1, KEY_F7),
+	FNKEY(1, 2, KEY_BRIGHTNESSDOWN),
+	FNKEY(1, 3, KEY_GRAVE),
+	FNKEY(1, 4, KEY_F14),		/* pipe/bar */
+	FNKEY(1, 5, KEY_TAB),
+	FNKEY(2, 0, KEY_INSERT),
+	FNKEY(2, 1, KEY_F6),
+	FNKEY(2, 2, KEY_F15),		/* dash */
+	FNKEY(2, 3, KEY_EQUAL),
+	FNKEY(2, 4, KEY_F16),		/* # (pound/hash) */
+	FNKEY(2, 5, KEY_FN),
+	FNKEY(3, 0, KEY_F11),
+	FNKEY(3, 1, KEY_F5),
+	FNKEY(3, 2, KEY_F17),		/* ! */
+	FNKEY(3, 3, KEY_KPPLUS),
+	FNKEY(3, 4, KEY_BACKSLASH),
+	FNKEY(4, 0, KEY_F12),
+	FNKEY(4, 1, KEY_F4),
+	FNKEY(4, 2, KEY_RIGHTBRACE),
+	FNKEY(4, 3, KEY_KPMINUS),
+	FNKEY(4, 4, KEY_QUESTION),
+	FNKEY(5, 0, KEY_F18),		/* £ (pound) */
+	FNKEY(5, 1, KEY_F3),
+	FNKEY(5, 2, KEY_LEFTBRACE),
+	FNKEY(5, 3, KEY_F19),		/* " */
+	FNKEY(5, 4, KEY_SLASH),
+	FNKEY(6, 0, KEY_YEN),
+	FNKEY(6, 1, KEY_F2),
+	FNKEY(6, 2, KEY_F20),		/* @ */
+	FNKEY(6, 3, KEY_APOSTROPHE),
+	FNKEY(6, 4, KEY_F21),		/* : */
+	FNKEY(7, 0, KEY_ENTER),
+	FNKEY(7, 1, KEY_F1),
+	FNKEY(7, 2, KEY_ESC),
+	FNKEY(7, 3, KEY_CAPSLOCK),
+	FNKEY(7, 4, KEY_SEMICOLON),
 };
 
 static struct matrix_keymap_data board_map_data = {
