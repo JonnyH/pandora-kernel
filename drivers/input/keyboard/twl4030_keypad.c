@@ -52,7 +52,7 @@
 #define TWL4030_MAX_ROWS	8	/* TWL4030 hard limit */
 #define TWL4030_MAX_COLS	8
 #define TWL4030_ROW_SHIFT	3
-#define TWL4030_KEYMAP_SIZE	(TWL4030_MAX_ROWS * TWL4030_MAX_COLS)
+#define TWL4030_KEYMAP_SIZE	(TWL4030_MAX_ROWS * 2 * TWL4030_MAX_COLS)
 
 struct twl4030_keypad {
 	unsigned short	keymap[TWL4030_KEYMAP_SIZE];
@@ -60,6 +60,9 @@ struct twl4030_keypad {
 	unsigned	n_rows;
 	unsigned	n_cols;
 	unsigned	irq;
+
+	unsigned	fn_down:1;
+	unsigned	fn_sticked:1;
 
 	struct device *dbg_dev;
 	struct input_dev *input;
@@ -226,7 +229,8 @@ static void twl4030_kp_scan(struct twl4030_keypad *kp, bool release_all)
 			continue;
 
 		for (col = 0; col < kp->n_cols; col++) {
-			int code;
+			int code, kcode, is_down;
+			int code2;
 
 			if (!(changed & (1 << col)))
 				continue;
@@ -236,9 +240,34 @@ static void twl4030_kp_scan(struct twl4030_keypad *kp, bool release_all)
 				"press" : "release");
 
 			code = MATRIX_SCAN_CODE(row, col, TWL4030_ROW_SHIFT);
+			kcode = kp->keymap[code];
+			is_down = (new_state[row] & (1 << col)) ? 1 : 0;
+
+			dev_dbg(kp->dbg_dev, "code:     %d %d\n", code, kcode);
+			/* Fn handling */
+			if (kcode == KEY_FN) {
+				kp->fn_down = is_down;
+				kp->fn_sticked |= is_down;
+			} else if (kp->fn_down || kp->fn_sticked) {
+				/* make sure other function is up */
+				input_event(input, EV_MSC, MSC_SCAN, code);
+				input_report_key(input, kcode, 0);
+
+				code = MATRIX_SCAN_CODE(row + TWL4030_MAX_ROWS,
+					col, TWL4030_ROW_SHIFT);
+				kcode = kp->keymap[code];
+
+				kp->fn_sticked = 0;
+			} else {
+				code2 = MATRIX_SCAN_CODE(row + TWL4030_MAX_ROWS,
+					col, TWL4030_ROW_SHIFT);
+				input_event(input, EV_MSC, MSC_SCAN, code2);
+				input_report_key(input, kp->keymap[code2], 0);
+			}
+
+			dev_dbg(kp->dbg_dev, "code(fn): %d %d\n", code, kcode);
 			input_event(input, EV_MSC, MSC_SCAN, code);
-			input_report_key(input, kp->keymap[code],
-					 new_state[row] & (1 << col));
+			input_report_key(input, kcode, is_down);
 		}
 		kp->kp_state[row] = new_state[row];
 	}
@@ -363,7 +392,7 @@ static int __devinit twl4030_kp_probe(struct platform_device *pdev)
 
 	input_set_capability(input, EV_MSC, MSC_SCAN);
 
-	input->name		= "TWL4030 Keypad";
+	input->name		= "keypad";
 	input->phys		= "twl4030_keypad/input0";
 	input->dev.parent	= &pdev->dev;
 
