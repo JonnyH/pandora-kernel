@@ -26,6 +26,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/i2c/twl.h>
 #include <linux/leds.h>
+#include <linux/leds_pwm.h>
 #include <linux/input.h>
 #include <linux/input/matrix_keypad.h>
 #include <linux/gpio_keys.h>
@@ -80,6 +81,33 @@ static struct platform_device pandora_leds_gpio = {
 	.id	= -1,
 	.dev	= {
 		.platform_data	= &pandora_gpio_led_data,
+	},
+};
+
+static struct led_pwm pandora_pwm_leds[] = {
+	{
+		.name			= "pandora::keypad_bl",
+		.pwm_id			= 0, /* LEDA */
+	}, {
+		.name			= "pandora::power",
+		.pwm_id			= 1, /* LEDB */
+	}, {
+		.name			= "pandora::charger",
+		.default_trigger	= "twl4030_bci_battery-charging",
+		.pwm_id			= 3, /* PWM1 */
+	}
+};
+
+static struct led_pwm_platform_data pandora_pwm_led_data = {
+	.leds		= pandora_pwm_leds,
+	.num_leds	= ARRAY_SIZE(pandora_pwm_leds),
+};
+
+static struct platform_device pandora_leds_pwm = {
+	.name	= "leds-twl4030-pwm",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &pandora_pwm_led_data,
 	},
 };
 
@@ -684,6 +712,7 @@ fail:
 
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
+	&pandora_leds_pwm,
 	&pandora_bl,
 	&pandora_keys_gpio,
 	&pandora_dss_device,
