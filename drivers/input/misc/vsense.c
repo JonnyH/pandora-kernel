@@ -62,7 +62,7 @@ static void vsense_work(struct work_struct *work)
 	struct vsense_drvdata *ddata;
 	int ax = 0, ay = 0, rx = 0, ry = 0;
 	signed char buff[4];
-	int ret, l, r;
+	int ret, l, r, m, d;
 
 	ddata = container_of(work, struct vsense_drvdata, work.work);
 
@@ -100,26 +100,31 @@ dosync:
 		input_report_rel(ddata->input, REL_WHEEL, ay);
 		break;
 	case VSENSE_MODE_MBUTTONS:
-		l = r = 0;
-		if (ax <= -ddata->mbutton_threshold)
-			l = 1;
-		else if (ax >= ddata->mbutton_threshold)
-			r = 1;
-		if (ay >= ddata->mbutton_threshold) {
-			ddata->mbutton_stage++;
-			l = r = 0;
-			switch (ddata->mbutton_stage) {
+		d = m = l = r = 0;
+		if (abs(ay) > abs(ax)) {
+			if (ay >= ddata->mbutton_threshold) d = 1;
+			else if (ay <= -ddata->mbutton_threshold) d = 3;
+		} else {
+			if (ax >= ddata->mbutton_threshold) d = 2;
+			else if (ax <= -ddata->mbutton_threshold) d = 4;
+		}
+		if (d != 1) ddata->mbutton_stage = 0;
+		switch (d) {
 			case 1:
-			case 2:
-			case 5:
-			case 6:
+			ddata->mbutton_stage++;
+			switch (ddata->mbutton_stage) {
+				case 1: case 2: case 5: case 6:
 				l = 1;
 				break;
 			}
-		} else
-			ddata->mbutton_stage = 0;
+			break;
+			case 2:	r = 1; break;
+			case 3: m = 1; break;
+			case 4: l = 1; break;
+		}
 		input_report_key(ddata->input, BTN_LEFT, l);
 		input_report_key(ddata->input, BTN_RIGHT, r);
+		input_report_key(ddata->input, BTN_MIDDLE, m);
 		break;
 	default:
 		input_report_abs(ddata->input, ABS_X, ax * 8);
@@ -185,6 +190,7 @@ static int vsense_input_register(struct vsense_drvdata *ddata, int mode)
 		/* add fake buttons to fool X that this is a mouse */
 		input_set_capability(input, EV_KEY, BTN_LEFT);
 		input_set_capability(input, EV_KEY, BTN_RIGHT);
+		input_set_capability(input, EV_KEY, BTN_MIDDLE);
 	} else {
 		input->evbit[BIT_WORD(EV_ABS)] = BIT_MASK(EV_ABS);
 		input_set_abs_params(input, ABS_X, -256, 256, 0, 0);
