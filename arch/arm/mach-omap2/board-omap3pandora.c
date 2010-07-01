@@ -33,6 +33,8 @@
 #include <linux/spi/wl12xx.h>
 #include <linux/i2c/vsense.h>
 #include <linux/mmc/card.h>
+#include <linux/mtd/partitions.h>
+#include <linux/mtd/nand.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -45,6 +47,7 @@
 #include <plat/mcspi.h>
 #include <plat/usb.h>
 #include <plat/display.h>
+#include <plat/nand.h>
 
 #include "mux.h"
 #include "sdram-micron-mt46h32m32lf-6.h"
@@ -53,6 +56,42 @@
 #define PANDORA_WIFI_IRQ_GPIO		21
 #define PANDORA_WIFI_NRESET_GPIO	23
 #define OMAP3_PANDORA_TS_GPIO		94
+
+#define NAND_BLOCK_SIZE		SZ_128K
+
+static struct mtd_partition omap3pandora_nand_partitions[] = {
+	{
+		.name           = "xloader",
+		.offset         = 0,
+		.size           = 4 * NAND_BLOCK_SIZE,
+		.mask_flags     = MTD_WRITEABLE
+	}, {
+		.name           = "uboot",
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = 15 * NAND_BLOCK_SIZE,
+	}, {
+		.name           = "uboot-env",
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = 1 * NAND_BLOCK_SIZE,
+	}, {
+		.name           = "boot",
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = 80 * NAND_BLOCK_SIZE,
+	}, {
+		.name           = "rootfs",
+		.offset         = MTDPART_OFS_APPEND,
+		.size           = MTDPART_SIZ_FULL,
+	},
+};
+
+static struct omap_nand_platform_data pandora_nand_data = {
+	.cs		= 0,
+	.devsize	= 1,	/* '0' for 8-bit, '1' for 16-bit device */
+	.parts		= omap3pandora_nand_partitions,
+	.nr_parts	= ARRAY_SIZE(omap3pandora_nand_partitions),
+	.gpmc_baseaddr	= (void *)OMAP34XX_GPMC_VIRT,
+	.gpmc_cs_baseaddr = (void *)(OMAP34XX_GPMC_VIRT + 0x60), /* GPMC_CS0_BASE */
+};
 
 static struct gpio_led pandora_gpio_leds[] = {
 	{
@@ -774,6 +813,7 @@ static void __init omap3pandora_init(void)
 	omap3pandora_ads7846_init();
 	usb_ehci_init(&ehci_pdata);
 	usb_musb_init(&musb_board_data);
+	gpmc_nand_init(&pandora_nand_data);
 
 	/* Ensure SDRC pins are mux'd for self-refresh */
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
