@@ -31,6 +31,7 @@
 static int get_fclk(void)
 {
 	unsigned __iomem *base;
+	unsigned n, m, m2;
 	unsigned ret;
 
 	base = ioremap(0x48004000, 0x2000);
@@ -39,19 +40,19 @@ static int get_fclk(void)
 		return -1;
 	}
 
-	ret = base[0x940>>2];
+	ret = base[0x940 >> 2];
 	iounmap(base);
 
-	if ((ret & ~0x7ff00) != 0x10000c) {
-		printk(KERN_ERR "get_fclk: unexpected CM_CLKSEL1_PLL_MPU: "
-				"%08x\n", ret);
+	n = ret & 0xff;
+	m = (ret >> 8) & 0x7ff;
+	m2 = (ret >> 19) & 7;
+
+	if (m2 != 1 && m2 != 2 && m2 != 4) {
+		printk(KERN_ERR "get_fclk: invalid divider %d\n", m2);
 		return -1;
 	}
 
-	ret &= 0x7ff00;
-	ret >>= 8;
-
-	return (int)ret;
+	return 26 * m / ((n + 1) * m2);
 }
 
 static void set_fclk(int val)
