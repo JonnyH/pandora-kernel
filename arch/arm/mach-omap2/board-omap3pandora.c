@@ -594,6 +594,48 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&wl1251_cd_device,
 };
 
+#define PANDORA_USBOC_GPIO	163
+
+#include <linux/interrupt.h>
+
+static irqreturn_t pandora_usboc_isr(int irq, void *dev_id)
+{
+	pr_err("Warning: USB host port overcurrent occured?\n");
+	return IRQ_HANDLED;
+}
+
+static void __init pandora_usboc_init(void)
+{
+	int ret, irq;
+
+	ret = gpio_request(PANDORA_USBOC_GPIO, "usb_nOC");
+	if (ret < 0) {
+		pr_err("usboc: failed to request GPIO, ret=%d\n", ret);
+		goto fail_request;
+	}
+
+	ret = gpio_direction_input(PANDORA_USBOC_GPIO);
+	if (ret < 0)
+		goto fail_direction;
+
+	irq = gpio_to_irq(PANDORA_USBOC_GPIO);
+	if (irq < 0)
+		goto fail_irq;
+
+	ret = request_irq(irq, pandora_usboc_isr, IRQF_TRIGGER_FALLING,
+			"usb_nOC", NULL);
+	if (irq < 0)
+		goto fail_irq;
+
+	return;
+
+fail_irq:
+fail_direction:
+	gpio_free(PANDORA_USBOC_GPIO);
+fail_request:
+	pr_err("usboc: failed to init.\n");
+}
+
 static void __init omap3pandora_init(void)
 {
 	omap3pandora_i2c_init();
@@ -610,6 +652,7 @@ static void __init omap3pandora_init(void)
 	usb_ehci_init();
 	omap3pandora_flash_init();
 	omap3pandora_ads7846_init();
+	pandora_usboc_init();
 }
 
 static void __init omap3pandora_map_io(void)
