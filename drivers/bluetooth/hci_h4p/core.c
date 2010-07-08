@@ -355,11 +355,6 @@ static void hci_h4p_rx_tasklet(unsigned long data)
 
 	NBT_DBG_TRANSFER("rx tasklet\n");
 
-	if (info->rx_skb != NULL && info->rx_timed_out) {
-		kfree_skb(info->rx_skb);
-		info->rx_skb = NULL;
-	}
-	info->rx_timed_out = 0;
 	info->rx_calls++;
 
 	while (hci_h4p_inb(info, UART_LSR) & UART_LSR_DR) {
@@ -468,15 +463,6 @@ static void hci_h4p_tx_tasklet(unsigned long data)
 	}
 
 	NBT_DBG("tx %p %d bytes\n", skb, skb->len);
-
-	/* there hould be no rx in progress at this point */
-	if (info->rx_skb != NULL) {
-		dev_err(info->dev, "Receive timed out, %i done, %li left, "
-			"LSR=%02x, IER=%02x\n", info->rx_skb->len + 1,
-			info->rx_count, hci_h4p_inb(info, UART_LSR),
-			hci_h4p_inb(info, UART_IER));
-		info->rx_timed_out = 1;
-	}
 
 	/* Copy data to tx fifo */
 	while (!(hci_h4p_inb(info, UART_OMAP_SSR) & UART_OMAP_SSR_TXFULL) &&

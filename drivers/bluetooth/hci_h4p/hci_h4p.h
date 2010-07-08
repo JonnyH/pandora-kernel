@@ -89,7 +89,6 @@ struct hci_h4p_info {
 	int fw_error;
 	int init_error;
 
-	int rx_timed_out;
 	int rx_calls;
 
 	struct sk_buff_head txq;
