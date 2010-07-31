@@ -10,6 +10,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/workqueue.h>
 #include <linux/platform_device.h>
 #include <linux/leds.h>
 #include <linux/leds_pwm.h>
@@ -43,9 +44,11 @@ enum twl4030_led {
 struct twl4030_pwmled {
 	struct led_classdev cdev;
 	void (*enable)(enum twl4030_led led, bool enable);
+	enum led_brightness new_brightness;
 	enum led_brightness old_brightness;
 	enum twl4030_led id;
 	int module;
+	struct work_struct work;
 };
 
 static int twl4030_clear_set(u8 mod_no, u8 clear, u8 set, u8 reg)
@@ -108,21 +111,20 @@ static void twl4030_enable_pwm01(enum twl4030_led led, bool enable)
 	twl4030_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
 }
 
-static void twl4030_pwmled_brightness(struct led_classdev *cdev,
-		enum led_brightness b)
+static void twl4030_pwmled_work(struct work_struct *work)
 {
 	struct twl4030_pwmled *led;
 	int val;
 
-	led = container_of(cdev, struct twl4030_pwmled, cdev);
+	led = container_of(work, struct twl4030_pwmled, work);
 
-	if (b == LED_OFF) {
+	if (led->new_brightness == LED_OFF) {
 		if (led->old_brightness != LED_OFF)
 			led->enable(led->id, 0);
 		goto out;
 	}
 
-	val = b * 0x7f / LED_FULL;
+	val = led->new_brightness * 0x7f / LED_FULL;
 	/* avoid 0: on = off = 0 means full brightness */
 	if (val == 0)
 		val = 1;
@@ -133,7 +135,17 @@ static void twl4030_pwmled_brightness(struct led_classdev *cdev,
 		led->enable(led->id, 1);
 
 out:
-	led->old_brightness = b;
+	led->old_brightness = led->new_brightness;
+}
+
+static void twl4030_pwmled_brightness(struct led_classdev *cdev,
+		enum led_brightness b)
+{
+	struct twl4030_pwmled *led;
+
+	led = container_of(cdev, struct twl4030_pwmled, cdev);
+	led->new_brightness = b;
+	schedule_work(&led->work);
 }
 
 static int __devinit twl4030_pwmled_probe(struct platform_device *pdev)
@@ -188,6 +200,7 @@ static int __devinit twl4030_pwmled_probe(struct platform_device *pdev)
 			ret = -ENODEV;
 			goto err;
 		}
+		INIT_WORK(&led->work, twl4030_pwmled_work);
 
 		twl4030_i2c_write_u8(led->module, 0, TWL4030_PWMx_PWMxON);
 
@@ -216,8 +229,10 @@ static int __devexit twl4030_pwmled_remove(struct platform_device *pdev)
 
 	leds = platform_get_drvdata(pdev);
 
-	for (i = 0; i < pdata->num_leds; i++)
+	for (i = 0; i < pdata->num_leds; i++) {
 		led_classdev_unregister(&leds[i].cdev);
+		cancel_work_sync(&leds[i].work);
+	}
 
 	kfree(leds);
 	platform_set_drvdata(pdev, NULL);
