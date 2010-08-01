@@ -15,12 +15,62 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/i2c/twl4030.h>
 
 #ifndef CONFIG_PROC_FS
 #error need CONFIG_PROC_FS
 #endif
 
 #define PND_PROC_CPUMHZ		"pandora/cpu_mhz_max"
+
+static int opp;
+
+static void set_opp(int nopp)
+{
+	static const unsigned char opp2volt[5] = { 30, 38, 48, 54, 60 };
+	unsigned char v, ov;
+
+	if (nopp>5) nopp=5;
+	if (nopp<1) nopp=1;
+	v = opp2volt[nopp-1];
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, v, 0x5E);
+
+	ov = opp2volt[opp-1];
+	/*
+	 * Rationale: Slowest slew rate of the TPS65950 SMPS is 4 mV/us.
+	 * Each unit is 12.5mV, resulting in 3.125us/unit.
+	 * Rounded up for a safe 4us/unit.
+	*/
+	udelay(abs(v - ov) * 4);
+
+	opp = nopp;
+	printk(KERN_INFO "set_opp: OPP %d set\n", opp);
+}
+
+static int mhz2opp(int mhz)
+{
+	int new_opp=1;
+	if (mhz<14) new_opp=3; /* Guard against -1 */
+	if (mhz>125) new_opp=2;
+	if (mhz>250) new_opp=3;
+	if (mhz>600) new_opp=4; /* Assumption: current pandoras OK with 600Mhz@OPP3 */
+	if (mhz>720) new_opp=5;
+	return new_opp;
+}
+
+static void preop_oppset(int mhz)
+{
+	int new_opp = mhz2opp(mhz);
+	if (new_opp > opp)
+		set_opp(new_opp);
+}
+
+static void postop_oppset(int mhz)
+{
+	int new_opp = mhz2opp(mhz);
+	if (new_opp < opp)
+		set_opp(new_opp);
+}
 
 /*
  * note:
@@ -73,6 +123,7 @@ static void set_fclk(int val)
 		return;
 	}
 
+	preop_oppset(val);
 	ret = clk_set_rate(pllclk, val * 1000000);
 	if (ret)
 		printk(KERN_ERR "set_fclk: clk_set_rate(dpll1_ck) "
@@ -89,6 +140,7 @@ static void set_fclk(int val)
 	}
 
 	printk(KERN_INFO "PLL_MPU  rate: %i\n", get_fclk() * 1000000);
+	postop_oppset(val);
 }
 
 static int cpu_clk_read(char *page, char **start, off_t off, int count,
@@ -138,6 +190,8 @@ static int pndctrl_init(void)
 	struct proc_dir_entry *pret;
 	int ret = -ENOMEM;
 
+	opp = mhz2opp(get_fclk());
+
 	pret = create_proc_entry(PND_PROC_CPUMHZ, S_IWUSR | S_IRUGO, NULL);
 	if (pret == NULL) {
 		proc_mkdir("pandora", NULL);
@@ -153,7 +207,6 @@ static int pndctrl_init(void)
 	pret->write_proc = cpu_clk_write;
 
 	printk(KERN_INFO "pndctrl loaded.\n");
-
 	return 0;
 }
 
