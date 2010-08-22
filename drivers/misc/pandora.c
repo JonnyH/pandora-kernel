@@ -22,7 +22,9 @@
 #endif
 
 #define PND_PROC_CPUMHZ		"pandora/cpu_mhz_max"
+#define PND_PROC_CPUOPP		"pandora/cpu_opp_max"
 
+static int max_allowed_opp = 3; /* 3 on ED's request */
 static int opp;
 
 static void set_opp(int nopp)
@@ -55,6 +57,10 @@ static int mhz2opp(int mhz)
 	if (mhz>250) new_opp=3;
 	if (mhz>600) new_opp=4; /* Assumption: current pandoras OK with 600Mhz@OPP3 */
 	if (mhz>720) new_opp=5;
+
+	if (max_allowed_opp > 0 && new_opp > max_allowed_opp)
+		new_opp = max_allowed_opp;
+
 	return new_opp;
 }
 
@@ -143,13 +149,13 @@ static void set_fclk(int val)
 	postop_oppset(val);
 }
 
-static int cpu_clk_read(char *page, char **start, off_t off, int count,
-		int *eof, void *data)
+static int proc_read_val(char *page, char **start, off_t off, int count,
+		int *eof, int val)
 {
 	char *p = page;
 	int len;
 
-	p += sprintf(p, "%d\n", get_fclk());
+	p += sprintf(p, "%d\n", val);
 
 	len = (p - page) - off;
 	if (len < 0)
@@ -161,50 +167,96 @@ static int cpu_clk_read(char *page, char **start, off_t off, int count,
 	return len;
 }
 
-static int cpu_clk_write(struct file *file, const char __user *buffer,
-		unsigned long count, void *data)
+static int proc_write_val(struct file *file, const char __user *buffer,
+		unsigned long count, unsigned long *val)
 {
 	char buff[32];
-	unsigned long val;
 	int ret;
 
 	count = strncpy_from_user(buff, buffer,
 			count < sizeof(buff) ? count : sizeof(buff) - 1);
 	buff[count] = 0;
 
-	ret = strict_strtoul(buff, 0, &val);
+	ret = strict_strtoul(buff, 0, val);
 	if (ret < 0) {
 		printk(KERN_ERR "error %i parsing %s\n", ret, buff);
 		return ret;
 	}
 
-	set_fclk(val);
-
 	return count;
+}
+
+static int cpu_clk_read(char *page, char **start, off_t off, int count,
+		int *eof, void *data)
+{
+	return proc_read_val(page, start, off, count, eof, get_fclk());
+}
+
+static int cpu_clk_write(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
+{
+	unsigned long val;
+	int ret;
+
+	ret = proc_write_val(file, buffer, count, &val);
+	if (ret < 0)
+		return ret;
+
+	set_fclk(val);
+	return ret;
+}
+
+static int cpu_maxopp_read(char *page, char **start, off_t off, int count,
+		int *eof, void *data)
+{
+	return proc_read_val(page, start, off, count, eof, max_allowed_opp);
+}
+
+static int cpu_maxopp_write(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
+{
+	unsigned long val;
+	int ret;
+
+	ret = proc_write_val(file, buffer, count, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val < 1 || val > 6)
+		return -EINVAL;
+
+	max_allowed_opp = val;
+	return ret;
+}
+
+static void proc_create_rw(const char *name, void *pdata,
+			   read_proc_t *read_proc, write_proc_t *write_proc)
+{
+	struct proc_dir_entry *pret;
+	
+	pret = create_proc_entry(name, S_IWUGO | S_IRUGO, NULL);
+	if (pret == NULL) {
+		proc_mkdir("pandora", NULL);
+		pret = create_proc_entry(name, S_IWUGO | S_IRUGO, NULL);
+		if (pret == NULL) {
+			printk(KERN_ERR "failed to create proc file %s\n", name);
+			return;
+		}
+	}
+
+	pret->data = pdata;
+	pret->read_proc = read_proc;
+	pret->write_proc = write_proc;
 }
 
 /* ************************************************************************* */
 
 static int pndctrl_init(void)
 {
-	struct proc_dir_entry *pret;
-	int ret = -ENOMEM;
-
 	opp = mhz2opp(get_fclk());
 
-	pret = create_proc_entry(PND_PROC_CPUMHZ, S_IWUSR | S_IRUGO, NULL);
-	if (pret == NULL) {
-		proc_mkdir("pandora", NULL);
-		pret = create_proc_entry(PND_PROC_CPUMHZ,
-					S_IWUSR | S_IRUGO, NULL);
-		if (pret == NULL) {
-			printk(KERN_ERR "can't create proc entry\n");
-			return ret;
-		}
-	}
-
-	pret->read_proc = cpu_clk_read;
-	pret->write_proc = cpu_clk_write;
+	proc_create_rw(PND_PROC_CPUMHZ, NULL, cpu_clk_read, cpu_clk_write);
+	proc_create_rw(PND_PROC_CPUOPP, NULL, cpu_maxopp_read, cpu_maxopp_write);
 
 	printk(KERN_INFO "pndctrl loaded.\n");
 	return 0;
@@ -213,6 +265,7 @@ static int pndctrl_init(void)
 
 static void pndctrl_cleanup(void)
 {
+	remove_proc_entry(PND_PROC_CPUOPP, NULL);
 	remove_proc_entry(PND_PROC_CPUMHZ, NULL);
 	printk(KERN_INFO "pndctrl unloaded.\n");
 }
