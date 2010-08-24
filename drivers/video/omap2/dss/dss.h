@@ -316,6 +316,19 @@ void dispc_setup_partial_planes(struct omap_display *display,
 				u16 *x, u16 *y, u16 *w, u16 *h);
 void dispc_draw_partial_planes(struct omap_display *display);
 
+enum omap_filter {
+	OMAP_DSS_FILTER_UP_H,
+	OMAP_DSS_FILTER_UP_V3,
+	OMAP_DSS_FILTER_UP_V5,
+	OMAP_DSS_FILTER_DOWN_H,
+	OMAP_DSS_FILTER_DOWN_V3,
+	OMAP_DSS_FILTER_DOWN_V5,
+};
+void dispc_get_scale_coef_phase(enum omap_plane plane, enum omap_filter filter,
+		int phase, int *vals);
+void dispc_set_scale_coef_phase(enum omap_plane plane, enum omap_filter filter,
+		int phase, const int *vals);
+
 
 /* VENC */
 int venc_init(void);

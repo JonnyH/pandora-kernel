@@ -558,79 +558,79 @@ static void _dispc_write_firv_reg(enum omap_plane plane, int reg, u32 value)
 	dispc_write_reg(DISPC_VID_FIR_COEF_V(plane-1, reg), value);
 }
 
+/* Coefficients for horizontal up-sampling */
+static struct dispc_h_coef coef_hup[8] = {
+	{  0,   0, 128,   0,  0 },
+	{ -1,  13, 124,  -8,  0 },
+	{ -2,  30, 112, -11, -1 },
+	{ -5,  51,  95, -11, -2 },
+	{  0,  -9,  73,  73, -9 },
+	{ -2, -11,  95,  51, -5 },
+	{ -1, -11, 112,  30, -2 },
+	{  0,  -8, 124,  13, -1 },
+};
+
+/* Coefficients for vertical up-sampling */
+static struct dispc_v_coef coef_vup_3tap[8] = {
+	{ 0,  0, 128,  0, 0 },
+	{ 0,  3, 123,  2, 0 },
+	{ 0, 12, 111,  5, 0 },
+	{ 0, 32,  89,  7, 0 },
+	{ 0,  0,  64, 64, 0 },
+	{ 0,  7,  89, 32, 0 },
+	{ 0,  5, 111, 12, 0 },
+	{ 0,  2, 123,  3, 0 },
+};
+
+static struct dispc_v_coef coef_vup_5tap[8] = {
+	{  0,   0, 128,   0,  0 },
+	{ -1,  13, 124,  -8,  0 },
+	{ -2,  30, 112, -11, -1 },
+	{ -5,  51,  95, -11, -2 },
+	{  0,  -9,  73,  73, -9 },
+	{ -2, -11,  95,  51, -5 },
+	{ -1, -11, 112,  30, -2 },
+	{  0,  -8, 124,  13, -1 },
+};
+
+/* Coefficients for horizontal down-sampling */
+static struct dispc_h_coef coef_hdown[8] = {
+	{   0, 36, 56, 36,  0 },
+	{   4, 40, 55, 31, -2 },
+	{   8, 44, 54, 27, -5 },
+	{  12, 48, 53, 22, -7 },
+	{  -9, 17, 52, 51, 17 },
+	{  -7, 22, 53, 48, 12 },
+	{  -5, 27, 54, 44,  8 },
+	{  -2, 31, 55, 40,  4 },
+};
+
+/* Coefficients for vertical down-sampling */
+static struct dispc_v_coef coef_vdown_3tap[8] = {
+	{ 0, 36, 56, 36, 0 },
+	{ 0, 40, 57, 31, 0 },
+	{ 0, 45, 56, 27, 0 },
+	{ 0, 50, 55, 23, 0 },
+	{ 0, 18, 55, 55, 0 },
+	{ 0, 23, 55, 50, 0 },
+	{ 0, 27, 56, 45, 0 },
+	{ 0, 31, 57, 40, 0 },
+};
+
+static struct dispc_v_coef coef_vdown_5tap[8] = {
+	{   0, 36, 56, 36,  0 },
+	{   4, 40, 55, 31, -2 },
+	{   8, 44, 54, 27, -5 },
+	{  12, 48, 53, 22, -7 },
+	{  -9, 17, 52, 51, 17 },
+	{  -7, 22, 53, 48, 12 },
+	{  -5, 27, 54, 44,  8 },
+	{  -2, 31, 55, 40,  4 },
+};
+
 static void _dispc_set_scale_coef(enum omap_plane plane, int hscaleup,
 		int vscaleup, int five_taps)
 {
-	/* Coefficients for horizontal up-sampling */
-	static const struct dispc_h_coef coef_hup[8] = {
-		{  0,   0, 128,   0,  0 },
-		{ -1,  13, 124,  -8,  0 },
-		{ -2,  30, 112, -11, -1 },
-		{ -5,  51,  95, -11, -2 },
-		{  0,  -9,  73,  73, -9 },
-		{ -2, -11,  95,  51, -5 },
-		{ -1, -11, 112,  30, -2 },
-		{  0,  -8, 124,  13, -1 },
-	};
-
-	/* Coefficients for vertical up-sampling */
-	static const struct dispc_v_coef coef_vup_3tap[8] = {
-		{ 0,  0, 128,  0, 0 },
-		{ 0,  3, 123,  2, 0 },
-		{ 0, 12, 111,  5, 0 },
-		{ 0, 32,  89,  7, 0 },
-		{ 0,  0,  64, 64, 0 },
-		{ 0,  7,  89, 32, 0 },
-		{ 0,  5, 111, 12, 0 },
-		{ 0,  2, 123,  3, 0 },
-	};
-
-	static const struct dispc_v_coef coef_vup_5tap[8] = {
-		{  0,   0, 128,   0,  0 },
-		{ -1,  13, 124,  -8,  0 },
-		{ -2,  30, 112, -11, -1 },
-		{ -5,  51,  95, -11, -2 },
-		{  0,  -9,  73,  73, -9 },
-		{ -2, -11,  95,  51, -5 },
-		{ -1, -11, 112,  30, -2 },
-		{  0,  -8, 124,  13, -1 },
-	};
-
-	/* Coefficients for horizontal down-sampling */
-	static const struct dispc_h_coef coef_hdown[8] = {
-		{   0, 36, 56, 36,  0 },
-		{   4, 40, 55, 31, -2 },
-		{   8, 44, 54, 27, -5 },
-		{  12, 48, 53, 22, -7 },
-		{  -9, 17, 52, 51, 17 },
-		{  -7, 22, 53, 48, 12 },
-		{  -5, 27, 54, 44,  8 },
-		{  -2, 31, 55, 40,  4 },
-	};
-
-	/* Coefficients for vertical down-sampling */
-	static const struct dispc_v_coef coef_vdown_3tap[8] = {
-		{ 0, 36, 56, 36, 0 },
-		{ 0, 40, 57, 31, 0 },
-		{ 0, 45, 56, 27, 0 },
-		{ 0, 50, 55, 23, 0 },
-		{ 0, 18, 55, 55, 0 },
-		{ 0, 23, 55, 50, 0 },
-		{ 0, 27, 56, 45, 0 },
-		{ 0, 31, 57, 40, 0 },
-	};
-
-	static const struct dispc_v_coef coef_vdown_5tap[8] = {
-		{   0, 36, 56, 36,  0 },
-		{   4, 40, 55, 31, -2 },
-		{   8, 44, 54, 27, -5 },
-		{  12, 48, 53, 22, -7 },
-		{  -9, 17, 52, 51, 17 },
-		{  -7, 22, 53, 48, 12 },
-		{  -5, 27, 54, 44,  8 },
-		{  -2, 31, 55, 40,  4 },
-	};
-
 	const struct dispc_h_coef *h_coef;
 	const struct dispc_v_coef *v_coef;
 	int i;
@@ -669,6 +669,68 @@ static void _dispc_set_scale_coef(enum omap_plane plane, int hscaleup,
 			_dispc_write_firv_reg(plane, i, v);
 		}
 	}
+}
+
+static struct dispc_h_coef *dispc_get_scale_coef_table(enum omap_plane plane,
+		enum omap_filter filter)
+{
+	switch (filter) {
+	case OMAP_DSS_FILTER_UP_H:
+		return coef_hup;
+	case OMAP_DSS_FILTER_UP_V3:
+		/* XXX: relying on fact that h and v tables have same layout */
+		return (void *)coef_vup_3tap;
+	case OMAP_DSS_FILTER_UP_V5:
+		return (void *)coef_vup_5tap;
+	case OMAP_DSS_FILTER_DOWN_H:
+		return coef_hdown;
+	case OMAP_DSS_FILTER_DOWN_V3:
+		return (void *)coef_vdown_3tap;
+	case OMAP_DSS_FILTER_DOWN_V5:
+		return (void *)coef_vdown_5tap;
+	default:
+		return NULL;
+	}
+}
+
+void dispc_get_scale_coef_phase(enum omap_plane plane, enum omap_filter filter,
+		int phase, int *vals)
+{
+	const struct dispc_h_coef *table;
+
+	if (phase < 0 || phase >= 8)
+		return;
+
+	table = dispc_get_scale_coef_table(plane, filter);
+	if (table == NULL)
+		return;
+
+	table += phase;
+	vals[0] = table->hc4;
+	vals[1] = table->hc3;
+	vals[2] = table->hc2;
+	vals[3] = table->hc1;
+	vals[4] = table->hc0;
+}
+
+void dispc_set_scale_coef_phase(enum omap_plane plane, enum omap_filter filter,
+		int phase, const int *vals)
+{
+	struct dispc_h_coef *table;
+
+	if (phase < 0 || phase >= 8)
+		return;
+
+	table = dispc_get_scale_coef_table(plane, filter);
+	if (table == NULL)
+		return;
+
+	table += phase;
+	table->hc4 = vals[0];
+	table->hc3 = vals[1];
+	table->hc2 = vals[2];
+	table->hc1 = vals[3];
+	table->hc0 = vals[4];
 }
 
 static void _dispc_setup_color_conv_coef(void)

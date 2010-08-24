@@ -225,6 +225,88 @@ static ssize_t overlay_global_alpha_store(struct omap_overlay *ovl,
 	return size;
 }
 
+static ssize_t overlay_filter_coef_show(struct omap_overlay *ovl, char *buf,
+		int which)
+{
+	ssize_t ret, len = 0;
+	int vals[5];
+	int i;
+
+	for (i = 0; i < 8; i++) {
+		dispc_get_scale_coef_phase(ovl->id, which, i, vals);
+		ret = snprintf(buf, PAGE_SIZE - len, "%3d %3d %3d %3d %3d\n",
+				vals[0], vals[1], vals[2], vals[3], vals[4]);
+		buf += ret;
+		len += ret;
+	}
+
+	return len;
+}
+
+static ssize_t overlay_filter_coef_store(struct omap_overlay *ovl,
+		const char *buf, size_t size, int which)
+{
+	const char *p;
+	int vals[8][5];
+	int i, ret;
+
+	p = buf;
+	for (i = 0; i < 8; i++) {
+		ret = sscanf(p, "%d %d %d %d %d\n", &vals[i][0], &vals[i][1],
+			&vals[i][2], &vals[i][3], &vals[i][4]);
+		if (ret != 5) {
+			DSSWARN("parse err, line %d, ret %d\n", i, ret);
+			return -EINVAL;
+		}
+
+		while (*p != 0 && *p != '\n')
+			p++;
+		if (*p == '\n')
+			p++;
+	}
+
+	for (i = 0; i < 8; i++)
+		dispc_set_scale_coef_phase(ovl->id, which, i, &vals[i][0]);
+
+	if (ovl->manager && (ret = ovl->manager->apply(ovl->manager, 0)))
+		return ret;
+
+	return size;
+}
+
+static ssize_t overlay_filter_coef_up_h_show(struct omap_overlay *ovl, char *buf)
+{
+	return overlay_filter_coef_show(ovl, buf, OMAP_DSS_FILTER_UP_H);
+}
+
+static ssize_t overlay_filter_coef_up_h_store(struct omap_overlay *ovl,
+		const char *buf, size_t size)
+{
+	return overlay_filter_coef_store(ovl, buf, size, OMAP_DSS_FILTER_UP_H);
+}
+
+static ssize_t overlay_filter_coef_up_v3_show(struct omap_overlay *ovl, char *buf)
+{
+	return overlay_filter_coef_show(ovl, buf, OMAP_DSS_FILTER_UP_V3);
+}
+
+static ssize_t overlay_filter_coef_up_v3_store(struct omap_overlay *ovl,
+		const char *buf, size_t size)
+{
+	return overlay_filter_coef_store(ovl, buf, size, OMAP_DSS_FILTER_UP_V3);
+}
+
+static ssize_t overlay_filter_coef_up_v5_show(struct omap_overlay *ovl, char *buf)
+{
+	return overlay_filter_coef_show(ovl, buf, OMAP_DSS_FILTER_UP_V5);
+}
+
+static ssize_t overlay_filter_coef_up_v5_store(struct omap_overlay *ovl,
+		const char *buf, size_t size)
+{
+	return overlay_filter_coef_store(ovl, buf, size, OMAP_DSS_FILTER_UP_V5);
+}
+
 struct overlay_attribute {
 	struct attribute attr;
 	ssize_t (*show)(struct omap_overlay *, char *);
@@ -248,6 +330,12 @@ static OVERLAY_ATTR(enabled, S_IRUGO|S_IWUSR,
 		overlay_enabled_show, overlay_enabled_store);
 static OVERLAY_ATTR(global_alpha, S_IRUGO|S_IWUSR,
 		overlay_global_alpha_show, overlay_global_alpha_store);
+static OVERLAY_ATTR(filter_coef_up_h, S_IRUGO|S_IWUSR,
+		overlay_filter_coef_up_h_show, overlay_filter_coef_up_h_store);
+static OVERLAY_ATTR(filter_coef_up_v3, S_IRUGO|S_IWUSR,
+		overlay_filter_coef_up_v3_show, overlay_filter_coef_up_v3_store);
+static OVERLAY_ATTR(filter_coef_up_v5, S_IRUGO|S_IWUSR,
+		overlay_filter_coef_up_v5_show, overlay_filter_coef_up_v5_store);
 
 static struct attribute *overlay_sysfs_attrs[] = {
 	&overlay_attr_name.attr,
@@ -258,6 +346,9 @@ static struct attribute *overlay_sysfs_attrs[] = {
 	&overlay_attr_output_size.attr,
 	&overlay_attr_enabled.attr,
 	&overlay_attr_global_alpha.attr,
+	&overlay_attr_filter_coef_up_h.attr,
+	&overlay_attr_filter_coef_up_v3.attr,
+	&overlay_attr_filter_coef_up_v5.attr,
 	NULL
 };
 
