@@ -444,6 +444,20 @@ int dispc_mgr_set_clock_div(enum omap_channel channel,
 int dispc_mgr_get_clock_div(enum omap_channel channel,
 		struct dispc_clock_info *cinfo);
 
+enum omap_filter {
+	OMAP_DSS_FILTER_UP_H,
+	OMAP_DSS_FILTER_UP_V3,
+	OMAP_DSS_FILTER_UP_V5,
+	OMAP_DSS_FILTER_DOWN_H,
+	OMAP_DSS_FILTER_DOWN_V3,
+	OMAP_DSS_FILTER_DOWN_V5,
+};
+void dispc_get_scale_coef_phase(enum omap_plane plane, enum omap_filter filter,
+		int phase, int *vals);
+void dispc_set_scale_coef_phase(enum omap_plane plane, enum omap_filter filter,
+		int phase, const int *vals);
+
+
 /* VENC */
 #ifdef CONFIG_OMAP2_DSS_VENC
 int venc_init_platform_driver(void);
