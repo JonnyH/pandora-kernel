@@ -95,9 +95,6 @@ struct omapfb_colormode {
 	struct fb_bitfield transp;
 };
 
-u32 omapfb_get_region_paddr(struct omapfb_info *ofbi);
-void __iomem *omapfb_get_region_vaddr(struct omapfb_info *ofbi);
-
 void set_fb_fix(struct fb_info *fbi);
 int check_fb_var(struct fb_info *fbi, struct fb_var_screeninfo *var);
 int omapfb_realloc_fbmem(struct fb_info *fbi, unsigned long size, int type);

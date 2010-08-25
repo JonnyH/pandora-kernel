@@ -37,6 +37,9 @@
 
 #define MODULE_NAME     "omapfb"
 
+#define OMAPFB_PLANE_XRES_MIN		8
+#define OMAPFB_PLANE_YRES_MIN		8
+
 static char *def_mode;
 static char *def_vram;
 static int def_vrfb;
@@ -174,17 +177,17 @@ static unsigned omapfb_get_vrfb_offset(struct omapfb_info *ofbi, int rot)
 	return offset;
 }
 
-static u32 omapfb_get_region_rot_paddr(struct omapfb_info *ofbi)
+static u32 omapfb_get_region_rot_paddr(struct omapfb_info *ofbi, int rot)
 {
 	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB) {
-		return ofbi->region.vrfb.paddr[ofbi->rotation]
-			+ omapfb_get_vrfb_offset(ofbi, ofbi->rotation);
+		return ofbi->region.vrfb.paddr[rot]
+			+ omapfb_get_vrfb_offset(ofbi, rot);
 	} else {
 		return ofbi->region.paddr;
 	}
 }
 
-u32 omapfb_get_region_paddr(struct omapfb_info *ofbi)
+static u32 omapfb_get_region_paddr(struct omapfb_info *ofbi)
 {
 	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB)
 		return ofbi->region.vrfb.paddr[0];
@@ -192,7 +195,7 @@ u32 omapfb_get_region_paddr(struct omapfb_info *ofbi)
 		return ofbi->region.paddr;
 }
 
-void __iomem *omapfb_get_region_vaddr(struct omapfb_info *ofbi)
+static void __iomem *omapfb_get_region_vaddr(struct omapfb_info *ofbi)
 {
 	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB)
 		return ofbi->region.vrfb.vaddr[0];
@@ -295,7 +298,8 @@ static void assign_colormode_to_var(struct fb_var_screeninfo *var,
 	var->transp = color->transp;
 }
 
-static enum omap_color_mode fb_mode_to_dss_mode(struct fb_var_screeninfo *var)
+static int fb_mode_to_dss_mode(struct fb_var_screeninfo *var,
+		enum omap_color_mode *mode)
 {
 	enum omap_color_mode dssmode;
 	int i;
@@ -303,10 +307,11 @@ static enum omap_color_mode fb_mode_to_dss_mode(struct fb_var_screeninfo *var)
 	/* first match with nonstd field */
 	if (var->nonstd) {
 		for (i = 0; i < ARRAY_SIZE(omapfb_colormodes); ++i) {
-			struct omapfb_colormode *mode = &omapfb_colormodes[i];
-			if (var->nonstd == mode->nonstd) {
-				assign_colormode_to_var(var, mode);
-				return mode->dssmode;
+			struct omapfb_colormode *m = &omapfb_colormodes[i];
+			if (var->nonstd == m->nonstd) {
+				assign_colormode_to_var(var, m);
+				*mode = m->dssmode;
+				return 0;
 			}
 		}
 
@@ -315,10 +320,11 @@ static enum omap_color_mode fb_mode_to_dss_mode(struct fb_var_screeninfo *var)
 
 	/* then try exact match of bpp and colors */
 	for (i = 0; i < ARRAY_SIZE(omapfb_colormodes); ++i) {
-		struct omapfb_colormode *mode = &omapfb_colormodes[i];
-		if (cmp_var_to_colormode(var, mode)) {
-			assign_colormode_to_var(var, mode);
-			return mode->dssmode;
+		struct omapfb_colormode *m = &omapfb_colormodes[i];
+		if (cmp_var_to_colormode(var, m)) {
+			assign_colormode_to_var(var, m);
+			*mode = m->dssmode;
+			return 0;
 		}
 	}
 
@@ -354,18 +360,109 @@ static enum omap_color_mode fb_mode_to_dss_mode(struct fb_var_screeninfo *var)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(omapfb_colormodes); ++i) {
-		struct omapfb_colormode *mode = &omapfb_colormodes[i];
-		if (dssmode == mode->dssmode) {
-			assign_colormode_to_var(var, mode);
-			return mode->dssmode;
+		struct omapfb_colormode *m = &omapfb_colormodes[i];
+		if (dssmode == m->dssmode) {
+			assign_colormode_to_var(var, m);
+			*mode = m->dssmode;
+			return 0;
 		}
 	}
 
 	return -EINVAL;
 }
 
-static int dss_mode_to_fb_mode(enum omap_color_mode dssmode,
-			       struct fb_var_screeninfo *var)
+static int check_fb_res_bounds(struct fb_var_screeninfo *var)
+{
+	int xres_min = OMAPFB_PLANE_XRES_MIN;
+	int xres_max = 2048;
+	int yres_min = OMAPFB_PLANE_YRES_MIN;
+	int yres_max = 2048;
+
+	/* XXX: some applications seem to set virtual res to 0. */
+	if (var->xres_virtual == 0)
+		var->xres_virtual = var->xres;
+
+	if (var->yres_virtual == 0)
+		var->yres_virtual = var->yres;
+
+	if (var->xres_virtual < xres_min || var->yres_virtual < yres_min)
+		return -EINVAL;
+
+	if (var->xres < xres_min)
+		var->xres = xres_min;
+	if (var->yres < yres_min)
+		var->yres = yres_min;
+	if (var->xres > xres_max)
+		var->xres = xres_max;
+	if (var->yres > yres_max)
+		var->yres = yres_max;
+
+	if (var->xres > var->xres_virtual)
+		var->xres = var->xres_virtual;
+	if (var->yres > var->yres_virtual)
+		var->yres = var->yres_virtual;
+
+	return 0;
+}
+
+static void shrink_height(unsigned long max_frame_size,
+		struct fb_var_screeninfo *var)
+{
+	DBG("can't fit FB into memory, reducing y\n");
+	var->yres_virtual = max_frame_size /
+		(var->xres_virtual * var->bits_per_pixel >> 3);
+
+	if (var->yres_virtual < OMAPFB_PLANE_YRES_MIN)
+		var->yres_virtual = OMAPFB_PLANE_YRES_MIN;
+
+	if (var->yres > var->yres_virtual)
+		var->yres = var->yres_virtual;
+}
+
+static void shrink_width(unsigned long max_frame_size,
+		struct fb_var_screeninfo *var)
+{
+	DBG("can't fit FB into memory, reducing x\n");
+	var->xres_virtual = max_frame_size / var->yres_virtual /
+		(var->bits_per_pixel >> 3);
+
+	if (var->xres_virtual < OMAPFB_PLANE_XRES_MIN)
+		var->xres_virtual = OMAPFB_PLANE_XRES_MIN;
+
+	if (var->xres > var->xres_virtual)
+		var->xres = var->xres_virtual;
+}
+
+static int check_fb_size(const struct omapfb_info *ofbi,
+		struct fb_var_screeninfo *var)
+{
+	unsigned long max_frame_size = ofbi->region.size;
+	int bytespp = var->bits_per_pixel >> 3;
+	unsigned long line_size = var->xres_virtual * bytespp;
+
+	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB)
+		return -EINVAL;
+
+	DBG("max frame size %lu, line size %lu\n", max_frame_size, line_size);
+
+	if (line_size * var->yres_virtual > max_frame_size)
+		shrink_height(max_frame_size, var);
+
+	if (line_size * var->yres_virtual > max_frame_size) {
+		shrink_width(max_frame_size, var);
+		line_size = var->xres_virtual * bytespp;
+	}
+
+	if (line_size * var->yres_virtual > max_frame_size) {
+		DBG("cannot fit FB to memory\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+int dss_mode_to_fb_mode(enum omap_color_mode dssmode,
+			struct fb_var_screeninfo *var)
 {
 	int i;
 
@@ -404,11 +501,15 @@ void set_fb_fix(struct fb_info *fbi)
 				(OMAP_VRFB_LINE_LEN * var->bits_per_pixel) >> 3;
 			break;
 		}
-	} else
+
+		fix->smem_len = var->yres_virtual * fix->line_length;
+	} else {
 		fix->line_length =
 			(var->xres_virtual * var->bits_per_pixel) >> 3;
+		fix->smem_len = rg->size;
+	}
+
 	fix->smem_start = omapfb_get_region_paddr(ofbi);
-	fix->smem_len = rg->size;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
 
@@ -436,16 +537,6 @@ void set_fb_fix(struct fb_info *fbi)
 
 	fix->xpanstep = 1;
 	fix->ypanstep = 1;
-
-	if (rg->size && ofbi->rotation_type == OMAP_DSS_ROT_VRFB) {
-		enum omap_color_mode mode = 0;
-		mode = fb_mode_to_dss_mode(var);
-
-		omap_vrfb_setup(&rg->vrfb, rg->paddr,
-				var->xres_virtual,
-				var->yres_virtual,
-				mode);
-	}
 }
 
 /* check new var and possibly modify it to be ok */
@@ -453,23 +544,19 @@ int check_fb_var(struct fb_info *fbi, struct fb_var_screeninfo *var)
 {
 	struct omapfb_info *ofbi = FB2OFB(fbi);
 	struct omap_display *display = fb2display(fbi);
-	unsigned long max_frame_size;
-	unsigned long line_size;
-	int xres_min, yres_min;
-	int xres_max, yres_max;
 	enum omap_color_mode mode = 0;
 	int i;
-	int bytespp;
+	int r;
 
 	DBG("check_fb_var %d\n", ofbi->id);
 
 	if (ofbi->region.size == 0)
 		return 0;
 
-	mode = fb_mode_to_dss_mode(var);
-	if (mode < 0) {
+	r = fb_mode_to_dss_mode(var, &mode);
+	if (r) {
 		DBG("cannot convert var to omap dss mode\n");
-		return -EINVAL;
+		return r;
 	}
 
 	for (i = 0; i < ofbi->num_overlays; ++i) {
@@ -482,98 +569,11 @@ int check_fb_var(struct fb_info *fbi, struct fb_var_screeninfo *var)
 	if (var->rotate < 0 || var->rotate > 3)
 		return -EINVAL;
 
-	if (var->rotate != fbi->var.rotate) {
-		DBG("rotation changing\n");
-
-		ofbi->rotation = var->rotate;
-
-		if (abs(var->rotate - fbi->var.rotate) != 2) {
-			int tmp;
-			DBG("rotate changing 90/270 degrees. "
-					"swapping x/y res\n");
-
-			tmp = var->yres;
-			var->yres = var->xres;
-			var->xres = tmp;
-
-			tmp = var->yres_virtual;
-			var->yres_virtual = var->xres_virtual;
-			var->xres_virtual = tmp;
-		}
-	}
-
-	xres_min = OMAPFB_PLANE_XRES_MIN;
-	xres_max = 2048;
-	yres_min = OMAPFB_PLANE_YRES_MIN;
-	yres_max = 2048;
-
-	bytespp = var->bits_per_pixel >> 3;
-
-	/* XXX: some applications seem to set virtual res to 0. */
-	if (var->xres_virtual == 0)
-		var->xres_virtual = var->xres;
-
-	if (var->yres_virtual == 0)
-		var->yres_virtual = var->yres;
-
-	if (var->xres_virtual < xres_min || var->yres_virtual < yres_min)
+	if (check_fb_res_bounds(var))
 		return -EINVAL;
 
-	if (var->xres < xres_min)
-		var->xres = xres_min;
-	if (var->yres < yres_min)
-		var->yres = yres_min;
-	if (var->xres > xres_max)
-		var->xres = xres_max;
-	if (var->yres > yres_max)
-		var->yres = yres_max;
-
-	if (var->xres > var->xres_virtual)
-		var->xres = var->xres_virtual;
-	if (var->yres > var->yres_virtual)
-		var->yres = var->yres_virtual;
-
-	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB)
-		line_size = OMAP_VRFB_LINE_LEN * bytespp;
-	else
-		line_size = var->xres_virtual * bytespp;
-
-	max_frame_size = ofbi->region.size;
-
-	DBG("max frame size %lu, line size %lu\n", max_frame_size, line_size);
-
-	if (line_size * var->yres_virtual > max_frame_size) {
-		DBG("can't fit FB into memory, reducing y\n");
-		var->yres_virtual = max_frame_size / line_size;
-
-		if (var->yres_virtual < yres_min)
-			var->yres_virtual = yres_min;
-
-		if (var->yres > var->yres_virtual)
-			var->yres = var->yres_virtual;
-	}
-
-	if (line_size * var->yres_virtual > max_frame_size) {
-		DBG("can't fit FB into memory, reducing x\n");
-		if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB)
-			return -EINVAL;
-
-		var->xres_virtual = max_frame_size / var->yres_virtual /
-			bytespp;
-
-		if (var->xres_virtual < xres_min)
-			var->xres_virtual = xres_min;
-
-		if (var->xres > var->xres_virtual)
-			var->xres = var->xres_virtual;
-
-		line_size = var->xres_virtual * bytespp;
-	}
-
-	if (line_size * var->yres_virtual > max_frame_size) {
-		DBG("cannot fit FB to memory\n");
+	if (check_fb_size(ofbi, var))
 		return -EINVAL;
-	}
 
 	if (var->xres + var->xoffset > var->xres_virtual)
 		var->xoffset = var->xres_virtual - var->xres;
@@ -695,7 +695,7 @@ static int omapfb_setup_overlay(struct fb_info *fbi, struct omap_overlay *ovl,
 				var->xoffset) * var->bits_per_pixel) >> 3;
 
 	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB) {
-		data_start_p = omapfb_get_region_rot_paddr(ofbi);
+		data_start_p = omapfb_get_region_rot_paddr(ofbi, ofbi->rotation);
 		data_start_v = NULL;
 	} else {
 		data_start_p = omapfb_get_region_paddr(ofbi);
@@ -705,11 +705,9 @@ static int omapfb_setup_overlay(struct fb_info *fbi, struct omap_overlay *ovl,
 	data_start_p += offset;
 	data_start_v += offset;
 
-	mode = fb_mode_to_dss_mode(var);
-
-	if (mode == -EINVAL) {
+	r = fb_mode_to_dss_mode(var, &mode);
+	if (r) {
 		DBG("fb_mode_to_dss_mode failed");
-		r = -EINVAL;
 		goto err;
 	}
 
