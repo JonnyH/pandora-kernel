@@ -654,6 +654,15 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 			musb->is_active = 0;
 			break;
 		}
+
+		switch (musb->xceiv->state) {
+		case OTG_STATE_B_IDLE:
+		case OTG_STATE_B_PERIPHERAL:
+			cancel_delayed_work(&musb->vbus_workaround_work);
+			schedule_delayed_work(&musb->vbus_workaround_work, HZ / 2);
+		default:
+			break;
+		}
 	}
 
 	if (int_usb & MUSB_INTR_CONNECT) {
@@ -993,6 +1002,9 @@ static void musb_shutdown(struct platform_device *pdev)
 	musb_platform_exit(musb);
 
 	pm_runtime_put(musb->controller);
+
+	cancel_delayed_work(&musb->vbus_workaround_work);
+
 	/* FIXME power down */
 }
 
@@ -1770,6 +1782,41 @@ static void musb_irq_work(struct work_struct *data)
 	}
 }
 
+#include <linux/usb/ulpi.h>
+
+static void musb_vbus_workaround_work(struct work_struct *work)
+{
+	struct musb *musb = container_of(work, struct musb, vbus_workaround_work.work);
+	u8 devctl;
+	int ret;
+
+	if (musb_ulpi_access.write == NULL)
+		return;
+
+	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+
+	/*
+	 * I don't really know why but VBUS sometimes gets stuck and
+	 * causes session to never end. It would look like some pullup
+	 * is enabled when it shouldn't be on certain PHY states.
+	 * Turning on pulldowns magically drains VBUS to zero and allows
+	 * session to end, so let's do that here.
+	 *
+	 * XXX: probably better check VBUS on TWL?
+	 * beagle sometimes has session bit set but no VBUS on twl?
+	 */
+	if ((musb->xceiv->state == OTG_STATE_B_PERIPHERAL ||
+	     musb->xceiv->state == OTG_STATE_B_IDLE) &&
+	    (devctl & MUSB_DEVCTL_VBUS) != (3 << MUSB_DEVCTL_VBUS_SHIFT) &&
+	    (devctl & MUSB_DEVCTL_VBUS) != (0 << MUSB_DEVCTL_VBUS_SHIFT)) {
+		dev_dbg(musb->controller, "VBUS workaround..\n");
+		ret = musb_ulpi_access.write(musb->xceiv, ULPI_SET(ULPI_OTG_CTRL),
+			ULPI_OTG_CTRL_DM_PULLDOWN | ULPI_OTG_CTRL_DP_PULLDOWN);
+		//if (ret)
+		//	dev_err(musb->controller, "VBUS workaround error\n");
+	}
+}
+
 /* --------------------------------------------------------------------------
  * Init support
  */
@@ -1940,6 +1987,8 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 
 	/* Init IRQ workqueue before request_irq */
 	INIT_WORK(&musb->irq_work, musb_irq_work);
+
+	INIT_DELAYED_WORK(&musb->vbus_workaround_work, musb_vbus_workaround_work);
 
 	/* attach to the IRQ */
 	if (request_irq(nIrq, musb->isr, 0, dev_name(dev), musb)) {
