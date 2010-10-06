@@ -516,6 +516,7 @@ struct musb {
 #ifdef MUSB_CONFIG_PROC_FS
 	struct proc_dir_entry *proc_entry;
 #endif
+	struct delayed_work	vbus_workaround_work;
 };
 
 #ifdef CONFIG_USB_GADGET_MUSB_HDRC
