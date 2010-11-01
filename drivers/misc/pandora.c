@@ -253,7 +253,8 @@ static void proc_create_rw(const char *name, void *pdata,
 
 static int pndctrl_init(void)
 {
-	opp = mhz2opp(get_fclk());
+	opp = 1; /* Safest assumption for the delay */
+	set_opp(mhz2opp(get_fclk()));
 
 	proc_create_rw(PND_PROC_CPUMHZ, NULL, cpu_clk_read, cpu_clk_write);
 	proc_create_rw(PND_PROC_CPUOPP, NULL, cpu_maxopp_read, cpu_maxopp_write);
