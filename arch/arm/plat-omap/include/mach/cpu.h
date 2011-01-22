@@ -44,6 +44,9 @@ extern unsigned int system_rev;
 /* compatibility with newer code */
 #define omap_rev() system_rev
 
+/* HACK: make SGX build less painful */
+#define omap_rev_lt_3_0() (omap_rev() < OMAP3430_REV_ES3_0)
+
 /*
  * Test if multicore OMAP support is needed
  */
@@ -269,6 +272,8 @@ IS_OMAP_TYPE(3430, 0x3430)
 #define cpu_is_omap2423()		0
 #define cpu_is_omap2430()		0
 #define cpu_is_omap3430()		0
+#define cpu_is_omap3530()		0
+#define cpu_is_omap3630()		0
 
 #if defined(MULTI_OMAP1)
 # if defined(CONFIG_ARCH_OMAP730)
@@ -319,7 +324,9 @@ IS_OMAP_TYPE(3430, 0x3430)
 
 #if defined(CONFIG_ARCH_OMAP34XX)
 # undef cpu_is_omap3430
+# undef cpu_is_omap3530
 # define cpu_is_omap3430()		is_omap3430()
+# define cpu_is_omap3530()		is_omap3430()
 #endif
 
 /* Macros to detect if we have OMAP1 or OMAP2 */
