@@ -4,7 +4,12 @@
 #ifndef __ASMARM_CACHE_H
 #define __ASMARM_CACHE_H
 
+#ifdef CONFIG_CPU_V7
+#define L1_CACHE_SHIFT		6
+#else
 #define L1_CACHE_SHIFT		5
+#endif
+
 #define L1_CACHE_BYTES		(1 << L1_CACHE_SHIFT)
 
 /*
