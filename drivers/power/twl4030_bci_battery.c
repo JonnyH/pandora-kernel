@@ -114,6 +114,7 @@
 
 /* Interrupt flags bits BCIISR1 */
 #define BATSTS_ISR1		0x080
+#define ICHGEOC_ISR1		0x010
 #define VBATLVL_ISR1		0x001
 
 /* Interrupt mask registers for int1*/
@@ -122,6 +123,7 @@
 
  /* Interrupt masks for BCIIMR1 */
 #define BATSTS_IMR1		0x080
+#define ICHGEOC_IMR1		0x010
 #define VBATLVL_IMR1		0x001
 
 /* Interrupt edge detection register */
@@ -132,6 +134,8 @@
 /* BCIEDR2 */
 #define	BATSTS_EDRRISIN		0x080
 #define BATSTS_EDRFALLING	0x040
+#define ICHGEOC_EDRRISIN	0x002
+#define ICHGEOC_EDRFALLING	0x001
 
 /* BCIEDR3 */
 #define	VBATLVL_EDRRISIN	0x02
@@ -142,10 +146,14 @@
 
 /* BCIMFTH1 */
 #define REG_BCIMFTH1		0x016
+#define REG_BCIMFTH2		0x017
+#define REG_BCIMFTH8		0x01D
 
 /* Key */
 #define KEY_IIREF		0xE7
 #define KEY_FTH1		0xD2
+#define KEY_FTH2		0x7F
+#define KEY_FTH8		0xF4
 #define REG_BCIMFKEY		0x011
 
 /* Step size and prescaler ratio */
@@ -183,10 +191,12 @@ struct twl4030_bci_device_info {
 };
 
 static int LVL_1, LVL_2, LVL_3, LVL_4;
+static int charged;
 
 static int read_bci_val(u8 reg_1);
 static inline int clear_n_set(u8 mod_no, u8 clear, u8 set, u8 reg);
 static int twl4030charger_presence(void);
+static int twl4030battery_charge_setup(void);
 
 /*
  * Report and clear the charger presence event.
@@ -212,6 +222,7 @@ static inline int twl4030charger_presence_evt(void)
 		clear = CHG_PRES_FALLING;
 	}
 
+	twl4030battery_charge_setup();
 	/* Update the interrupt edge detection register */
 	clear_n_set(TWL4030_MODULE_INT, clear, set, REG_PWR_EDR1);
 
@@ -286,6 +297,17 @@ static int twl4030battery_presence_evt(void)
 }
 
 /*
+ * This function handles the twl4030 battery end-of-charge interrupt
+ */
+static int twl4030battery_charged_evt(void *_di)
+{
+	struct twl4030_bci_device_info *di = _di;
+	charged = 1;
+	di->charge_status = POWER_SUPPLY_STATUS_FULL;
+	return 0;
+}
+
+/*
  * This function handles the twl4030 battery voltage level interrupt.
  */
 static int twl4030battery_level_evt(void)
@@ -321,6 +343,7 @@ static int twl4030battery_level_evt(void)
 		LVL_2 = 0;
 		LVL_1 = 1;
 	}
+	charged = 0;
 
 	return 0;
 }
@@ -357,7 +380,7 @@ static irqreturn_t twl4030battery_interrupt(int irq, void *_di)
 		return IRQ_NONE;
 
 	clear_2a = (isr2a_val & VBATLVL_ISR1) ? (VBATLVL_ISR1) : 0;
-	clear_1a = (isr1a_val & BATSTS_ISR1) ? (BATSTS_ISR1) : 0;
+	clear_1a = ((isr1a_val & BATSTS_ISR1) ? (BATSTS_ISR1) : 0) | ((isr1a_val & ICHGEOC_ISR1) ? (ICHGEOC_ISR1) : 0);
 
 	/* cleaning BCI interrupt status flags */
 	ret = twl4030_i2c_write_u8(TWL4030_MODULE_INTERRUPTS,
@@ -370,13 +393,25 @@ static irqreturn_t twl4030battery_interrupt(int irq, void *_di)
 	if (ret)
 		return IRQ_NONE;
 
+	ret = 0;
 	/* battery connetion or removal event */
 	if (isr1a_val & BATSTS_ISR1)
+	{
 		twl4030battery_presence_evt();
+		++ret;
+	}
+	if (isr1a_val & ICHGEOC_ISR1)
+	{
+		twl4030battery_charged_evt(_di);
+		++ret;
+	}
 	/* battery voltage threshold event*/
-	else if (isr2a_val & VBATLVL_ISR1)
+	if (isr2a_val & VBATLVL_ISR1)
+	{
 		twl4030battery_level_evt();
-	else
+		++ret;
+	}
+	if (ret == 0)
 		return IRQ_NONE;
 
 	return IRQ_HANDLED;
@@ -412,6 +447,35 @@ static int twl4030battery_hw_level_en(int enable)
 	return 0;
 }
 
+/*
+ * Enable/Disable battery end-of-charge event notifications.
+ */
+static int twl4030battery_bat_eoc_en(int enable)
+{
+	int ret;
+
+	if (enable) {
+		/* unmask ICHGEOC interrupt for INT1 */
+		ret = clear_n_set(TWL4030_MODULE_INTERRUPTS, ICHGEOC_IMR1,
+			0, REG_BCIIMR1A);
+		if (ret)
+			return ret;
+
+		/* configuring interrupt edge detection for ICHGEOC */
+		ret = clear_n_set(TWL4030_MODULE_INTERRUPTS, 0,
+			ICHGEOC_EDRRISIN | ICHGEOC_EDRFALLING, REG_BCIEDR2);
+		if (ret)
+			return ret;
+	} else {
+		/* mask ICHGEOC interrupt for INT1 */
+		ret = clear_n_set(TWL4030_MODULE_INTERRUPTS, 0,
+			ICHGEOC_IMR1, REG_BCIIMR1A);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
 /*
  * Enable/disable hardware battery presence event notifications.
  */
@@ -732,6 +796,41 @@ static int twl4030battery_temp_setup(void)
 	return 0;
 }
 
+static int twl4030battery_charge_setup(void)
+{
+	u8 ret;
+	charged = 0;
+
+	/* Unlock BCI monitor for BCIMFTH2 */
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, KEY_FTH2, REG_BCIMFKEY);
+	if (ret)
+		return ret;
+
+	/*
+	 * Set monitoring threshold of Lvl3/Lvl4 to about 95% charge
+	 * default is 0x86, which is around 80%
+	 */
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, 0xDC, REG_BCIMFTH2);
+	if (ret)
+		return ret;
+
+
+	/* Unlock BCI monitor for BCIMFTH8 */
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, KEY_FTH8, REG_BCIMFKEY);
+	if (ret)
+		return ret;
+
+	/* 
+	 * Set end-of-charge threshold to about 160ma.
+	 * In reality, this should be 80ma+current_used or whatever, but we
+	 * don't necessarily have that. This is a good approximation
+	 */
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, 0x99, REG_BCIMFTH8);
+	if (ret)
+		return ret;
+
+	return 0;
+}
 /*
  * Sets and clears bits on an given register on a given module
  */
@@ -868,9 +967,12 @@ static void twl4030_bci_battery_work(struct work_struct *work)
 	twl4030_bci_battery_read_status(di);
 
 	source = power_supply_am_i_supplied(&di->bat);
-	if (source)
-		di->charge_status = POWER_SUPPLY_STATUS_CHARGING;
-	else
+	if (source) {
+		if (charged)
+			di->charge_status = POWER_SUPPLY_STATUS_FULL;
+		else
+			di->charge_status = POWER_SUPPLY_STATUS_CHARGING;
+	} else
 		di->charge_status = POWER_SUPPLY_STATUS_DISCHARGING;
 
 	if (source != di->charge_source) {
@@ -1061,9 +1163,14 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 	twl4030charger_ac_en(ENABLE, CHARGE_MODE);
 	twl4030charger_usb_en(ENABLE);
 	twl4030battery_hw_level_en(ENABLE);
+	twl4030battery_bat_eoc_en(ENABLE);
 	twl4030battery_hw_presence_en(ENABLE);
 
 	platform_set_drvdata(pdev, di);
+
+	ret = twl4030battery_charge_setup();
+	if (ret)
+		goto charge_setup_fail;
 
 	/* settings for temperature sensing */
 	ret = twl4030battery_temp_setup();
@@ -1140,11 +1247,13 @@ batt_failed:
 chg_irq_fail:
 	free_irq(TWL4030_MODIRQ_BCI, NULL);
 batt_irq_fail:
+charge_setup_fail:
 voltage_setup_fail:
 temp_setup_fail:
 	twl4030charger_ac_en(DISABLE, CHARGE_MODE);
 	twl4030charger_usb_en(DISABLE);
 	twl4030battery_hw_level_en(DISABLE);
+	twl4030battery_bat_eoc_en(DISABLE);
 	twl4030battery_hw_presence_en(DISABLE);
 	kfree(di);
 
@@ -1159,6 +1268,7 @@ static int __exit twl4030_bci_battery_remove(struct platform_device *pdev)
 	twl4030charger_ac_en(DISABLE, CHARGE_MODE);
 	twl4030charger_usb_en(DISABLE);
 	twl4030battery_hw_level_en(DISABLE);
+	twl4030battery_bat_eoc_en(DISABLE);
 	twl4030battery_hw_presence_en(DISABLE);
 
 	free_irq(TWL4030_MODIRQ_BCI, NULL);
