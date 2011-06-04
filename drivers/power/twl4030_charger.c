@@ -21,6 +21,7 @@
 #include <linux/power_supply.h>
 #include <linux/notifier.h>
 #include <linux/usb/otg.h>
+#include <linux/ratelimit.h>
 
 #define TWL4030_BCIMSTATEC	0x02
 #define TWL4030_BCIICHG		0x08
@@ -76,6 +77,7 @@ struct twl4030_bci {
 	int			irq_bci;
 
 	unsigned long		event;
+	struct ratelimit_state	ratelimit;
 };
 
 /*
@@ -243,20 +245,27 @@ static irqreturn_t twl4030_bci_interrupt(int irq, void *arg)
 	}
 
 	/* various monitoring events, for now we just log them here */
-	if (irqs1 & (TWL4030_TBATOR2 | TWL4030_TBATOR1))
+	if (irqs1 & (TWL4030_TBATOR2 | TWL4030_TBATOR1) &&
+			__ratelimit(&bci->ratelimit))
 		dev_warn(bci->dev, "battery temperature out of range\n");
 
-	if (irqs1 & TWL4030_BATSTS)
+	if (irqs1 & TWL4030_BATSTS && __ratelimit(&bci->ratelimit))
 		dev_crit(bci->dev, "battery disconnected\n");
 
-	if (irqs2 & TWL4030_VBATOV)
+	if (irqs2 & TWL4030_VBATOV && __ratelimit(&bci->ratelimit))
 		dev_crit(bci->dev, "VBAT overvoltage\n");
 
-	if (irqs2 & TWL4030_VBUSOV)
+	if (irqs2 & TWL4030_VBUSOV && __ratelimit(&bci->ratelimit))
 		dev_crit(bci->dev, "VBUS overvoltage\n");
 
-	if (irqs2 & TWL4030_ACCHGOV)
+	if (irqs2 & TWL4030_ACCHGOV && __ratelimit(&bci->ratelimit))
 		dev_crit(bci->dev, "Ac charger overvoltage\n");
+
+	/* ack the interrupts */
+	twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, irqs1,
+			 TWL4030_INTERRUPTS_BCIISR1A);
+	twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, irqs2,
+			 TWL4030_INTERRUPTS_BCIISR2A);
 
 	return IRQ_HANDLED;
 }
@@ -436,6 +445,8 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->irq_bci = platform_get_irq(pdev, 1);
 
 	platform_set_drvdata(pdev, bci);
+
+	ratelimit_state_init(&bci->ratelimit, HZ, 2);
 
 	bci->ac.name = "twl4030_ac";
 	bci->ac.type = POWER_SUPPLY_TYPE_MAINS;
