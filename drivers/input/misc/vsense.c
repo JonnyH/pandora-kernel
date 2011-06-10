@@ -338,7 +338,7 @@ static int vsense_proc_mult_write(struct file *file, const char __user *buffer,
 		unsigned long count, void *data)
 {
 	int *multiplier = data;
-	int ret, val;
+	int ret, val, adj;
 
 	ret = vsense_proc_int_write(buffer, count, &val);
 	if (ret < 0)
@@ -346,7 +346,10 @@ static int vsense_proc_mult_write(struct file *file, const char __user *buffer,
 	if (val == 0)
 		return -EINVAL;
 
-	*multiplier = val * 256 / 100;
+	/* round to higher absolute value */
+	adj = val < 0 ? -99 : 99;
+	*multiplier = (val * 256 + adj) / 100;
+
 	return ret;
 }
 
