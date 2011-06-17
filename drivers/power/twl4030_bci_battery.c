@@ -1189,7 +1189,7 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 
 	/* request BCI interruption */
 	ret = request_irq(TWL4030_MODIRQ_BCI, twl4030battery_interrupt,
-		0, pdev->name, NULL);
+		0, pdev->name, di);
 	if (ret) {
 		dev_dbg(&pdev->dev, "could not request irq %d, status %d\n",
 			TWL4030_MODIRQ_BCI, ret);
