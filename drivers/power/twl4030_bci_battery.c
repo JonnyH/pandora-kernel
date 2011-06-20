@@ -167,7 +167,7 @@
 #define BK_VOLT_PSR_R		100
 
 #define ENABLE		1
-#define DISABLE		1
+#define DISABLE		0
 
 struct twl4030_bci_device_info {
 	struct device		*dev;
