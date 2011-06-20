@@ -825,7 +825,7 @@ static int twl4030battery_charge_setup(void)
 	 * In reality, this should be 80ma+current_used or whatever, but we
 	 * don't necessarily have that. This is a good approximation
 	 */
-	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, 0x99, REG_BCIMFTH8);
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, 0xB9, REG_BCIMFTH8);
 	if (ret)
 		return ret;
 
