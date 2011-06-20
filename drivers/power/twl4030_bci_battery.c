@@ -192,6 +192,7 @@ struct twl4030_bci_device_info {
 
 static int LVL_1, LVL_2, LVL_3, LVL_4;
 static int charged;
+static int charge_enable;
 
 static int read_bci_val(u8 reg_1);
 static inline int clear_n_set(u8 mod_no, u8 clear, u8 set, u8 reg);
@@ -546,6 +547,9 @@ int twl4030charger_usb_en(int enable)
 	int ret;
 
 	if (enable) {
+		if (!charge_enable)
+			return -EINVAL;
+
 		/* Check for USB charger conneted */
 		ret = twl4030charger_presence();
 		if (ret < 0)
@@ -1034,6 +1038,37 @@ store_charge_current(struct device *dev, struct device_attribute *attr, const ch
 }
 static DEVICE_ATTR(charge_current, S_IRUGO | S_IWUSR, show_charge_current, store_charge_current);
 
+static ssize_t
+show_enable(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	u8 boot_bci;
+	int ret;
+
+	ret = twl4030_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &boot_bci, REG_BOOT_BCI);
+	if (ret)
+		return ret;
+
+	return sprintf(buf, "%d\n", (boot_bci & (BCIAUTOAC | BCIAUTOUSB)) ? 1 : 0);
+}
+
+static ssize_t
+store_enable(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned long enable;
+	int ret;
+
+	ret = strict_strtoul(buf, 10, &enable);
+	if (ret || enable > 1)
+		return -EINVAL;
+
+	charge_enable = enable;
+	twl4030charger_ac_en(enable, CHARGE_MODE);
+	twl4030charger_usb_en(enable);
+
+	return count;
+}
+static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, show_enable, store_enable);
+
 static int twl4030_bk_bci_battery_get_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					union power_supply_propval *val)
@@ -1160,6 +1195,7 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 	clear_n_set(TWL4030_MODULE_INTBR, 0,
 			MADC_HFCLK_EN | DEFAULT_MADC_CLK_EN, REG_GPBR1);
 
+	charge_enable = ENABLE;
 	twl4030charger_ac_en(ENABLE, CHARGE_MODE);
 	twl4030charger_usb_en(ENABLE);
 	twl4030battery_hw_level_en(ENABLE);
@@ -1228,10 +1264,12 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 	}
 
 	ret = device_create_file(di->bat.dev, &dev_attr_charge_current);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to create sysfs entries\n");
-		goto bk_batt_failed;
-	}
+	if (ret)
+		goto attr1_failed;
+
+	ret = device_create_file(di->bat.dev, &dev_attr_enable);
+	if (ret)
+		goto attr2_failed;
 
 	INIT_DELAYED_WORK_DEFERRABLE(&di->twl4030_bk_bci_monitor_work,
 				twl4030_bk_bci_battery_work);
@@ -1239,9 +1277,13 @@ static int __init twl4030_bci_battery_probe(struct platform_device *pdev)
 
 	return 0;
 
-bk_batt_failed:
+attr2_failed:
+	device_remove_file(di->bat.dev, &dev_attr_charge_current);
+attr1_failed:
 	if(!pdata->no_backup_battery)
-		power_supply_unregister(&di->bat);
+		power_supply_unregister(&di->bk_bat);
+bk_batt_failed:
+	power_supply_unregister(&di->bat);
 batt_failed:
 	free_irq(irq, di);
 chg_irq_fail:
@@ -1264,6 +1306,9 @@ static int __exit twl4030_bci_battery_remove(struct platform_device *pdev)
 {
 	struct twl4030_bci_device_info *di = platform_get_drvdata(pdev);
 	int irq = platform_get_irq(pdev, 0);
+
+	device_remove_file(di->bat.dev, &dev_attr_enable);
+	device_remove_file(di->bat.dev, &dev_attr_charge_current);
 
 	twl4030charger_ac_en(DISABLE, CHARGE_MODE);
 	twl4030charger_usb_en(DISABLE);
