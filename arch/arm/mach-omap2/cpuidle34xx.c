@@ -25,6 +25,7 @@
 #include <linux/sched.h>
 #include <linux/cpuidle.h>
 #include <linux/export.h>
+#include <linux/cpu_pm.h>
 
 #include <plat/prcm.h>
 #include <plat/irqs.h>
@@ -108,8 +109,22 @@ static int omap3_enter_idle(struct cpuidle_device *dev,
 		clkdm_deny_idle(core_pd->pwrdm_clkdms[0]);
 	}
 
+	/*
+	 * Call idle CPU PM enter notifier chain so that
+	 * VFP context is saved.
+	 */
+	if (mpu_state == PWRDM_POWER_OFF)
+		cpu_pm_enter();
+
 	/* Execute ARM wfi */
 	omap_sram_idle();
+
+	/*
+	 * Call idle CPU PM enter notifier chain to restore
+	 * VFP context.
+	 */
+	if (pwrdm_read_prev_pwrst(mpu_pd) == PWRDM_POWER_OFF)
+		cpu_pm_exit();
 
 	/* Re-allow idle for C1 */
 	if (index == 0) {
