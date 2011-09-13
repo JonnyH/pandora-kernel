@@ -221,6 +221,38 @@ static ssize_t display_mirror_store(struct omap_display *display,
 	return size;
 }
 
+static ssize_t display_venc_type_show(struct omap_display *display, char *buf)
+{
+	const char *ret;
+
+	switch (display->hw_config.u.venc.type) {
+	case OMAP_DSS_VENC_TYPE_COMPOSITE:
+		ret = "composite";
+		break;
+	case OMAP_DSS_VENC_TYPE_SVIDEO:
+		ret = "svideo";
+		break;
+	default:
+		ret = "unknown";
+		break;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", ret);
+}
+
+static ssize_t display_venc_type_store(struct omap_display *display,
+		const char *buf, size_t size)
+{
+	if (strncmp("composite", buf, 9) == 0)
+		display->hw_config.u.venc.type = OMAP_DSS_VENC_TYPE_COMPOSITE;
+	else if (strncmp("svideo", buf, 4) == 0)
+		display->hw_config.u.venc.type = OMAP_DSS_VENC_TYPE_SVIDEO;
+	else
+		return -EINVAL;
+
+	return size;
+}
+
 static ssize_t display_panel_name_show(struct omap_display *display, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%s\n",
@@ -258,6 +290,8 @@ static DISPLAY_ATTR(mirror, S_IRUGO|S_IWUSR,
 		display_mirror_show, display_mirror_store);
 static DISPLAY_ATTR(panel_name, S_IRUGO, display_panel_name_show, NULL);
 static DISPLAY_ATTR(ctrl_name, S_IRUGO, display_ctrl_name_show, NULL);
+static DISPLAY_ATTR(venc_type, S_IRUGO|S_IWUSR,
+		display_venc_type_show, display_venc_type_store);
 
 static struct attribute *display_sysfs_attrs[] = {
 	&display_attr_name.attr,
@@ -458,6 +492,13 @@ void dss_init_displays(struct platform_device *pdev)
 			continue;
 		}
 
+		if (display->type == OMAP_DISPLAY_TYPE_VENC) {
+			r = sysfs_create_file(&display->kobj,
+				&display_attr_venc_type.attr);
+			if (r)
+				DSSERR("failed to create sysfs file\n");
+		}
+
 		num_displays++;
 
 		list_add_tail(&display->list, &display_list);
@@ -472,6 +513,9 @@ void dss_uninit_displays(struct platform_device *pdev)
 		display = list_first_entry(&display_list,
 				struct omap_display, list);
 		list_del(&display->list);
+		if (display->type == OMAP_DISPLAY_TYPE_VENC)
+			sysfs_remove_file(&display->kobj,
+					  &display_attr_venc_type.attr);
 		kobject_del(&display->kobj);
 		kobject_put(&display->kobj);
 		kfree(display);
