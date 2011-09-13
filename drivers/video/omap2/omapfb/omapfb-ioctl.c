@@ -46,11 +46,6 @@ static int omapfb_setup_plane(struct fb_info *fbi, struct omapfb_plane_info *pi)
 
 	omapfb_lock(fbdev);
 
-	if (ofbi->num_overlays != 1) {
-		r = -EINVAL;
-		goto out;
-	}
-
 	/* XXX uses only the first overlay */
 	ovl = ofbi->overlays[0];
 
@@ -107,9 +102,8 @@ static int omapfb_query_plane(struct fb_info *fbi, struct omapfb_plane_info *pi)
 
 	omapfb_lock(fbdev);
 
-	if (ofbi->num_overlays != 1) {
-		memset(pi, 0, sizeof(*pi));
-	} else {
+	/* XXX uses only the first overlay */
+	{
 		struct omap_overlay_info *ovli;
 		struct omap_overlay *ovl;
 
