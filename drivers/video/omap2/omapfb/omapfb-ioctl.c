@@ -143,7 +143,13 @@ static int omapfb_setup_mem(struct fb_info *fbi, struct omapfb_mem_info *mi)
 
 	for (i = 0; i < ofbi->num_overlays; i++) {
 		if (ofbi->overlays[i]->info.enabled) {
-			r = -EBUSY;
+			if (size != 0 && rg->size >= size) {
+				dev_warn(fbdev->dev,
+					"mem change %lu to %zu while busy, faking success\n",
+					rg->size, size);
+				r = 0;
+			} else
+				r = -EBUSY;
 			goto out;
 		}
 	}
