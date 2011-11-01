@@ -100,7 +100,7 @@ early_initcall(init_static_idmap);
  * cpu_reset functions. This will then ensure that we have predictable
  * results when turning off the mmu.
  */
-void setup_mm_for_reboot(char mode)
+void setup_mm_for_reboot(void)
 {
 	/* Clean and invalidate L1. */
 	flush_cache_all();
