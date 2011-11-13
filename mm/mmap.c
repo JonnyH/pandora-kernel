@@ -178,7 +178,8 @@ int __vm_enough_memory(struct mm_struct *mm, long pages, int cap_sys_admin)
 
 	/* Don't let a single process grow too big:
 	   leave 3% of the size of this process for other processes */
-	allowed -= mm->total_vm / 32;
+	if (mm)
+		allowed -= mm->total_vm / 32;
 
 	/*
 	 * cast `allowed' as a signed long because vm_committed_space
@@ -1572,7 +1573,7 @@ static int acct_stack_growth(struct vm_area_struct * vma, unsigned long size, un
 	 * Overcommit..  This must be the final test, as it will
 	 * update security statistics.
 	 */
-	if (security_vm_enough_memory(grow))
+	if (security_vm_enough_memory_mm(mm, grow))
 		return -ENOMEM;
 
 	/* Ok, everything looks good - let it rip */
@@ -1588,9 +1589,6 @@ static int acct_stack_growth(struct vm_area_struct * vma, unsigned long size, un
  * PA-RISC uses this for its stack; IA64 for its Register Backing Store.
  * vma is the last one with address > vma->vm_end.  Have to extend vma.
  */
-#ifndef CONFIG_IA64
-static inline
-#endif
 int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 {
 	int error;
