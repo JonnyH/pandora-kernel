@@ -1166,6 +1166,13 @@ munmap_back:
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
 
+#ifdef __LINUX_ARM_ARCH__
+	/* ARM cache attribute override hack */
+	if (flags & 0xf0000000)
+		vma->vm_page_prot = __pgprot((pgprot_val(vma->vm_page_prot) & ~L_PTE_MT_MASK)
+			| ((flags >> 26) & 0x3c));
+#endif
+
 	if (file) {
 		error = -EINVAL;
 		if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
