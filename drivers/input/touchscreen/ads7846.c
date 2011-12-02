@@ -479,9 +479,33 @@ static ssize_t ads7846_disable_store(struct device *dev,
 
 static DEVICE_ATTR(disable, 0664, ads7846_disable_show, ads7846_disable_store);
 
+static ssize_t ads7846_debounce_tol_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct ads7846 *ts = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%u\n", ts->debounce_tol);
+}
+
+static ssize_t ads7846_debounce_tol_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct ads7846 *ts = dev_get_drvdata(dev);
+	char *endp;
+
+	ts->debounce_tol = simple_strtoul(buf, &endp, 10);
+
+	return count;
+}
+
+static DEVICE_ATTR(debounce_tol, 0664,
+	ads7846_debounce_tol_show, ads7846_debounce_tol_store);
+
 static struct attribute *ads784x_attributes[] = {
 	&dev_attr_pen_down.attr,
 	&dev_attr_disable.attr,
+	&dev_attr_debounce_tol.attr,
 	NULL,
 };
 
