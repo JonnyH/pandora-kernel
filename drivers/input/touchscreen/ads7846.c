@@ -27,6 +27,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 #include <asm/irq.h>
+#include <mach/display.h>
 
 
 /*
@@ -111,6 +112,7 @@ struct ads7846 {
 	unsigned		irq_disabled:1;	/* P: lock */
 	unsigned		disabled:1;
 	unsigned		is_suspended:1;
+	unsigned		ext_trigger:1;
 
 	int			(*filter)(void *data, int data_idx, int *val);
 	void			*filter_data;
@@ -606,8 +608,11 @@ static void ads7846_rx(void *ads)
 #endif
 	}
 
-	hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_PERIOD),
-			HRTIMER_MODE_REL);
+	if (!ts->ext_trigger)
+		hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_PERIOD),
+				HRTIMER_MODE_REL);
+	else
+		ts->pending = 0;
 }
 
 static int ads7846_debounce(void *ads, int data_idx, int *val)
@@ -757,6 +762,21 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 	spin_unlock_irqrestore(&ts->lock, flags);
 
 	return IRQ_HANDLED;
+}
+
+static void omap_vsync_handler(void *arg, u32 mask)
+{
+	struct ads7846 *ts = arg;
+
+	spin_lock_irq(&ts->lock);
+
+	if (ts->pendown && !ts->pending && !ts->disabled) {
+		ts->pending = 1;
+		hrtimer_start(&ts->timer, ktime_set(0, 0),
+				HRTIMER_MODE_REL);
+	}
+
+	spin_unlock_irq(&ts->lock);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1127,6 +1147,12 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 
 	dev_info(&spi->dev, "touchscreen, irq %d\n", spi->irq);
 
+	err = omap_dispc_register_isr(omap_vsync_handler, ts, DISPC_IRQ_VSYNC);
+	if (err == 0) {
+		dev_info(&spi->dev, "using vsync trigger\n");
+		ts->ext_trigger = 1;
+	}
+
 	/* take a first sample, leaving nPENIRQ active and vREF off; avoid
 	 * the touchscreen, in case it's not connected.
 	 */
@@ -1164,6 +1190,7 @@ static int __devexit ads7846_remove(struct spi_device *spi)
 
 	ads784x_hwmon_unregister(spi, ts);
 	input_unregister_device(ts->input);
+	omap_dispc_unregister_isr(omap_vsync_handler, ts, DISPC_IRQ_VSYNC);
 
 	ads7846_suspend(spi, PMSG_SUSPEND);
 
