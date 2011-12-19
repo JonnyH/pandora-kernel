@@ -321,7 +321,6 @@ void __iomem *omap_irq_base;
 
 static void __init omap_common_init_early(void)
 {
-	omap2_check_revision();
 	omap_ioremap_init();
 	omap_init_consistent_dma_size();
 }
@@ -363,6 +362,7 @@ static void __init omap_hwmod_init_postsetup(void)
 void __init omap2420_init_early(void)
 {
 	omap2_set_globals_242x();
+	omap2xxx_check_revision();
 	omap_common_init_early();
 	omap2xxx_voltagedomains_init();
 	omap242x_powerdomains_init();
@@ -375,6 +375,7 @@ void __init omap2420_init_early(void)
 void __init omap2430_init_early(void)
 {
 	omap2_set_globals_243x();
+	omap2xxx_check_revision();
 	omap_common_init_early();
 	omap2xxx_voltagedomains_init();
 	omap243x_powerdomains_init();
@@ -393,6 +394,8 @@ void __init omap2430_init_early(void)
 void __init omap3_init_early(void)
 {
 	omap2_set_globals_3xxx();
+	omap3xxx_check_revision();
+	omap3xxx_check_features();
 	omap_common_init_early();
 	omap3xxx_voltagedomains_init();
 	omap3xxx_powerdomains_init();
@@ -425,6 +428,8 @@ void __init am35xx_init_early(void)
 void __init ti816x_init_early(void)
 {
 	omap2_set_globals_ti816x();
+	omap3xxx_check_revision();
+	ti81xx_check_features();
 	omap_common_init_early();
 	omap3xxx_voltagedomains_init();
 	omap3xxx_powerdomains_init();
@@ -439,6 +444,8 @@ void __init ti816x_init_early(void)
 void __init omap4430_init_early(void)
 {
 	omap2_set_globals_443x();
+	omap4xxx_check_revision();
+	omap4xxx_check_features();
 	omap_common_init_early();
 	omap44xx_voltagedomains_init();
 	omap44xx_powerdomains_init();
