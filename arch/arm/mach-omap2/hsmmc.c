@@ -28,6 +28,7 @@
 #define P1_DEV_GRP		0x20
 #define VMMC1_DEDICATED		0x2A
 #define VSEL_3V			0x02
+#define VSEL_3V15		0x03
 #define VSEL_18V		0x00
 #define TWL_GPIO_IMR1A		0x1C
 #define TWL_GPIO_ISR1A		0x19
@@ -166,7 +167,7 @@ static int hsmmc_set_power(struct device *dev, int slot, int power_on,
 		switch (1 << vdd) {
 		case MMC_VDD_33_34:
 		case MMC_VDD_32_33:
-			vdd_sel = VSEL_3V;
+			vdd_sel = VSEL_3V15;
 			if (cpu_is_omap24xx())
 				devconf |= OMAP2_CONTROL_DEVCONF1_ACTOV;
 			break;
@@ -313,7 +314,7 @@ static int hsmmc2_set_power(struct device *dev, int slot, int power_on,
 		switch (1 << vdd) {
 		case MMC_VDD_33_34:
 		case MMC_VDD_32_33:
-			vdd_sel = 0x0b;
+			vdd_sel = 0x0c;
 			break;
 		case MMC_VDD_165_195:
 			vdd_sel = 0x05;
