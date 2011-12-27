@@ -21,6 +21,7 @@
 #include <mach/hardware.h>
 #include <mach/mmc.h>
 #include <mach/board.h>
+#include <asm/mach-types.h>
 
 #if defined(CONFIG_MMC_OMAP_HS) || defined(CONFIG_MMC_OMAP_HS_MODULE)
 
@@ -37,8 +38,13 @@
 #define GPIO_0_BIT_POS		(1 << 0)
 
 #define OMAP2_CONTROL_DEVCONF0	0x48002274
+#if defined(CONFIG_ARCH_OMAP2430)
 #define OMAP2_CONTROL_DEVCONF1	0x490022E8
+#else
+#define OMAP2_CONTROL_DEVCONF1	0x480022D8
+#endif
 
+#define OMAP2_MMCSDIO2ADPCLKISEL	(1 << 6)
 #define OMAP2_CONTROL_DEVCONF0_LBCLK	(1 << 24)
 #define OMAP2_CONTROL_DEVCONF1_ACTOV	(1 << 31)
 
@@ -311,6 +317,12 @@ static int hsmmc2_set_power(struct device *dev, int slot, int power_on,
 	dev_dbg(dev, "power %s, vdd %i\n", power_on ? "on" : "off", vdd);
 
 	if (power_on) {
+		if (machine_is_omap3_pandora()) {
+			u32 devconf = omap_readl(OMAP2_CONTROL_DEVCONF1);
+			devconf &= ~OMAP2_MMCSDIO2ADPCLKISEL;
+			omap_writel(devconf, OMAP2_CONTROL_DEVCONF1);
+		}
+
 		switch (1 << vdd) {
 		case MMC_VDD_33_34:
 		case MMC_VDD_32_33:
