@@ -180,14 +180,14 @@ static void hsmmc2_before_set_reg(struct device *dev, int slot,
 		mmc->slots[0].remux(dev, slot, power_on);
 
 	if (power_on) {
-		/* Only MMC2 supports a CLKIN */
-		if (mmc->slots[0].internal_clock) {
-			u32 reg;
+		u32 reg;
 
-			reg = omap_ctrl_readl(control_devconf1_offset);
+		reg = omap_ctrl_readl(control_devconf1_offset);
+		if (mmc->slots[0].internal_clock)
 			reg |= OMAP2_MMCSDIO2ADPCLKISEL;
-			omap_ctrl_writel(reg, control_devconf1_offset);
-		}
+		else
+			reg &= ~OMAP2_MMCSDIO2ADPCLKISEL;
+		omap_ctrl_writel(reg, control_devconf1_offset);
 	}
 }
 
