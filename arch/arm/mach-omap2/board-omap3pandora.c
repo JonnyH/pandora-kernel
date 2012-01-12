@@ -58,6 +58,7 @@
 #define PANDORA_WIFI_IRQ_GPIO		21
 #define PANDORA_WIFI_NRESET_GPIO	23
 #define OMAP3_PANDORA_TS_GPIO		94
+#define PANDORA_EN_USB_5V_GPIO		164
 
 static struct mtd_partition omap3pandora_nand_partitions[] = {
 	{
@@ -666,6 +667,16 @@ fail:
 	printk(KERN_ERR "wl1251 board initialisation failed\n");
 }
 
+static void __init pandora_usb_host_init(void)
+{
+	int ret;
+
+	ret = gpio_request_one(PANDORA_EN_USB_5V_GPIO, GPIOF_OUT_INIT_HIGH,
+		"ehci vbus");
+	if (ret < 0)
+		pr_err("Cannot set vbus GPIO, ret=%d\n", ret);
+}
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
 	&pandora_leds_pwm,
@@ -695,6 +706,7 @@ static struct omap_board_mux board_mux[] __initdata = {
 static void __init omap3pandora_init(void)
 {
 	omap3_mux_init(board_mux, OMAP_PACKAGE_CBB);
+	pandora_usb_host_init();
 	omap3pandora_i2c_init();
 	pandora_wl1251_init();
 	platform_add_devices(omap3pandora_devices,
