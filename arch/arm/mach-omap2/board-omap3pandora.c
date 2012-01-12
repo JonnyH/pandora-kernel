@@ -557,6 +557,10 @@ static struct platform_device pandora_vwlan_device = {
 
 static struct twl4030_bci_platform_data pandora_bci_data;
 
+static struct twl4030_power_data pandora_power_data = {
+	.use_poweroff	= 1,
+};
+
 static struct twl4030_platform_data omap3pandora_twldata = {
 	.gpio		= &omap3pandora_gpio_data,
 	.vmmc1		= &pandora_vmmc1,
@@ -567,6 +571,7 @@ static struct twl4030_platform_data omap3pandora_twldata = {
 	.vsim		= &pandora_vsim,
 	.keypad		= &pandora_kp_data,
 	.bci		= &pandora_bci_data,
+	.power		= &pandora_power_data,
 };
 
 static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
