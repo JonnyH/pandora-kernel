@@ -515,7 +515,8 @@ static void bq27x00_external_power_changed(struct power_supply *psy)
 	struct bq27x00_device_info *di = to_bq27x00_device_info(psy);
 
 	cancel_delayed_work_sync(&di->work);
-	schedule_delayed_work(&di->work, 0);
+	set_timer_slack(&di->work.timer, 2 * HZ);
+	schedule_delayed_work(&di->work, 2 * HZ);
 }
 
 static int bq27x00_powersupply_init(struct bq27x00_device_info *di)
