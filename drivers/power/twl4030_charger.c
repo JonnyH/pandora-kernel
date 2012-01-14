@@ -511,9 +511,15 @@ static enum power_supply_property twl4030_charger_props[] = {
 
 static int __init twl4030_bci_probe(struct platform_device *pdev)
 {
+	const struct twl4030_bci_platform_data *pdata = pdev->dev.platform_data;
 	struct twl4030_bci *bci;
 	int ret;
 	u32 reg;
+
+	if (pdata == NULL) {
+		dev_err(&pdev->dev, "No platform data\n");
+		return -EINVAL;
+	}
 
 	bci = kzalloc(sizeof(*bci), GFP_KERNEL);
 	if (bci == NULL)
@@ -532,6 +538,8 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->ac.properties = twl4030_charger_props;
 	bci->ac.num_properties = ARRAY_SIZE(twl4030_charger_props);
 	bci->ac.get_property = twl4030_bci_get_property;
+	bci->ac.supplied_to = pdata->supplied_to;
+	bci->ac.num_supplicants = pdata->num_supplicants;
 
 	ret = power_supply_register(&pdev->dev, &bci->ac);
 	if (ret) {
@@ -544,6 +552,8 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->usb.properties = twl4030_charger_props;
 	bci->usb.num_properties = ARRAY_SIZE(twl4030_charger_props);
 	bci->usb.get_property = twl4030_bci_get_property;
+	bci->usb.supplied_to = pdata->supplied_to;
+	bci->usb.num_supplicants = pdata->num_supplicants;
 
 	ret = power_supply_register(&pdev->dev, &bci->usb);
 	if (ret) {

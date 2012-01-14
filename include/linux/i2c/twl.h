@@ -557,6 +557,8 @@ struct twl4030_clock_init_data {
 struct twl4030_bci_platform_data {
 	int *battery_tmp_tbl;
 	unsigned int tblsize;
+	char **supplied_to;
+	size_t num_supplicants;
 };
 
 /* TWL4030_GPIO_MAX (18) GPIOs, with interrupts */

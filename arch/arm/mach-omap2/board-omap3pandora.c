@@ -556,7 +556,14 @@ static struct platform_device pandora_vwlan_device = {
 	},
 };
 
-static struct twl4030_bci_platform_data pandora_bci_data;
+static char *pandora_power_supplied_to[] = {
+	"bq27500-0",
+};
+
+static struct twl4030_bci_platform_data pandora_bci_data = {
+	.supplied_to		= pandora_power_supplied_to,
+	.num_supplicants	= ARRAY_SIZE(pandora_power_supplied_to),
+};
 
 static struct twl4030_power_data pandora_power_data = {
 	.use_poweroff	= 1,
