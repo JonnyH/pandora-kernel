@@ -75,6 +75,8 @@ struct twl4030_bci {
 	struct work_struct	work;
 	int			irq_chg;
 	int			irq_bci;
+	bool			ac_charge_enable;
+	bool			usb_charge_enable;
 
 	unsigned long		event;
 	struct ratelimit_state	ratelimit;
@@ -160,6 +162,9 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 	int ret;
 
 	if (enable) {
+		if (!bci->usb_charge_enable)
+			return -EACCES;
+
 		/* Check for USB charger conneted */
 		if (!twl4030_bci_have_vbus(bci))
 			return -ENODEV;
@@ -326,6 +331,80 @@ static int twl4030_charger_get_current(void)
 
 	return ret;
 }
+
+static ssize_t twl4030_bci_ac_show_enable(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	u8 boot_bci;
+	int ret;
+
+	ret = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &boot_bci,
+			      TWL4030_PM_MASTER_BOOT_BCI);
+	if (ret)
+		return ret;
+
+	return sprintf(buf, "%d\n", (boot_bci & TWL4030_BCIAUTOAC) ? 1 : 0);
+}
+
+static ssize_t twl4030_bci_ac_store_enable(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	struct power_supply *psy = dev_get_drvdata(dev);
+	struct twl4030_bci *bci = container_of(psy, struct twl4030_bci, ac);
+	unsigned long enable;
+	int ret;
+
+	ret = strict_strtoul(buf, 10, &enable);
+	if (ret || enable > 1)
+		return -EINVAL;
+
+	bci->ac_charge_enable = enable;
+	twl4030_charger_enable_ac(enable);
+
+	return count;
+}
+static const struct device_attribute dev_attr_enable_ac =
+	__ATTR(enable, S_IRUGO | S_IWUSR, twl4030_bci_ac_show_enable,
+	twl4030_bci_ac_store_enable);
+
+static ssize_t twl4030_bci_usb_show_enable(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	u8 boot_bci;
+	int ret;
+
+	ret = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &boot_bci,
+			      TWL4030_PM_MASTER_BOOT_BCI);
+	if (ret)
+		return ret;
+
+	return sprintf(buf, "%d\n", (boot_bci & TWL4030_BCIAUTOUSB) ? 1 : 0);
+}
+
+static ssize_t twl4030_bci_usb_store_enable(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	struct power_supply *psy = dev_get_drvdata(dev);
+	struct twl4030_bci *bci = container_of(psy, struct twl4030_bci, usb);
+	unsigned long enable;
+	int ret;
+
+	ret = strict_strtoul(buf, 10, &enable);
+	if (ret || enable > 1)
+		return -EINVAL;
+
+	bci->usb_charge_enable = enable;
+	twl4030_charger_enable_usb(bci, enable);
+
+	return count;
+}
+static const struct device_attribute dev_attr_enable_usb =
+	__ATTR(enable, S_IRUGO | S_IWUSR, twl4030_bci_usb_show_enable,
+	twl4030_bci_usb_store_enable);
 
 /*
  * Returns the main charge FSM state
@@ -496,6 +575,18 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 		otg_register_notifier(bci->transceiver, &bci->otg_nb);
 	}
 
+	ret = device_create_file(bci->ac.dev, &dev_attr_enable_ac);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to create sysfs file: %d\n", ret);
+		goto fail_sysfs1;
+	}
+
+	ret = device_create_file(bci->usb.dev, &dev_attr_enable_usb);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to create sysfs file: %d\n", ret);
+		goto fail_sysfs2;
+	}
+
 	/* Enable interrupts now. */
 	reg = ~(u32)(TWL4030_ICHGLOW | TWL4030_ICHGEOC | TWL4030_TBATOR2 |
 		TWL4030_TBATOR1 | TWL4030_BATSTS);
@@ -512,12 +603,18 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	if (ret < 0)
 		dev_warn(&pdev->dev, "failed to unmask interrupts: %d\n", ret);
 
+	bci->ac_charge_enable = true;
+	bci->usb_charge_enable = true;
 	twl4030_charger_enable_ac(true);
 	twl4030_charger_enable_usb(bci, true);
 
 	return 0;
 
 fail_unmask_interrupts:
+	device_remove_file(bci->usb.dev, &dev_attr_enable_usb);
+fail_sysfs2:
+	device_remove_file(bci->ac.dev, &dev_attr_enable_ac);
+fail_sysfs1:
 	if (bci->transceiver != NULL) {
 		otg_unregister_notifier(bci->transceiver, &bci->otg_nb);
 		otg_put_transceiver(bci->transceiver);
@@ -539,6 +636,9 @@ fail_register_ac:
 static int __exit twl4030_bci_remove(struct platform_device *pdev)
 {
 	struct twl4030_bci *bci = platform_get_drvdata(pdev);
+
+	device_remove_file(bci->usb.dev, &dev_attr_enable_usb);
+	device_remove_file(bci->ac.dev, &dev_attr_enable_ac);
 
 	twl4030_charger_enable_ac(false);
 	twl4030_charger_enable_usb(bci, false);
