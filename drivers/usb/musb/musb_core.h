@@ -311,6 +311,7 @@ struct musb_context_registers {
 	u8 index, testmode;
 
 	u8 devctl, busctl, misc;
+	u32 otg_interfsel;
 
 	struct musb_csr_regs index_regs[MUSB_C_NUM_EPS];
 };
@@ -454,6 +455,7 @@ struct musb {
 #ifdef MUSB_CONFIG_PROC_FS
 	struct proc_dir_entry *proc_entry;
 #endif
+	struct delayed_work	vbus_workaround_work;
 };
 
 static inline struct musb *gadget_to_musb(struct usb_gadget *g)

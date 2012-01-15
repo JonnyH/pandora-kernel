@@ -654,6 +654,15 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 			musb->is_active = 0;
 			break;
 		}
+
+		switch (musb->xceiv->state) {
+		case OTG_STATE_B_IDLE:
+		case OTG_STATE_B_PERIPHERAL:
+			cancel_delayed_work(&musb->vbus_workaround_work);
+			schedule_delayed_work(&musb->vbus_workaround_work, HZ / 2);
+		default:
+			break;
+		}
 	}
 
 	if (int_usb & MUSB_INTR_CONNECT) {
@@ -982,6 +991,9 @@ static void musb_shutdown(struct platform_device *pdev)
 	unsigned long	flags;
 
 	pm_runtime_get_sync(musb->controller);
+
+	musb_gadget_cleanup(musb);
+
 	spin_lock_irqsave(&musb->lock, flags);
 	musb_platform_disable(musb);
 	musb_generic_disable(musb);
@@ -993,6 +1005,9 @@ static void musb_shutdown(struct platform_device *pdev)
 	musb_platform_exit(musb);
 
 	pm_runtime_put(musb->controller);
+
+	cancel_delayed_work(&musb->vbus_workaround_work);
+
 	/* FIXME power down */
 }
 
@@ -1770,6 +1785,41 @@ static void musb_irq_work(struct work_struct *data)
 	}
 }
 
+#include <linux/usb/ulpi.h>
+
+static void musb_vbus_workaround_work(struct work_struct *work)
+{
+	struct musb *musb = container_of(work, struct musb, vbus_workaround_work.work);
+	u8 devctl;
+	int ret;
+
+	if (musb_ulpi_access.write == NULL)
+		return;
+
+	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+
+	/*
+	 * I don't really know why but VBUS sometimes gets stuck and
+	 * causes session to never end. It would look like some pullup
+	 * is enabled when it shouldn't be on certain PHY states.
+	 * Turning on pulldowns magically drains VBUS to zero and allows
+	 * session to end, so let's do that here.
+	 *
+	 * XXX: probably better check VBUS on TWL?
+	 * beagle sometimes has session bit set but no VBUS on twl?
+	 */
+	if ((musb->xceiv->state == OTG_STATE_B_PERIPHERAL ||
+	     musb->xceiv->state == OTG_STATE_B_IDLE) &&
+	    (devctl & MUSB_DEVCTL_VBUS) != (3 << MUSB_DEVCTL_VBUS_SHIFT) &&
+	    (devctl & MUSB_DEVCTL_VBUS) != (0 << MUSB_DEVCTL_VBUS_SHIFT)) {
+		dev_dbg(musb->controller, "VBUS workaround..\n");
+		ret = musb_ulpi_access.write(musb->xceiv, ULPI_SET(ULPI_OTG_CTRL),
+			ULPI_OTG_CTRL_DM_PULLDOWN | ULPI_OTG_CTRL_DP_PULLDOWN);
+		//if (ret)
+		//	dev_err(musb->controller, "VBUS workaround error\n");
+	}
+}
+
 /* --------------------------------------------------------------------------
  * Init support
  */
@@ -1826,8 +1876,6 @@ static void musb_free(struct musb *musb)
 #ifdef CONFIG_SYSFS
 	sysfs_remove_group(&musb->controller->kobj, &musb_attr_group);
 #endif
-
-	musb_gadget_cleanup(musb);
 
 	if (musb->nIrq >= 0) {
 		if (musb->irq_wake)
@@ -1941,6 +1989,8 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 	/* Init IRQ workqueue before request_irq */
 	INIT_WORK(&musb->irq_work, musb_irq_work);
 
+	INIT_DELAYED_WORK(&musb->vbus_workaround_work, musb_vbus_workaround_work);
+
 	/* attach to the IRQ */
 	if (request_irq(nIrq, musb->isr, 0, dev_name(dev), musb)) {
 		dev_err(dev, "request_irq %d failed!\n", nIrq);
@@ -2011,6 +2061,8 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 	}
 	if (status < 0)
 		goto fail3;
+
+	pm_runtime_put(musb->controller);
 
 	status = musb_init_debugfs(musb);
 	if (status < 0)
@@ -2111,11 +2163,9 @@ static int __exit musb_remove(struct platform_device *pdev)
 	 *  - Peripheral mode: peripheral is deactivated (or never-activated)
 	 *  - OTG mode: both roles are deactivated (or never-activated)
 	 */
-	pm_runtime_get_sync(musb->controller);
 	musb_exit_debugfs(musb);
 	musb_shutdown(pdev);
 
-	pm_runtime_put(musb->controller);
 	musb_free(musb);
 	iounmap(ctrl_base);
 	device_init_wakeup(&pdev->dev, 0);
@@ -2156,6 +2206,7 @@ static void musb_save_context(struct musb *musb)
 		if (!epio)
 			continue;
 
+		musb_writeb(musb_base, MUSB_INDEX, i);
 		musb->context.index_regs[i].txmaxp =
 			musb_readw(epio, MUSB_TXMAXP);
 		musb->context.index_regs[i].txcsr =
@@ -2231,6 +2282,7 @@ static void musb_restore_context(struct musb *musb)
 		if (!epio)
 			continue;
 
+		musb_writeb(musb_base, MUSB_INDEX, i);
 		musb_writew(epio, MUSB_TXMAXP,
 			musb->context.index_regs[i].txmaxp);
 		musb_writew(epio, MUSB_TXCSR,

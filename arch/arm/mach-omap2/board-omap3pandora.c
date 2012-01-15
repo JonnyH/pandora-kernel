@@ -28,6 +28,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
 #include <linux/leds.h>
+#include <linux/leds_pwm.h>
 #include <linux/input.h>
 #include <linux/input/matrix_keypad.h>
 #include <linux/gpio.h>
@@ -35,6 +36,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 #include <linux/regulator/fixed.h>
+#include <linux/i2c/vsense.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -56,6 +58,7 @@
 #define PANDORA_WIFI_IRQ_GPIO		21
 #define PANDORA_WIFI_NRESET_GPIO	23
 #define OMAP3_PANDORA_TS_GPIO		94
+#define PANDORA_EN_USB_5V_GPIO		164
 
 static struct mtd_partition omap3pandora_nand_partitions[] = {
 	{
@@ -121,6 +124,38 @@ static struct platform_device pandora_leds_gpio = {
 	},
 };
 
+static struct led_pwm pandora_pwm_leds[] = {
+	{
+		.name			= "pandora::keypad_bl",
+		.pwm_id			= 0, /* LEDA */
+	}, {
+		.name			= "pandora::power",
+		.pwm_id			= 1, /* LEDB */
+	}, {
+		.name			= "pandora::charger",
+		.default_trigger	= "bq27500-0-charging",
+		.pwm_id			= 3, /* PWM1 */
+	}
+};
+
+static struct led_pwm_platform_data pandora_pwm_led_data = {
+	.leds		= pandora_pwm_leds,
+	.num_leds	= ARRAY_SIZE(pandora_pwm_leds),
+};
+
+static struct platform_device pandora_leds_pwm = {
+	.name	= "leds-twl4030-pwm",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &pandora_pwm_led_data,
+	},
+};
+
+static struct platform_device pandora_bl = {
+	.name	= "twl4030-pwm0-bl",
+	.id	= -1,
+};
+
 #define GPIO_BUTTON(gpio_num, ev_type, ev_code, act_low, descr)	\
 {								\
 	.gpio		= gpio_num,				\
@@ -167,6 +202,9 @@ static struct platform_device pandora_keys_gpio = {
 	},
 };
 
+/* HACK: this requires patched twl4030_keypad driver */
+#define FNKEY(row, col, code) KEY((row + 8), col, code)
+
 static const uint32_t board_keymap[] = {
 	/* row, col, code */
 	KEY(0, 0, KEY_9),
@@ -212,6 +250,50 @@ static const uint32_t board_keymap[] = {
 	KEY(7, 2, KEY_Q),
 	KEY(7, 3, KEY_LEFTSHIFT),
 	KEY(7, 4, KEY_COMMA),
+	/* Fn keys */
+	FNKEY(0, 0, KEY_F9),
+	FNKEY(0, 1, KEY_F8),
+	FNKEY(0, 2, KEY_BRIGHTNESSUP),
+	FNKEY(0, 3, KEY_F13),		/* apostrophe, differs from Fn-A? */
+	FNKEY(0, 4, KEY_F22),
+	FNKEY(0, 5, KEY_F23),
+	FNKEY(1, 0, KEY_F10),
+	FNKEY(1, 1, KEY_F7),
+	FNKEY(1, 2, KEY_BRIGHTNESSDOWN),
+	FNKEY(1, 3, KEY_GRAVE),
+	FNKEY(1, 4, KEY_F14),		/* pipe/bar */
+	FNKEY(1, 5, KEY_TAB),
+	FNKEY(2, 0, KEY_INSERT),
+	FNKEY(2, 1, KEY_F6),
+	FNKEY(2, 2, KEY_F15),		/* dash */
+	FNKEY(2, 3, KEY_EQUAL),
+	FNKEY(2, 4, KEY_F16),		/* # (pound/hash) */
+	FNKEY(2, 5, KEY_FN),
+	FNKEY(3, 0, KEY_F11),
+	FNKEY(3, 1, KEY_F5),
+	FNKEY(3, 2, KEY_F17),		/* ! */
+	FNKEY(3, 3, KEY_KPPLUS),
+	FNKEY(3, 4, KEY_BACKSLASH),
+	FNKEY(4, 0, KEY_F12),
+	FNKEY(4, 1, KEY_F4),
+	FNKEY(4, 2, KEY_RIGHTBRACE),
+	FNKEY(4, 3, KEY_KPMINUS),
+	FNKEY(4, 4, KEY_QUESTION),
+	FNKEY(5, 0, KEY_F18),		/* £ (pound) */
+	FNKEY(5, 1, KEY_F3),
+	FNKEY(5, 2, KEY_LEFTBRACE),
+	FNKEY(5, 3, KEY_F19),		/* " */
+	FNKEY(5, 4, KEY_SLASH),
+	FNKEY(6, 0, KEY_YEN),
+	FNKEY(6, 1, KEY_F2),
+	FNKEY(6, 2, KEY_F20),		/* @ */
+	FNKEY(6, 3, KEY_APOSTROPHE),
+	FNKEY(6, 4, KEY_F21),		/* : */
+	FNKEY(7, 0, KEY_ENTER),
+	FNKEY(7, 1, KEY_F1),
+	FNKEY(7, 2, KEY_ESC),
+	FNKEY(7, 3, KEY_CAPSLOCK),
+	FNKEY(7, 4, KEY_SEMICOLON),
 };
 
 static struct matrix_keymap_data board_map_data = {
@@ -474,7 +556,18 @@ static struct platform_device pandora_vwlan_device = {
 	},
 };
 
-static struct twl4030_bci_platform_data pandora_bci_data;
+static char *pandora_power_supplied_to[] = {
+	"bq27500-0",
+};
+
+static struct twl4030_bci_platform_data pandora_bci_data = {
+	.supplied_to		= pandora_power_supplied_to,
+	.num_supplicants	= ARRAY_SIZE(pandora_power_supplied_to),
+};
+
+static struct twl4030_power_data pandora_power_data = {
+	.use_poweroff	= 1,
+};
 
 static struct twl4030_platform_data omap3pandora_twldata = {
 	.gpio		= &omap3pandora_gpio_data,
@@ -486,10 +579,38 @@ static struct twl4030_platform_data omap3pandora_twldata = {
 	.vsim		= &pandora_vsim,
 	.keypad		= &pandora_kp_data,
 	.bci		= &pandora_bci_data,
+	.power		= &pandora_power_data,
+};
+
+static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("tps65950", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_34XX_SYS_NIRQ,
+		.platform_data = &omap3pandora_twldata,
+	},
+};
+
+static struct vsense_platform_data omap3pandora_nub1_data = {
+	.gpio_irq	= 161,
+	.gpio_reset	= 156,
+};
+
+static struct vsense_platform_data omap3pandora_nub2_data = {
+	.gpio_irq	= 162,
+	.gpio_reset	= 156,
 };
 
 static struct i2c_board_info __initdata omap3pandora_i2c3_boardinfo[] = {
 	{
+		I2C_BOARD_INFO("vsense", 0x66),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub1_data,
+	}, {
+		I2C_BOARD_INFO("vsense", 0x67),
+		.flags = I2C_CLIENT_WAKE,
+		.platform_data = &omap3pandora_nub2_data,
+	}, {
 		I2C_BOARD_INFO("bq27500", 0x55),
 		.flags = I2C_CLIENT_WAKE,
 	},
@@ -553,8 +674,20 @@ fail:
 	printk(KERN_ERR "wl1251 board initialisation failed\n");
 }
 
+static void __init pandora_usb_host_init(void)
+{
+	int ret;
+
+	ret = gpio_request_one(PANDORA_EN_USB_5V_GPIO, GPIOF_OUT_INIT_HIGH,
+		"ehci vbus");
+	if (ret < 0)
+		pr_err("Cannot set vbus GPIO, ret=%d\n", ret);
+}
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
+	&pandora_leds_pwm,
+	&pandora_bl,
 	&pandora_keys_gpio,
 	&pandora_vwlan_device,
 };
@@ -580,6 +713,7 @@ static struct omap_board_mux board_mux[] __initdata = {
 static void __init omap3pandora_init(void)
 {
 	omap3_mux_init(board_mux, OMAP_PACKAGE_CBB);
+	pandora_usb_host_init();
 	omap3pandora_i2c_init();
 	pandora_wl1251_init();
 	platform_add_devices(omap3pandora_devices,
@@ -599,6 +733,22 @@ static void __init omap3pandora_init(void)
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
 }
+
+/* HACK: create it here, so that others don't need to bother */
+#ifdef CONFIG_PROC_FS
+#include <linux/proc_fs.h>
+
+static int __init proc_pandora_init(void)
+{
+	struct proc_dir_entry *ret;
+
+	ret = proc_mkdir("pandora", NULL);
+	if (!ret)
+		return -ENOMEM;
+	return 0;
+}
+fs_initcall(proc_pandora_init);
+#endif
 
 MACHINE_START(OMAP3_PANDORA, "Pandora Handheld Console")
 	.atag_offset	= 0x100,

@@ -890,3 +890,18 @@ config ARCH_HAS_BARRIERS
 	help
 	  This option allows the use of custom mandatory barriers
 	  included via the mach/barriers.h file.
+
+config USER_L2_PLE
+	bool "Enable userspace access to the L2 PLE"
+	depends on CPU_V7
+	default n
+	help
+	  Enable userspace access to the L2 preload engine (PLE) available
+	  in Cortex-A series ARM processors.
+
+config USER_PMON
+	bool "Enable userspace access to performance counters"
+	depends on CPU_V7
+	default n
+	help
+	  Enable userpsace access to the performance monitor registers.
