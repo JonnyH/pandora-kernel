@@ -2338,6 +2338,7 @@ static int musb_suspend(struct device *dev)
 {
 	struct musb	*musb = dev_to_musb(dev);
 	unsigned long	flags;
+	int		ret = 0;
 
 	spin_lock_irqsave(&musb->lock, flags);
 
@@ -2345,6 +2346,20 @@ static int musb_suspend(struct device *dev)
 		/* FIXME force disconnect unless we know USB will wake
 		 * the system up quickly enough to respond ...
 		 */
+		/*
+		 * FIXME: musb must be already runtime suspended at this point.
+		 * If it's not, framework will try to suspend it late when
+		 * i2c will be off, and twl4030 will want to access it for it's
+		 * stuff, causing data abort.
+		 */
+		int pm_usage_count =
+			atomic_read(&musb->controller->power.usage_count);
+		if (pm_usage_count > 1) {
+			dev_err(dev, "can't suspend while still active, "
+				"try removing gadget drivers (usage_count %d)\n",
+				pm_usage_count);
+			ret = -EBUSY;
+		}
 	} else if (is_host_active(musb)) {
 		/* we know all the children are suspended; sometimes
 		 * they will even be wakeup-enabled.
@@ -2352,7 +2367,7 @@ static int musb_suspend(struct device *dev)
 	}
 
 	spin_unlock_irqrestore(&musb->lock, flags);
-	return 0;
+	return ret;
 }
 
 static int musb_resume_noirq(struct device *dev)
