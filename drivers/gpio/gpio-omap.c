@@ -1347,8 +1347,18 @@ void omap2_gpio_prepare_for_idle(int off_mode)
 
 	for (i = min; i < gpio_bank_count; i++) {
 		struct gpio_bank *bank = &gpio_bank[i];
+		void __iomem *reg;
 		u32 l1 = 0, l2 = 0;
 		int j;
+
+		/*
+		 * Disable debounce since clock disable below will cause
+		 * problems if GPIO module doesn't go idle for some reason.
+		 */
+		if (bank->dbck_enable_mask != 0) {
+			reg = bank->base + bank->regs->debounce_en;
+			__raw_writel(0, reg);
+		}
 
 		for (j = 0; j < hweight_long(bank->dbck_enable_mask); j++)
 			clk_disable(bank->dbck);
@@ -1415,11 +1425,17 @@ void omap2_gpio_resume_after_idle(void)
 		min = 1;
 	for (i = min; i < gpio_bank_count; i++) {
 		struct gpio_bank *bank = &gpio_bank[i];
+		void __iomem *reg;
 		u32 l = 0, gen, gen0, gen1;
 		int j;
 
 		for (j = 0; j < hweight_long(bank->dbck_enable_mask); j++)
 			clk_enable(bank->dbck);
+
+		if (bank->dbck_enable_mask != 0) {
+			reg = bank->base + bank->regs->debounce_en;
+			__raw_writel(bank->dbck_enable_mask, reg);
+		}
 
 		if (!workaround_enabled)
 			continue;
