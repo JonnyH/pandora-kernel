@@ -53,6 +53,8 @@ static int pwm0_backlight_update_status(struct backlight_device *bl)
 
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
+	if (bl->props.state & BL_CORE_SUSPENDED)
+		brightness = 0;
 
 	/* ignore fb blank for now
 	if (bl->props.fb_blank != FB_BLANK_UNBLANK)
@@ -103,6 +105,7 @@ static int pwm0_backlight_get_brightness(struct backlight_device *bl)
 }
 
 static const struct backlight_ops pwm0_backlight_ops = {
+	.options	= BL_CORE_SUSPENDRESUME,
 	.update_status	= pwm0_backlight_update_status,
 	.get_brightness	= pwm0_backlight_get_brightness,
 };
@@ -122,6 +125,8 @@ static int pwm0_backlight_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to register backlight\n");
 		return PTR_ERR(bl);
 	}
+
+	platform_set_drvdata(pdev, bl);
 
 	/* 64 cycle period, ON position 0 */
 	twl_i2c_write_u8(TWL4030_MODULE_PWM0, 0x80, TWL_PWM0_ON);
@@ -145,28 +150,6 @@ static int pwm0_backlight_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int pwm0_backlight_suspend(struct platform_device *pdev,
-				 pm_message_t state)
-{
-	pwm0_disable();
-	old_brightness = 0;
-
-	return 0;
-}
-
-static int pwm0_backlight_resume(struct platform_device *pdev)
-{
-	struct backlight_device *bl = platform_get_drvdata(pdev);
-
-	backlight_update_status(bl);
-	return 0;
-}
-#else
-#define pwm0_backlight_suspend	NULL
-#define pwm0_backlight_resume	NULL
-#endif
-
 static struct platform_driver pwm0_backlight_driver = {
 	.driver		= {
 		.name	= "twl4030-pwm0-bl",
@@ -174,8 +157,6 @@ static struct platform_driver pwm0_backlight_driver = {
 	},
 	.probe		= pwm0_backlight_probe,
 	.remove		= pwm0_backlight_remove,
-	.suspend	= pwm0_backlight_suspend,
-	.resume		= pwm0_backlight_resume,
 };
 
 static int __init pwm0_backlight_init(void)
