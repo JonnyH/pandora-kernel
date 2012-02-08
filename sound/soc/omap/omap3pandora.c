@@ -77,6 +77,23 @@ static int omap3pandora_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int omap3pandora_hw_free(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	int ret;
+
+	/* Set McBSP clock back to internal for power saving to work */
+	ret = snd_soc_dai_set_sysclk(cpu_dai, OMAP_MCBSP_SYSCLK_CLKS_FCLK,
+				     0, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		pr_err(PREFIX "can't set cpu system clock\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int omap3pandora_dac_event(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *k, int event)
 {
@@ -201,6 +218,7 @@ static int omap3pandora_in_init(struct snd_soc_pcm_runtime *rtd)
 
 static struct snd_soc_ops omap3pandora_ops = {
 	.hw_params = omap3pandora_hw_params,
+	.hw_free = omap3pandora_hw_free,
 };
 
 /* Digital audio interface glue - connects codec <--> CPU */
