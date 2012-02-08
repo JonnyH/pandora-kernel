@@ -152,7 +152,7 @@ static struct platform_device pandora_leds_pwm = {
 };
 
 static struct platform_device pandora_bl = {
-	.name	= "twl4030-pwm0-bl",
+	.name	= "pandora-backlight",
 	.id	= -1,
 };
 
