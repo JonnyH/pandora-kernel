@@ -707,6 +707,8 @@ static const struct usbhs_omap_board_data usbhs_bdata __initconst = {
 
 #ifdef CONFIG_OMAP_MUX
 static struct omap_board_mux board_mux[] __initdata = {
+	/* enable wakeup for pandora button (GPIO99) */
+	OMAP3_MUX(CAM_D0, OMAP_INPUT_EN | OMAP_WAKEUP_EN | OMAP_MUX_MODE4),
 	{ .reg_offset = OMAP_MUX_TERMINATOR },
 };
 #endif
