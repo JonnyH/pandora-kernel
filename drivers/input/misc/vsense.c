@@ -36,6 +36,7 @@ static DEFINE_MUTEX(vsense_mutex);
  * track of it here.
  */
 static int vsense_reset_state;
+static int vsense_reset_refcount;
 
 struct vsense_drvdata {
 	char dev_name[12];
@@ -143,20 +144,15 @@ static int vsense_reset(struct vsense_drvdata *ddata, int val)
 
 	dev_dbg(&ddata->client->dev, "vsense_reset: %i\n", val);
 
-	ret = gpio_request(ddata->reset_gpio, "vsense reset");
-	if (ret < 0) {
-		dev_err(&ddata->client->dev, "failed to request GPIO %d,"
-				" error %d\n", ddata->reset_gpio, ret);
-		return ret;
-	}
-
 	ret = gpio_direction_output(ddata->reset_gpio, val);
 	if (ret < 0) {
 		dev_err(&ddata->client->dev, "failed to configure direction "
 			"for GPIO %d, error %d\n", ddata->reset_gpio, ret);
 	}
+	else {
+		vsense_reset_state = val;
+	}
 
-	gpio_free(ddata->reset_gpio);
 	return ret;
 }
 
@@ -164,11 +160,9 @@ static int vsense_open(struct input_dev *dev)
 {
 	dev_dbg(&dev->dev, "vsense_open\n");
 
-	/* get out of reset and stay there until driver is unloaded */
-	if (vsense_reset_state != 0) {
-		vsense_reset_state = 0;
+	/* get out of reset and stay there until user wants to reset it */
+	if (vsense_reset_state != 0)
 		vsense_reset(input_get_drvdata(dev), 0);
-	}
 
 	return 0;
 }
@@ -414,8 +408,7 @@ vsense_set_reset(struct device *dev, struct device_attribute *attr,
 	client = to_i2c_client(dev);
 	ddata = i2c_get_clientdata(client);
 
-	vsense_reset_state = new_reset ? 1 : 0;
-	vsense_reset(ddata, vsense_reset_state);
+	vsense_reset(ddata, new_reset ? 1 : 0);
 
 	return count;
 }
@@ -468,10 +461,25 @@ static int vsense_probe(struct i2c_client *client,
 	}
 
 	mutex_lock(&vsense_mutex);
+
 	ret = idr_get_new(&vsense_proc_id, client, &ddata->proc_id);
-	mutex_unlock(&vsense_mutex);
-	if (ret < 0)
+	if (ret < 0) {
+		mutex_unlock(&vsense_mutex);
 		goto fail0;
+	}
+
+	if (!vsense_reset_refcount) {
+		ret = gpio_request(pdata->gpio_reset, "vsense reset");
+		if (ret < 0) {
+			dev_err(&ddata->client->dev, "gpio_request error: %d, %d\n",
+				ddata->reset_gpio, ret);
+			mutex_unlock(&vsense_mutex);
+			goto fail0;
+		}
+	}
+	vsense_reset_refcount++;
+
+	mutex_unlock(&vsense_mutex);
 
 	ret = gpio_request(pdata->gpio_irq, client->name);
 	if (ret < 0) {
@@ -510,8 +518,8 @@ static int vsense_probe(struct i2c_client *client,
 	ddata->mbutton_threshold = 20;
 	i2c_set_clientdata(client, ddata);
 
-	vsense_reset_state = 1;
-	vsense_reset(ddata, 1);
+	/* resetting drains power, so keep it out of reset at all times */
+	vsense_reset(ddata, 0);
 
 	ret = vsense_input_register(ddata, ddata->mode);
 	if (ret) {
@@ -559,6 +567,7 @@ fail3:
 fail2:
 	gpio_free(pdata->gpio_irq);
 fail1:
+	gpio_free(pdata->gpio_reset);
 	idr_remove(&vsense_proc_id, ddata->proc_id);
 fail0:
 	kfree(ddata);
@@ -574,8 +583,13 @@ static int __devexit vsense_remove(struct i2c_client *client)
 
 	ddata = i2c_get_clientdata(client);
 
-	vsense_reset_state = 1;
-	vsense_reset(ddata, 1);
+	mutex_lock(&vsense_mutex);
+
+	vsense_reset_refcount--;
+	if (!vsense_reset_refcount)
+		gpio_free(ddata->reset_gpio);
+
+	mutex_unlock(&vsense_mutex);
 
 	device_remove_file(&client->dev, &dev_attr_reset);
 
