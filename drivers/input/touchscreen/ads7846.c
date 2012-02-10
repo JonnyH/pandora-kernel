@@ -1281,7 +1281,7 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	ts->wait_for_sync = pdata->wait_for_sync ? : null_wait_for_sync;
 
 	snprintf(ts->phys, sizeof(ts->phys), "%s/input0", dev_name(&spi->dev));
-	snprintf(ts->name, sizeof(ts->name), "ADS%d Touchscreen", ts->model);
+	snprintf(ts->name, sizeof(ts->name), "touchscreen");
 
 	input_dev->name = ts->name;
 	input_dev->phys = ts->phys;
