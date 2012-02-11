@@ -437,6 +437,7 @@ static struct regulator_consumer_supply pandora_vaux4_supplies[] = {
 
 static struct regulator_consumer_supply pandora_adac_supply[] = {
 	REGULATOR_SUPPLY("vcc", "soc-audio"),
+	REGULATOR_SUPPLY("lidsw", NULL),
 };
 
 /* VMMC1 for MMC1 pins CMD, CLK, DAT0..DAT3 (20 mA, plus card == max 220 mA) */
@@ -709,6 +710,57 @@ static struct omap_board_mux board_mux[] __initdata = {
 	{ .reg_offset = OMAP_MUX_TERMINATOR },
 };
 #endif
+
+static struct regulator *lid_switch_power;
+
+#ifdef CONFIG_PM_SLEEP
+static int pandora_pm_suspend(struct device *dev)
+{
+	if (!IS_ERR_OR_NULL(lid_switch_power))
+		regulator_disable(lid_switch_power);
+
+	return 0;
+}
+
+static int pandora_pm_resume(struct device *dev)
+{
+	if (!IS_ERR_OR_NULL(lid_switch_power))
+		regulator_enable(lid_switch_power);
+
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(pandora_pm, pandora_pm_suspend, pandora_pm_resume);
+
+static int __devinit pandora_pm_probe(struct platform_device *pdev)
+{
+	lid_switch_power = regulator_get(NULL, "lidsw");
+	if (!IS_ERR(lid_switch_power))
+		regulator_enable(lid_switch_power);
+
+	return 0;
+}
+
+static struct platform_driver pandora_pm_driver = {
+	.probe		= pandora_pm_probe,
+	.driver		= {
+		.name	= "pandora-pm",
+		.pm	= &pandora_pm,
+	},
+};
+
+static struct platform_device pandora_pm_dev = {
+	.name	= "pandora-pm",
+	.id	= -1,
+};
+
+static int __init pandora_pm_drv_reg(void)
+{
+	platform_device_register(&pandora_pm_dev);
+	return platform_driver_register(&pandora_pm_driver);
+}
+late_initcall(pandora_pm_drv_reg);
 
 static void __init omap3pandora_init(void)
 {
