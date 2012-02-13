@@ -152,9 +152,6 @@ static struct arm_vmregion_head consistent_head = {
 	.vm_end		= CONSISTENT_END,
 };
 
-#ifdef CONFIG_HUGETLB_PAGE
-#error ARM Coherent DMA allocator does not (yet) support huge TLB
-#endif
 
 /*
  * Initialise the consistent memory allocation.
