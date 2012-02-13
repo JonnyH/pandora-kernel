@@ -9,6 +9,10 @@ typedef struct {
 	raw_spinlock_t id_lock;
 #endif
 	unsigned int kvm_seq;
+#ifdef CONFIG_ARM_HUGETLB_SUPPORT
+	/* we place hugepage linux pte at mm_struct.context  */
+	pte_t *huge_linux_pte;
+#endif
 } mm_context_t;
 
 #ifdef CONFIG_CPU_HAS_ASID

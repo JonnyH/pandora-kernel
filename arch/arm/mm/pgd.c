@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/gfp.h>
 #include <linux/highmem.h>
+#include <linux/slab.h>
 
 #include <asm/pgalloc.h>
 #include <asm/page.h>
@@ -67,6 +68,12 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 		pte_unmap(new_pte);
 	}
 
+#ifdef CONFIG_ARM_HUGETLB_SUPPORT
+	/* reset the hugepage linux pte pointer
+	 * for new mm_struct when we do the fork
+	 */
+	mm->context.huge_linux_pte = NULL;
+#endif
 	return new_pgd;
 
 no_pte:
@@ -76,6 +83,11 @@ no_pmd:
 no_pud:
 	free_pages((unsigned long)new_pgd, 2);
 no_pgd:
+#ifdef CONFIG_ARM_HUGETLB_SUPPORT
+	/* free huge linux pte table */
+	if (mm->context.huge_linux_pte != NULL)
+		kfree(mm->context.huge_linux_pte);
+#endif
 	return NULL;
 }
 
