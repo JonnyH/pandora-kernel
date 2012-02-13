@@ -247,6 +247,10 @@ static inline pte_t *pmd_page_vaddr(pmd_t pmd)
 	((pte_val(pte) & (L_PTE_PRESENT | L_PTE_USER)) == \
 	 (L_PTE_PRESENT | L_PTE_USER))
 
+#ifdef CONFIG_ARM_HUGETLB_SUPPORT
+#define set_hugepte_ext(ptep,pte,ext) cpu_set_hugepte_ext(ptep,pte,ext)
+#endif
+
 #if __LINUX_ARM_ARCH__ < 6
 static inline void __sync_icache_dcache(pte_t pteval)
 {
@@ -268,6 +272,15 @@ static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 	set_pte_ext(ptep, pteval, ext);
 }
 
+#ifdef CONFIG_ARM_HUGETLB_SUPPORT
+static inline void set_hugepte_at(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval)
+{
+	__sync_icache_dcache(pteval);
+	set_hugepte_ext(ptep, pteval, PTE_EXT_NG);
+}
+#endif
+
 #define PTE_BIT_FUNC(fn,op) \
 static inline pte_t pte_##fn(pte_t pte) { pte_val(pte) op; return pte; }
 
@@ -278,6 +291,7 @@ PTE_BIT_FUNC(mkdirty,   |= L_PTE_DIRTY);
 PTE_BIT_FUNC(mkold,     &= ~L_PTE_YOUNG);
 PTE_BIT_FUNC(mkyoung,   |= L_PTE_YOUNG);
 
+static inline pte_t pte_mkhuge(pte_t pte) { return pte; }
 static inline pte_t pte_mkspecial(pte_t pte) { return pte; }
 
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
