@@ -15,6 +15,21 @@
 #define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)
 #define PAGE_MASK		(~(PAGE_SIZE-1))
 
+#ifdef CONFIG_HUGEPAGE_SIZE_2MB
+/* we have 2MB hugepage for two 1MB section mapping */
+#define HPAGE_SHIFT		(SECTION_SHIFT + 1)
+#define HPAGE_SIZE		(_AC(1, UL) << HPAGE_SHIFT)
+#define HPAGE_MASK		(~(HPAGE_SIZE - 1))
+#define HUGETLB_PAGE_ORDER	(HPAGE_SHIFT - PAGE_SHIFT)
+#endif
+
+#ifdef CONFIG_HUGEPAGE_SIZE_16MB
+#define HPAGE_SHIFT		SUPERSECTION_SHIFT
+#define HPAGE_SIZE		(_AC(1, UL) << HPAGE_SHIFT)
+#define HPAGE_MASK		(~(HPAGE_SIZE - 1))
+#define HUGETLB_PAGE_ORDER	(HPAGE_SHIFT - PAGE_SHIFT)
+#endif
+
 #ifndef __ASSEMBLY__
 
 #ifndef CONFIG_MMU
