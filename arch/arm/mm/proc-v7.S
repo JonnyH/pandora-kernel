@@ -181,6 +181,93 @@ ENTRY(cpu_v7_set_pte_ext)
 	mov	pc, lr
 ENDPROC(cpu_v7_set_pte_ext)
 
+#ifdef CONFIG_ARM_HUGETLB_SUPPORT
+ENTRY(cpu_v7_set_hugepte_ext)
+	@mask out AP[2:0] TEX[2:0] in first level section descriptor
+	bic	r3, r1, #0x0000fc00
+	@clear NX/IMP
+	bic	r3, r3,#0x210
+
+	@clear BIT1:0
+	bic	r3, r3, #PMD_TYPE_MASK
+
+	@set extension bit
+	orr	r3, r3, #PMD_SECT_nG @HUGEPAGE always non-global
+
+	@set SECT mapping,1M section or 16M supersection
+	orr	r3, r3, #PMD_SECT_AP_WRITE
+	orr	r3, r3, #PMD_TYPE_SECT
+
+	@BIT18 1: 16M supersection 0: 1M section
+	bic	r3, r3, #PMD_SECT_SUPER
+
+	@ shared bit
+	tst	r1,#L_PTE_SHARED
+	orrne	r3,r3,#PMD_SECT_S
+
+	@ shared device ?
+	tst	r1, #1 << 4
+	orrne	r3, r3, #PMD_SECT_TEX(1)
+
+	eor	r1, r1,  #L_PTE_DIRTY
+	tst	r1, #L_PTE_RDONLY | L_PTE_DIRTY
+	orrne	r3, r3, #PMD_SECT_APX
+
+	tst	r1, #L_PTE_USER
+	orrne	r3, r3, #PMD_SECT_AP_READ
+#ifdef CONFIG_CPU_USE_DOMAINS
+	tstne	r3, #PMD_SECT_APX
+	bicne	r3, r3, #PMD_SECT_APX | PMD_SECT_AP_WRITE
+#endif
+
+	@set domain
+	bic 	r3, r3, #(0xf << 5)
+	orr	r3, r3, #PMD_DOMAIN(0x1)
+
+#ifdef CONFIG_HUGEPAGE_SIZE_16MB
+	@ for supersection mapping
+	@ clear domain setting and extend addr
+	@ set BIT18 to denote supersection
+	ldr	r2, =((0xf << 5) | (0xf << 20))
+	bic	r3, r3, r2
+	orr	r3, r3, #PMD_SECT_SUPER
+#endif
+
+	tst	r1, #L_PTE_XN
+	orrne	r3, r3, #PMD_SECT_XN
+
+	tst	r1, #L_PTE_YOUNG
+	tstne	r1, #L_PTE_PRESENT
+	moveq	r3, #0
+
+#ifdef CONFIG_HUGEPAGE_SIZE_16MB
+	@ set 16M huge page
+	.rept 16
+ 	str r3, [r0]
+	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
+	add	r0, r0, #4
+	.endr
+#endif
+
+#ifdef CONFIG_HUGEPAGE_SIZE_2MB
+	@ set 2M huge page
+	@ 1st 1MB mapping
+ 	str r3, [r0]
+	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
+	@ 2st 1MB mapping
+	cmp	r3,#0
+	movne	r2,#0x100000
+	addne	r3, r3, r2
+
+	add	r0, r0, #4
+ 	str r3, [r0]
+	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
+#endif
+	mov pc, lr
+#endif /*COFNIG_ARM_HUGETLB_SUPPORT*/
+
+ENDPROC(cpu_v7_set_hugepte_ext)
+
 	string	cpu_v7_name, "ARMv7 Processor"
 	.align
 
