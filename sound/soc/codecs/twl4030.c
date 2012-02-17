@@ -1760,9 +1760,11 @@ static int twl4030_hw_params(struct snd_pcm_substream *substream,
 			return -EINVAL;
 	}
 
+#if 0
 	if (twl4030->configured)
 		/* Ignoring hw_params for already configured DAI */
 		return 0;
+#endif
 
 	/* bit rate */
 	old_mode = twl4030_read_reg_cache(codec,
