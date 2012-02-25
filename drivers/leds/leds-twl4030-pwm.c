@@ -36,6 +36,8 @@
 #define LEDEN_LEDAPWM		BIT(4)
 #define LEDEN_LEDBPWM		BIT(5)
 
+#define LED_UNKNOWN		-1
+
 enum twl4030_led {
 	TWL4030_LEDA = 0,
 	TWL4030_LEDB,
@@ -133,7 +135,7 @@ static void twl4030_pwmled_work(struct work_struct *work)
 
 	twl_i2c_write_u8(led->module, val, TWL4030_PWMx_PWMxOFF);
 
-	if (led->old_brightness == LED_OFF)
+	if (led->old_brightness == LED_OFF || led->old_brightness == LED_UNKNOWN)
 		led->enable(led->id, 1);
 
 out:
@@ -172,7 +174,7 @@ static int __devinit twl4030_pwmled_probe(struct platform_device *pdev)
 		led->cdev.brightness_set = twl4030_pwmled_brightness;
 		led->cdev.default_trigger = pdata->leds[i].default_trigger;
 		led->id = pdata->leds[i].pwm_id;
-		led->old_brightness = -1; /* unknown */
+		led->old_brightness = LED_UNKNOWN;
 
 		switch (pdata->leds[i].pwm_id) {
 		case TWL4030_LEDA:
