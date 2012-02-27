@@ -19,6 +19,7 @@
 #include <plat/omap-pm.h>
 #include <plat/mux.h>
 #include <plat/omap_device.h>
+#include <asm/mach-types.h>
 
 #include "mux.h"
 #include "hsmmc.h"
@@ -468,6 +469,13 @@ void __init omap2_hsmmc_init(struct omap2_hsmmc_info *controllers)
 		} else {
 			control_pbias_offset = OMAP343X_CONTROL_PBIAS_LITE;
 			control_devconf1_offset = OMAP343X_CONTROL_DEVCONF1;
+		}
+
+		if (machine_is_omap3_pandora()) {
+			/* needed for gpio_126 - gpio_129 to work correctly */
+			reg = omap_ctrl_readl(control_pbias_offset);
+			reg &= ~OMAP343X_PBIASLITEVMODE1;
+			omap_ctrl_writel(reg, control_pbias_offset);
 		}
 	} else {
 		control_pbias_offset =
