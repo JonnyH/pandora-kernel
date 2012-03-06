@@ -312,10 +312,12 @@ static int omap_mcbsp_dai_hw_params(struct snd_pcm_substream *substream,
 
 	snd_soc_dai_set_dma_data(cpu_dai, substream, dma_data);
 
+#if 0
 	if (mcbsp_data->configured) {
 		/* McBSP already configured by another stream */
 		return 0;
 	}
+#endif
 
 	regs->rcr2	&= ~(RPHASE | RFRLEN2(0x7f) | RWDLEN2(7));
 	regs->xcr2	&= ~(RPHASE | XFRLEN2(0x7f) | XWDLEN2(7));
