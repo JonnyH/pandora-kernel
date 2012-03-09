@@ -601,6 +601,33 @@ static int omap_mcbsp_dai_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 	return err;
 }
 
+/* 
+ * We have to be sure there is more than FIFO size worth of data ready
+ * before starting, or else we get underflow right after start.
+ * XXX: To make realtime streaming work, setting this to fifo+period
+ * as DMA uses period boundaries, there must be enough data at those.
+ */
+static int omap_mcbsp_dai_prepare(struct snd_pcm_substream *substream,
+				  struct snd_soc_dai *cpu_dai)
+{
+	struct omap_mcbsp_data *mcbsp_data = snd_soc_dai_get_drvdata(cpu_dai);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	int size;
+
+	size = omap_mcbsp_get_fifo_size(mcbsp_data->bus_id);
+	size /= substream->runtime->channels;
+
+	size += bytes_to_frames(runtime, snd_pcm_lib_period_bytes(substream));
+
+	if (runtime->start_threshold < size) {
+		runtime->start_threshold = size;
+		if (runtime->start_threshold > runtime->buffer_size)
+			runtime->start_threshold = runtime->buffer_size;
+	}
+
+	return 0;
+}
+
 static struct snd_soc_dai_ops mcbsp_dai_ops = {
 	.startup	= omap_mcbsp_dai_startup,
 	.shutdown	= omap_mcbsp_dai_shutdown,
@@ -610,6 +637,7 @@ static struct snd_soc_dai_ops mcbsp_dai_ops = {
 	.set_fmt	= omap_mcbsp_dai_set_dai_fmt,
 	.set_clkdiv	= omap_mcbsp_dai_set_clkdiv,
 	.set_sysclk	= omap_mcbsp_dai_set_dai_sysclk,
+	.prepare	= omap_mcbsp_dai_prepare,
 };
 
 static int mcbsp_dai_probe(struct snd_soc_dai *dai)
