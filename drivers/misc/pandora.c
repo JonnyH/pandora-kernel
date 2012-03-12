@@ -21,6 +21,12 @@
 #error need CONFIG_PROC_FS
 #endif
 
+#define DCDC_GLOBAL_CFG	0x06
+#define VDD1_VSEL	0x5e
+#define VDD1_VMODE_CFG	0x5f
+
+#define SMARTREFLEX_ENABLE	BIT(3)
+
 #define PND_PROC_CPUMHZ		"pandora/cpu_mhz_max"
 #define PND_PROC_CPUOPP		"pandora/cpu_opp_max"
 
@@ -31,11 +37,14 @@ static void set_opp(int nopp)
 {
 	static const unsigned char opp2volt[5] = { 30, 38, 48, 54, 60 };
 	unsigned char v, ov;
+	int ret;
 
 	if (nopp>5) nopp=5;
 	if (nopp<1) nopp=1;
 	v = opp2volt[nopp-1];
-	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, v, 0x5E);
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, v, VDD1_VSEL);
+	if (ret != 0)
+		printk(KERN_ERR "VDD1_VSEL write failed: %d\n", ret);
 
 	ov = opp2volt[opp-1];
 	/*
@@ -83,6 +92,7 @@ static void postop_oppset(int mhz)
  * SYS_CLK is 26 MHz (see PRM_CLKSEL)
  * ARM_FCLK = (SYS_CLK * M * 2) / ([N+1] * M2) / 2
  * CM_CLKSEL1_PLL_MPU = N | (M << 8) | (M2 << 19)
+ * XXX: one of dividers are taken from wrong register
  */
 static int get_fclk(void)
 {
@@ -253,6 +263,24 @@ static void proc_create_rw(const char *name, void *pdata,
 
 static int pndctrl_init(void)
 {
+	int ret;
+	u8 val;
+
+	/* Some things other kernels can set and cause problems here: */
+	/* - make sure VMODE and DCDC_SLP are cleared */
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0, VDD1_VMODE_CFG);
+	if (ret != 0)
+		printk(KERN_ERR "VDD1_VMODE_CFG write failed: %d\n", ret);
+	/* - disable TWL-side SR */
+	ret = twl4030_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, &val, DCDC_GLOBAL_CFG);
+	if (ret == 0 && (val & SMARTREFLEX_ENABLE)) {
+		val &= ~SMARTREFLEX_ENABLE;
+		ret = twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, val,
+					   DCDC_GLOBAL_CFG);
+	}
+	if (ret != 0)
+		printk(KERN_ERR "DCDC_GLOBAL_CFG write failed: %d\n", ret);
+
 	opp = 1; /* Safest assumption for the delay */
 	set_opp(mhz2opp(get_fclk()));
 
