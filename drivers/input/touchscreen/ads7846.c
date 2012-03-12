@@ -53,6 +53,7 @@
 
 #define TS_POLL_DELAY	(1 * 1000000)	/* ns delay before the first sample */
 #define TS_POLL_PERIOD	(5 * 1000000)	/* ns delay between samples */
+#define TS_FALLBACK_PERIOD	(25 * 1000000)	/* ns fallback for vsync polling */
 
 /* this driver doesn't aim at the peak continuous sample rate */
 #define	SAMPLE_BITS	(8 /*cmd*/ + 16 /*sample*/ + 2 /* before, after */)
@@ -530,6 +531,7 @@ static void ads7846_rx(void *ads)
 	struct ads7846		*ts = ads;
 	unsigned		Rt;
 	u16			x, y, z1, z2;
+	ktime_t			next_poll;
 
 	/* ads7846_rx_val() did in-place conversion (including byteswap) from
 	 * on-the-wire format as part of debouncing to get stable readings.
@@ -608,11 +610,9 @@ static void ads7846_rx(void *ads)
 #endif
 	}
 
-	if (!ts->ext_trigger)
-		hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_PERIOD),
-				HRTIMER_MODE_REL);
-	else
-		ts->pending = 0;
+	next_poll = ktime_set(0, ts->ext_trigger ?
+				 TS_FALLBACK_PERIOD : TS_POLL_PERIOD);
+	hrtimer_start(&ts->timer, next_poll, HRTIMER_MODE_REL);
 }
 
 static int ads7846_debounce(void *ads, int data_idx, int *val)
@@ -743,6 +743,7 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 {
 	struct ads7846 *ts = handle;
 	unsigned long flags;
+	ktime_t next_poll;
 
 	spin_lock_irqsave(&ts->lock, flags);
 	if (likely(ts->get_pendown_state())) {
@@ -755,8 +756,9 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 			ts->irq_disabled = 1;
 			disable_irq(ts->spi->irq);
 			ts->pending = 1;
-			hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_DELAY),
-					HRTIMER_MODE_REL);
+			next_poll = ktime_set(0, ts->ext_trigger ?
+					 TS_FALLBACK_PERIOD : TS_POLL_DELAY);
+			hrtimer_start(&ts->timer, next_poll, HRTIMER_MODE_REL);
 		}
 	}
 	spin_unlock_irqrestore(&ts->lock, flags);
@@ -770,11 +772,8 @@ static void omap_vsync_handler(void *arg, u32 mask)
 
 	spin_lock_irq(&ts->lock);
 
-	if (ts->pendown && !ts->pending && !ts->disabled) {
-		ts->pending = 1;
-		hrtimer_start(&ts->timer, ktime_set(0, 0),
-				HRTIMER_MODE_REL);
-	}
+	if (ts->pending)
+		hrtimer_start(&ts->timer, ktime_set(0, 0), HRTIMER_MODE_REL);
 
 	spin_unlock_irq(&ts->lock);
 }
