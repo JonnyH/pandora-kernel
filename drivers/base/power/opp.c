@@ -458,12 +458,12 @@ int opp_add(struct device *dev, unsigned long freq, unsigned long u_volt)
  * that this function is *NOT* called under RCU protection or in contexts where
  * mutex locking or synchronize_rcu() blocking calls cannot be used.
  */
-static int opp_set_availability(struct device *dev, unsigned long freq,
+static int opp_set_availability(struct device *dev, int index, unsigned long freq,
 		bool availability_req)
 {
 	struct device_opp *tmp_dev_opp, *dev_opp = ERR_PTR(-ENODEV);
 	struct opp *new_opp, *tmp_opp, *opp = ERR_PTR(-ENODEV);
-	int r = 0;
+	int i, r = 0;
 
 	/* keep the node allocated */
 	new_opp = kmalloc(sizeof(struct opp), GFP_KERNEL);
@@ -488,11 +488,13 @@ static int opp_set_availability(struct device *dev, unsigned long freq,
 	}
 
 	/* Do we have the frequency? */
+	i = 0;
 	list_for_each_entry(tmp_opp, &dev_opp->opp_list, node) {
-		if (tmp_opp->rate == freq) {
+		if (i == index || tmp_opp->rate == freq) {
 			opp = tmp_opp;
 			break;
 		}
+		i++;
 	}
 	if (IS_ERR(opp)) {
 		r = PTR_ERR(opp);
@@ -548,7 +550,7 @@ out:
  */
 int opp_enable(struct device *dev, unsigned long freq)
 {
-	return opp_set_availability(dev, freq, true);
+	return opp_set_availability(dev, -1, freq, true);
 }
 
 /**
@@ -569,7 +571,109 @@ int opp_enable(struct device *dev, unsigned long freq)
  */
 int opp_disable(struct device *dev, unsigned long freq)
 {
-	return opp_set_availability(dev, freq, false);
+	return opp_set_availability(dev, -1, freq, false);
+}
+
+int opp_enable_i(struct device *dev, int index)
+{
+	return opp_set_availability(dev, index, ~0, true);
+}
+
+int opp_disable_i(struct device *dev, int index)
+{
+	return opp_set_availability(dev, index, ~0, false);
+}
+
+int opp_hack_set_freq(struct device *dev, int index, unsigned long freq)
+{
+	struct device_opp *tmp_dev_opp, *dev_opp = ERR_PTR(-ENODEV);
+	struct opp *tmp_opp, *opp = ERR_PTR(-ENODEV);
+	int i, r = 0;
+
+	mutex_lock(&dev_opp_list_lock);
+
+	/* Find the device_opp */
+	list_for_each_entry(tmp_dev_opp, &dev_opp_list, node) {
+		if (dev == tmp_dev_opp->dev) {
+			dev_opp = tmp_dev_opp;
+			break;
+		}
+	}
+	if (IS_ERR(dev_opp)) {
+		r = PTR_ERR(dev_opp);
+		dev_warn(dev, "%s: Device OPP not found (%d)\n", __func__, r);
+		goto unlock;
+	}
+
+	/* Do we have the frequency? */
+	i = 0;
+	list_for_each_entry(tmp_opp, &dev_opp->opp_list, node) {
+		if (i == index) {
+			opp = tmp_opp;
+			break;
+		}
+		i++;
+	}
+	if (IS_ERR(opp)) {
+		r = PTR_ERR(opp);
+		goto unlock;
+	}
+
+	opp->rate = freq;
+
+	mutex_unlock(&dev_opp_list_lock);
+	synchronize_rcu();
+
+	/* Notify the change */
+	srcu_notifier_call_chain(&dev_opp->head, OPP_EVENT_ENABLE, opp);
+
+	return r;
+
+unlock:
+	mutex_unlock(&dev_opp_list_lock);
+	return r;
+}
+
+int opp_hack_get_freq(struct device *dev, int index, unsigned long *freq)
+{
+	struct device_opp *tmp_dev_opp, *dev_opp = ERR_PTR(-ENODEV);
+	struct opp *tmp_opp, *opp = ERR_PTR(-ENODEV);
+	int i, r = 0;
+
+	mutex_lock(&dev_opp_list_lock);
+
+	/* Find the device_opp */
+	list_for_each_entry(tmp_dev_opp, &dev_opp_list, node) {
+		if (dev == tmp_dev_opp->dev) {
+			dev_opp = tmp_dev_opp;
+			break;
+		}
+	}
+	if (IS_ERR(dev_opp)) {
+		r = PTR_ERR(dev_opp);
+		dev_warn(dev, "%s: Device OPP not found (%d)\n", __func__, r);
+		goto unlock;
+	}
+
+	/* Do we have the frequency? */
+	i = 0;
+	list_for_each_entry(tmp_opp, &dev_opp->opp_list, node) {
+		if (i == index) {
+			opp = tmp_opp;
+			break;
+		}
+		i++;
+	}
+	if (IS_ERR(opp)) {
+		r = PTR_ERR(opp);
+		goto unlock;
+	}
+
+	*freq = opp->rate;
+
+unlock:
+	mutex_unlock(&dev_opp_list_lock);
+	return r;
 }
 
 #ifdef CONFIG_CPU_FREQ

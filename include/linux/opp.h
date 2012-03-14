@@ -47,6 +47,12 @@ int opp_disable(struct device *dev, unsigned long freq);
 
 struct srcu_notifier_head *opp_get_notifier(struct device *dev);
 
+/* hacks */
+int opp_enable_i(struct device *dev, int index);
+int opp_disable_i(struct device *dev, int index);
+int opp_hack_set_freq(struct device *dev, int index, unsigned long freq);
+int opp_hack_get_freq(struct device *dev, int index, unsigned long *freq);
+
 #else
 static inline unsigned long opp_get_voltage(struct opp *opp)
 {
