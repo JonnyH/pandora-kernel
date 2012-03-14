@@ -204,6 +204,77 @@ static inline void freq_table_free(void)
 		opp_free_cpufreq_table(mpu_dev, &freq_table);
 }
 
+/* force-update hack */
+static struct notifier_block omap_freq_nb;
+static struct cpufreq_policy *omap_freq_policy;
+
+static int freq_notifier_call(struct notifier_block *nb, unsigned long type,
+			      void *devp)
+{
+	static DEFINE_SPINLOCK(lock);
+	struct cpufreq_frequency_table *new_freq_table, *old_freq_table;
+	unsigned long flags;
+	int ret;
+
+	ret = opp_init_cpufreq_table(mpu_dev, &new_freq_table);
+	if (ret) {
+		dev_err(mpu_dev, "%s: failed to create cpufreq_table: %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	/* FIXME: use proper locks instead of these hacks */
+	spin_lock_irqsave(&lock, flags);
+	old_freq_table = freq_table;
+	freq_table = new_freq_table;
+	spin_unlock_irqrestore(&lock, flags);
+	msleep(1);
+	opp_free_cpufreq_table(mpu_dev, &old_freq_table);
+
+	if (omap_freq_policy == NULL) {
+		dev_err(mpu_dev, "%s: omap_freq_policy is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	cpufreq_frequency_table_get_attr(freq_table, omap_freq_policy->cpu);
+
+	ret = cpufreq_frequency_table_cpuinfo(omap_freq_policy, freq_table);
+	if (ret)
+		dev_err(mpu_dev, "%s: cpufreq_frequency_table_cpuinfo: %d\n",
+			__func__, ret);
+
+	return ret;
+}
+
+static void freq_register_opp_notifier(struct device *dev,
+				       struct cpufreq_policy *policy)
+{
+	struct srcu_notifier_head *nh = opp_get_notifier(dev);
+	int ret;
+
+	omap_freq_policy = policy;
+
+	if (IS_ERR(nh)) {
+		ret = PTR_ERR(nh);
+		goto out;
+	}
+	omap_freq_nb.notifier_call = freq_notifier_call;
+	ret = srcu_notifier_chain_register(nh, &omap_freq_nb);
+out:
+	if (ret != 0)
+		dev_err(mpu_dev, "%s: failed to register notifier: %d\n",
+				__func__, ret);
+}
+
+static void freq_unregister_opp_notifier(struct device *dev)
+{
+	struct srcu_notifier_head *nh = opp_get_notifier(dev);
+
+	if (IS_ERR(nh))
+		return;
+	srcu_notifier_chain_unregister(nh, &omap_freq_nb);
+}
+
 static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 {
 	int result = 0;
@@ -253,6 +324,8 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 	/* FIXME: what's the actual transition time? */
 	policy->cpuinfo.transition_latency = 300 * 1000;
 
+	freq_register_opp_notifier(mpu_dev, policy);
+
 	return 0;
 
 fail_table:
@@ -264,6 +337,7 @@ fail_ck:
 
 static int omap_cpu_exit(struct cpufreq_policy *policy)
 {
+	freq_unregister_opp_notifier(mpu_dev);
 	freq_table_free();
 	clk_put(mpu_clk);
 	return 0;
