@@ -230,6 +230,15 @@ config ENCLOSURE_SERVICES
 	  driver (SCSI/ATA) which supports enclosures
 	  or a SCSI enclosure device (SES) to use these services.
 
+config OMAP_OVERCLOCKING
+	tristate "OMAP overclocking support"
+	depends on ARCH_OMAP && PM_OPP && PROC_FS
+	help
+	  Support CPU overclocking at risk of reduced kernel/system stability.
+	  Exports controls through /proc/pandora/cpu_*_max.
+	  Note: after changing controls, make cpufreq do a transition (usually
+	  updating governor is enough) to do the actual scaling with updated limits.
+
 config SGI_XP
 	tristate "Support communication between SGI SSIs"
 	depends on NET
