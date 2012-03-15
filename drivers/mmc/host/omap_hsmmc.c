@@ -852,6 +852,38 @@ omap_hsmmc_show_slot_name(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR(slot_name, S_IRUGO, omap_hsmmc_show_slot_name, NULL);
 
+/* for hosts with 35xx erratum 2.1.1.128 */
+static ssize_t
+omap_hsmmc_show_unsafe_read(struct device *dev, struct device_attribute *attr,
+			char *buf)
+{
+	struct mmc_host *mmc = container_of(dev, struct mmc_host, class_dev);
+
+	return sprintf(buf, "%d\n", (mmc->caps2 & MMC_CAP2_NO_MULTI_READ) ? 0 : 1);
+}
+
+static ssize_t
+omap_hsmmc_set_unsafe_read(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct mmc_host *mmc = container_of(dev, struct mmc_host, class_dev);
+	unsigned long val;
+	int ret;
+
+	ret = strict_strtoul(buf, 0, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val)
+		mmc->caps2 &= ~MMC_CAP2_NO_MULTI_READ;
+	else
+		mmc->caps2 |= MMC_CAP2_NO_MULTI_READ;
+
+	return count;
+}
+static DEVICE_ATTR(unsafe_read, S_IWUSR | S_IRUGO,
+	omap_hsmmc_show_unsafe_read, omap_hsmmc_set_unsafe_read);
+
 /*
  * Configure the response type and send the cmd.
  */
@@ -1928,6 +1960,7 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 	omap_hsmmc_context_save(host);
 
 	mmc->caps |= MMC_CAP_DISABLE;
+
 	if (host->pdata->controller_flags & OMAP_HSMMC_BROKEN_MULTIBLOCK_READ) {
 		dev_info(&pdev->dev, "multiblock reads disabled due to 35xx erratum 2.1.1.128; MMC read performance may suffer\n");
 		mmc->caps2 |= MMC_CAP2_NO_MULTI_READ;
@@ -2060,6 +2093,16 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 					&dev_attr_cover_switch);
 		if (ret < 0)
 			goto err_slot_name;
+	}
+
+	if (host->pdata->controller_flags & OMAP_HSMMC_BROKEN_MULTIBLOCK_READ) {
+		ret = device_create_file(&mmc->class_dev, &dev_attr_unsafe_read);
+
+		/* MMC_CAP2_NO_MULTI_READ makes it crawl, try a different workaround */
+		mmc->caps2 &= ~MMC_CAP2_NO_MULTI_READ;
+		mmc->max_blk_count = 8;
+		mmc->max_req_size = mmc->max_blk_size * mmc->max_blk_count;
+		mmc->max_seg_size = mmc->max_req_size;
 	}
 
 	omap_hsmmc_debugfs(mmc);
