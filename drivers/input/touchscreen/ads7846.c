@@ -114,6 +114,7 @@ struct ads7846 {
 	unsigned		disabled:1;
 	unsigned		is_suspended:1;
 	unsigned		ext_trigger:1;
+	unsigned		reading:1;
 
 	int			(*filter)(void *data, int data_idx, int *val);
 	void			*filter_data;
@@ -568,9 +569,7 @@ static void ads7846_rx(void *ads)
 		pr_debug("%s: ignored %d pressure %d\n",
 			ts->spi->dev.bus_id, ts->tc.ignore, Rt);
 #endif
-		hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_PERIOD),
-			      HRTIMER_MODE_REL);
-		return;
+		goto out;
 	}
 
 	/* Maybe check the pendown state before reporting. This discards
@@ -610,6 +609,8 @@ static void ads7846_rx(void *ads)
 #endif
 	}
 
+out:
+	ts->reading = 0;
 	next_poll = ktime_set(0, ts->ext_trigger ?
 				 TS_FALLBACK_PERIOD : TS_POLL_PERIOD);
 	hrtimer_start(&ts->timer, next_poll, HRTIMER_MODE_REL);
@@ -694,17 +695,17 @@ static void ads7846_rx_val(void *ads)
 		BUG();
 	}
 	status = spi_async(ts->spi, m);
-	if (status)
-		dev_err(&ts->spi->dev, "spi_async --> %d\n",
+	if (status) {
+		ts->reading = 0;
+		dev_err(&ts->spi->dev, "spi_async 1 --> %d\n",
 				status);
+	}
 }
 
-static enum hrtimer_restart ads7846_timer(struct hrtimer *handle)
+/* Must be called with ts->lock held */
+static void ads7846_next_update(struct ads7846 *ts)
 {
-	struct ads7846	*ts = container_of(handle, struct ads7846, timer);
 	int		status = 0;
-
-	spin_lock_irq(&ts->lock);
 
 	if (unlikely(!ts->get_pendown_state() ||
 		     device_suspended(&ts->spi->dev))) {
@@ -729,13 +730,25 @@ static enum hrtimer_restart ads7846_timer(struct hrtimer *handle)
 		ts->pending = 0;
 	} else {
 		/* pen is still down, continue with the measurement */
+		ts->reading = 1;
 		ts->msg_idx = 0;
 		status = spi_async(ts->spi, &ts->msg[0]);
-		if (status)
-			dev_err(&ts->spi->dev, "spi_async --> %d\n", status);
+		if (status) {
+			ts->reading = 0;
+			dev_err(&ts->spi->dev, "spi_async 2 --> %d\n", status);
+		}
 	}
+}
 
+static enum hrtimer_restart ads7846_timer(struct hrtimer *handle)
+{
+	struct ads7846 *ts = container_of(handle, struct ads7846, timer);
+
+	spin_lock_irq(&ts->lock);
+	if (ts->pending && !ts->reading)
+		ads7846_next_update(ts);
 	spin_unlock_irq(&ts->lock);
+
 	return HRTIMER_NORESTART;
 }
 
@@ -771,10 +784,8 @@ static void omap_vsync_handler(void *arg, u32 mask)
 	struct ads7846 *ts = arg;
 
 	spin_lock_irq(&ts->lock);
-
-	if (ts->pending)
-		hrtimer_start(&ts->timer, ktime_set(0, 0), HRTIMER_MODE_REL);
-
+	if (ts->pending && !ts->reading)
+		ads7846_next_update(ts);
 	spin_unlock_irq(&ts->lock);
 }
 
