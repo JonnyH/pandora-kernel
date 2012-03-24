@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/opp.h>
+#include <linux/clk.h>
 #include <linux/uaccess.h>
 
 #include <plat/omap_device.h>
@@ -14,6 +15,7 @@
 #define PROC_DIR	"pandora"
 #define PROC_CPUMHZ	"pandora/cpu_mhz_max"
 #define PROC_CPUOPP	"pandora/cpu_opp_max"
+#define PROC_SYSMHZ	"pandora/sys_mhz_max"
 
 /* FIXME: could use opp3xxx_data.c, but that's initdata.. */
 static const unsigned long nominal_freqs_35xx[] = {
@@ -63,7 +65,7 @@ static int set_opp_max(int new_opp_max)
 	return 0;
 }
 
-static int set_mhz_max(unsigned long new_mhz_max)
+static int set_cpu_mhz_max(unsigned long new_mhz_max)
 {
 	unsigned long cur_mhz_max = 0;
 	struct device *mpu_dev;
@@ -103,7 +105,7 @@ static int set_mhz_max(unsigned long new_mhz_max)
 	return 0;
 }
 
-static int get_mhz_max(void)
+static int get_cpu_mhz_max(void)
 {
 	unsigned long cur_mhz_max = 0;
 	struct device *mpu_dev;
@@ -152,6 +154,48 @@ static int init_opp_hacks(void)
 	return 0;
 }
 
+static int set_sys_mhz_max(unsigned long rate)
+{
+	struct clk *dpll3_m2_ck;
+	int ret;
+
+	rate *= 1000000;
+
+	dpll3_m2_ck = clk_get(NULL, "dpll3_m2_ck");
+	if (IS_ERR(dpll3_m2_ck)) {
+		pr_err("%s: dpll3_m2_clk not available: %ld\n",
+			__func__, PTR_ERR(dpll3_m2_ck));
+		return -ENODEV;
+	}
+
+	pr_info("Reprogramming CORE clock to %luHz\n", rate);
+	ret = clk_set_rate(dpll3_m2_ck, rate);
+	if (ret)
+		pr_err("dpll3_m2_clk rate change failed: %d\n", ret);
+
+	clk_put(dpll3_m2_ck);
+
+	return ret;
+}
+
+static int get_sys_mhz_max(void)
+{
+	struct clk *dpll3_m2_ck;
+	int ret;
+
+	dpll3_m2_ck = clk_get(NULL, "dpll3_m2_ck");
+	if (IS_ERR(dpll3_m2_ck)) {
+		pr_err("%s: dpll3_m2_clk not available: %ld\n",
+			__func__, PTR_ERR(dpll3_m2_ck));
+		return -ENODEV;
+	}
+
+	ret = clk_get_rate(dpll3_m2_ck);
+	clk_put(dpll3_m2_ck);
+
+	return ret / 1000000;
+}
+
 static int proc_read_val(char *page, char **start, off_t off, int count,
 		int *eof, int val)
 {
@@ -192,7 +236,7 @@ static int proc_write_val(struct file *file, const char __user *buffer,
 static int cpu_clk_read(char *page, char **start, off_t off, int count,
 		int *eof, void *data)
 {
-	return proc_read_val(page, start, off, count, eof, get_mhz_max());
+	return proc_read_val(page, start, off, count, eof, get_cpu_mhz_max());
 }
 
 static int cpu_clk_write(struct file *file, const char __user *buffer,
@@ -205,7 +249,7 @@ static int cpu_clk_write(struct file *file, const char __user *buffer,
 	if (retval < 0)
 		return retval;
 
-	ret = set_mhz_max(val);
+	ret = set_cpu_mhz_max(val);
 	if (ret < 0)
 		return ret;
 
@@ -233,6 +277,29 @@ static int cpu_maxopp_write(struct file *file, const char __user *buffer,
 
 	ret = set_opp_max(val);
 	if (ret != 0)
+		return ret;
+
+	return retval;
+}
+
+static int sys_clk_read(char *page, char **start, off_t off, int count,
+		int *eof, void *data)
+{
+	return proc_read_val(page, start, off, count, eof, get_sys_mhz_max());
+}
+
+static int sys_clk_write(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
+{
+	unsigned long val;
+	int ret, retval;
+
+	retval = proc_write_val(file, buffer, count, &val);
+	if (retval < 0)
+		return retval;
+
+	ret = set_sys_mhz_max(val);
+	if (ret < 0)
 		return ret;
 
 	return retval;
@@ -271,6 +338,7 @@ static int pndctrl_init(void)
 
 	proc_create_rw(PROC_CPUMHZ, NULL, cpu_clk_read, cpu_clk_write);
 	proc_create_rw(PROC_CPUOPP, NULL, cpu_maxopp_read, cpu_maxopp_write);
+	proc_create_rw(PROC_SYSMHZ, NULL, sys_clk_read, sys_clk_write);
 
 	pr_info("OMAP overclocker loaded.\n");
 	return 0;
@@ -281,6 +349,7 @@ static void pndctrl_cleanup(void)
 {
 	remove_proc_entry(PROC_CPUOPP, NULL);
 	remove_proc_entry(PROC_CPUMHZ, NULL);
+	remove_proc_entry(PROC_SYSMHZ, NULL);
 }
 
 module_init(pndctrl_init);

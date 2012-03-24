@@ -231,8 +231,8 @@ config ENCLOSURE_SERVICES
 	  or a SCSI enclosure device (SES) to use these services.
 
 config OMAP_OVERCLOCKING
-	tristate "OMAP overclocking support"
-	depends on ARCH_OMAP && PM_OPP && PROC_FS
+	bool "OMAP overclocking support"
+	depends on ARCH_OMAP && PM_OPP=y && PROC_FS
 	help
 	  Support CPU overclocking at risk of reduced kernel/system stability.
 	  Exports controls through /proc/pandora/cpu_*_max.
