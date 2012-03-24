@@ -52,6 +52,7 @@
 
 #include "mux.h"
 #include "sdram-micron-mt46h32m32lf-6.h"
+#include "sdram-micron-mt29c4g96mazapcjg-5.h"
 #include "hsmmc.h"
 #include "common-board-devices.h"
 
@@ -768,6 +769,8 @@ late_initcall(pandora_pm_drv_reg);
 
 static void __init omap3pandora_init(void)
 {
+	struct omap_sdrc_params *sdrc_params;
+
 	omap3_mux_init(board_mux, OMAP_PACKAGE_CBB);
 	pandora_usb_host_init();
 	omap3pandora_i2c_init();
@@ -776,8 +779,12 @@ static void __init omap3pandora_init(void)
 			ARRAY_SIZE(omap3pandora_devices));
 	omap_display_init(&pandora_dss_data);
 	omap_serial_init();
-	omap_sdrc_init(mt46h32m32lf6_sdrc_params,
-				  mt46h32m32lf6_sdrc_params);
+
+	sdrc_params = mt46h32m32lf6_sdrc_params;
+	if (cpu_is_omap3630() || omap_rev() >= OMAP3430_REV_ES3_0)
+		sdrc_params = mt29c4g96mazapcjg5_sdrc_params;
+	omap_sdrc_init(sdrc_params, sdrc_params);
+
 	spi_register_board_info(omap3pandora_spi_board_info,
 			ARRAY_SIZE(omap3pandora_spi_board_info));
 	omap_ads7846_init(1, OMAP3_PANDORA_TS_GPIO, 0, NULL);
