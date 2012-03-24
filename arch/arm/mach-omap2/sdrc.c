@@ -100,17 +100,23 @@ int omap2_sdrc_get_params(unsigned long r,
 	sp0 = sdrc_init_params_cs0;
 	sp1 = sdrc_init_params_cs1;
 
-	while (sp0->rate && sp0->rate != r) {
+	/* assume max clock */
+	*sdrc_cs0 = sp0;
+	*sdrc_cs1 = sp1;
+
+	while (sp0->rate) {
+		if (sp0->rate >= r) {
+			*sdrc_cs0 = sp0;
+			*sdrc_cs1 = sp1;
+		}
 		sp0++;
 		if (sdrc_init_params_cs1)
 			sp1++;
 	}
 
-	if (!sp0->rate)
+	if (*sdrc_cs0 == NULL)
 		return -1;
 
-	*sdrc_cs0 = sp0;
-	*sdrc_cs1 = sp1;
 	return 0;
 }
 
