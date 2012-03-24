@@ -34,7 +34,7 @@ extern void omap2_sram_reprogram_sdrc(u32 perf_level, u32 dll_val,
 extern u32 omap2_set_prcm(u32 dpll_ctrl_val, u32 sdrc_rfr_val, int bypass);
 
 extern u32 omap3_configure_core_dpll(
-			u32 m2, u32 unlock_dll, u32 f, u32 inc,
+			u32 cm_clksel1_pll, u32 unlock_dll, u32 f, u32 inc,
 			u32 sdrc_rfr_ctrl_0, u32 sdrc_actim_ctrl_a_0,
 			u32 sdrc_actim_ctrl_b_0, u32 sdrc_mr_0,
 			u32 sdrc_rfr_ctrl_1, u32 sdrc_actim_ctrl_a_1,

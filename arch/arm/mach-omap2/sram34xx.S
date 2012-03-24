@@ -215,10 +215,14 @@ wait_sdrc_idle:
 	bx 	lr
 configure_core_dpll:
 	ldr 	r11, omap3_cm_clksel1_pll
+#if 0
 	ldr	r12, [r11]
 	ldr	r10, core_m2_mask_val	@ modify m2 for core dpll
 	and	r12, r12, r10
 	orr	r12, r12, r0, lsl #CORE_DPLL_CLKOUT_DIV_SHIFT
+#else
+	mov	r12, r0  @ HACK!
+#endif
 	str	r12, [r11]
 	ldr	r12, [r11]		@ posted-write barrier for CM
 	bx	lr
