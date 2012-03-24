@@ -310,10 +310,10 @@ static void proc_create_rw(const char *name, void *pdata,
 {
 	struct proc_dir_entry *pret;
 
-	pret = create_proc_entry(name, S_IWUGO | S_IRUGO, NULL);
+	pret = create_proc_entry(name, S_IWUSR | S_IRUGO, NULL);
 	if (pret == NULL) {
 		proc_mkdir(PROC_DIR, NULL);
-		pret = create_proc_entry(name, S_IWUGO | S_IRUGO, NULL);
+		pret = create_proc_entry(name, S_IWUSR | S_IRUGO, NULL);
 		if (pret == NULL) {
 			pr_err("%s: failed to create proc file %s\n",
 				__func__, name);
