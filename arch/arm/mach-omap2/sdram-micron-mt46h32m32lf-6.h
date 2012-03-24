@@ -19,35 +19,42 @@
 /* Micron MT46H32M32LF-6 */
 /* XXX Using ARE = 0x1 (no autorefresh burst) -- can this be changed? */
 static struct omap_sdrc_params mt46h32m32lf6_sdrc_params[] = {
-	[0] = {
+	[0] = { /* fake entry for overclocking */
+		.rate	     = 200000000,
+		.actim_ctrla = 0xb325b4c6,
+		.actim_ctrlb = 0x0002121b,
+		.rfr_ctrl    = 0x0005e601,
+		.mr	     = 0x00000032,
+	},
+	[1] = {
 		.rate	     = 166000000,
 		.actim_ctrla = 0x9a9db4c6,
 		.actim_ctrlb = 0x00011217,
 		.rfr_ctrl    = 0x0004dc01,
 		.mr	     = 0x00000032,
 	},
-	[1] = {
+	[2] = {
 		.rate	     = 165941176,
 		.actim_ctrla = 0x9a9db4c6,
 		.actim_ctrlb = 0x00011217,
 		.rfr_ctrl    = 0x0004dc01,
 		.mr	     = 0x00000032,
 	},
-	[2] = {
+	[3] = {
 		.rate	     = 83000000,
 		.actim_ctrla = 0x51512283,
 		.actim_ctrlb = 0x0001120c,
 		.rfr_ctrl    = 0x00025501,
 		.mr	     = 0x00000032,
 	},
-	[3] = {
+	[4] = {
 		.rate	     = 82970588,
 		.actim_ctrla = 0x51512283,
 		.actim_ctrlb = 0x0001120c,
 		.rfr_ctrl    = 0x00025501,
 		.mr	     = 0x00000032,
 	},
-	[4] = {
+	[5] = {
 		.rate	     = 0
 	},
 };
