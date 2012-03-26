@@ -570,9 +570,13 @@ static void bq27x00_external_power_changed(struct power_supply *psy)
 {
 	struct bq27x00_device_info *di = to_bq27x00_device_info(psy);
 
+	mutex_lock(&di->lock);
+
 	cancel_delayed_work_sync(&di->work);
-	set_timer_slack(&di->work.timer, 2 * HZ);
-	schedule_delayed_work(&di->work, 2 * HZ);
+	set_timer_slack(&di->work.timer, 1 * HZ);
+	schedule_delayed_work(&di->work, 3 * HZ);
+
+	mutex_unlock(&di->lock);
 }
 
 static int bq27x00_powersupply_init(struct bq27x00_device_info *di)
