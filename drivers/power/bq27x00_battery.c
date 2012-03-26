@@ -342,6 +342,16 @@ static void bq27x00_update(struct bq27x00_device_info *di)
 			di->charge_design_full = bq27x00_battery_read_ilmd(di);
 	}
 
+	/*
+	 * On bq27500, DSG is not set on discharge with very low currents,
+	 * so check AI to not misreport that we are charging in status query
+	 */
+	if (is_bq27500 && !(cache.flags & BQ27500_FLAG_DSC)) {
+		int curr = bq27x00_read(di, BQ27x00_REG_AI, false);
+		if ((s16)curr <= 0)
+			cache.flags |= BQ27500_FLAG_DSC;
+	}
+
 	flags_changed = di->cache.flags ^ cache.flags;
 	di->cache = cache;
 	if (is_bq27500)
