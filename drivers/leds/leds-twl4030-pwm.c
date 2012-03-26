@@ -191,12 +191,17 @@ static int __devinit twl4030_pwmled_probe(struct platform_device *pdev)
 			/* enable PWM0 in pin mux */
 			twl4030_clear_set(TWL4030_MODULE_INTBR,
 				0x0c, 0x04, TWL_INTBR_PMBR1);
+			/* enable PWM clock for initial write */
+			twl4030_clear_set(TWL4030_MODULE_INTBR,
+				0, GPBR1_PWM0_CLK_ENABLE, TWL_INTBR_GPBR1);
 			break;
 		case TWL4030_PWM1:
 			led->module = TWL4030_MODULE_PWM1;
 			led->enable = twl4030_enable_pwm01;
 			twl4030_clear_set(TWL4030_MODULE_INTBR,
 				0, 0x30, TWL_INTBR_PMBR1);
+			twl4030_clear_set(TWL4030_MODULE_INTBR,
+				0, GPBR1_PWM1_CLK_ENABLE, TWL_INTBR_GPBR1);
 			break;
 		default:
 			dev_err(&pdev->dev, "invalid pwm_id: %d\n",
@@ -207,6 +212,8 @@ static int __devinit twl4030_pwmled_probe(struct platform_device *pdev)
 		INIT_WORK(&led->work, twl4030_pwmled_work);
 
 		twl_i2c_write_u8(led->module, 0, TWL4030_PWMx_PWMxON);
+		led->new_brightness = LED_OFF;
+		twl4030_pwmled_work(&led->work);
 
 		/* Hand it over to the LED framework */
 		ret = led_classdev_register(&pdev->dev, &led->cdev);
