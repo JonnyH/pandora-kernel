@@ -131,6 +131,7 @@ static struct led_pwm pandora_pwm_leds[] = {
 		.pwm_id			= 0, /* LEDA */
 	}, {
 		.name			= "pandora::power",
+		.default_trigger	= "default-on",
 		.pwm_id			= 1, /* LEDB */
 	}, {
 		.name			= "pandora::charger",
