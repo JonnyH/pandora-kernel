@@ -858,8 +858,15 @@ omap_hsmmc_show_unsafe_read(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct mmc_host *mmc = container_of(dev, struct mmc_host, class_dev);
+	int val = 0;
 
-	return sprintf(buf, "%d\n", (mmc->caps2 & MMC_CAP2_NO_MULTI_READ) ? 0 : 1);
+	if (!(mmc->caps2 & MMC_CAP2_NO_MULTI_READ)) {
+		val = 1;
+		if (mmc->f_max == OMAP_MMC_MAX_CLOCK)
+			val = 2;
+	}
+
+	return sprintf(buf, "%d\n", val);
 }
 
 static ssize_t
@@ -874,10 +881,20 @@ omap_hsmmc_set_unsafe_read(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return -EINVAL;
 
-	if (val)
-		mmc->caps2 &= ~MMC_CAP2_NO_MULTI_READ;
-	else
+	switch (val) {
+	case 0:
 		mmc->caps2 |= MMC_CAP2_NO_MULTI_READ;
+		mmc->f_max = OMAP_MMC_MAX_CLOCK;
+		break;
+	case 1:
+		mmc->caps2 &= ~MMC_CAP2_NO_MULTI_READ;
+		mmc->f_max = 32000000;
+		break;
+	case 2:
+		mmc->caps2 &= ~MMC_CAP2_NO_MULTI_READ;
+		mmc->f_max = OMAP_MMC_MAX_CLOCK;
+		break;
+	}
 
 	return count;
 }
@@ -2100,9 +2117,8 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 
 		/* MMC_CAP2_NO_MULTI_READ makes it crawl, try a different workaround */
 		mmc->caps2 &= ~MMC_CAP2_NO_MULTI_READ;
-		mmc->max_blk_count = 8;
-		mmc->max_req_size = mmc->max_blk_size * mmc->max_blk_count;
-		mmc->max_seg_size = mmc->max_req_size;
+		mmc->max_segs = 1;
+		mmc->f_max = 32000000;
 	}
 
 	omap_hsmmc_debugfs(mmc);
