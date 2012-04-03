@@ -257,15 +257,28 @@ static int nfs4_handle_exception(struct nfs_server *server, int errorcode, struc
 {
 	struct nfs_client *clp = server->nfs_client;
 	struct nfs4_state *state = exception->state;
+	struct inode *inode = exception->inode;
 	int ret = errorcode;
 
 	exception->retry = 0;
 	switch(errorcode) {
 		case 0:
 			return 0;
+		case -NFS4ERR_OPENMODE:
+			if (nfs_have_delegation(inode, FMODE_READ)) {
+				nfs_inode_return_delegation(inode);
+				exception->retry = 1;
+				return 0;
+			}
+			if (state == NULL)
+				break;
+			nfs4_schedule_stateid_recovery(server, state);
+			goto wait_on_recovery;
+		case -NFS4ERR_DELEG_REVOKED:
 		case -NFS4ERR_ADMIN_REVOKED:
 		case -NFS4ERR_BAD_STATEID:
-		case -NFS4ERR_OPENMODE:
+			if (state != NULL)
+				nfs_remove_bad_delegation(state->inode);
 			if (state == NULL)
 				break;
 			nfs4_schedule_stateid_recovery(server, state);
@@ -1316,8 +1329,11 @@ int nfs4_open_delegation_recall(struct nfs_open_context *ctx, struct nfs4_state 
 				 * The show must go on: exit, but mark the
 				 * stateid as needing recovery.
 				 */
+			case -NFS4ERR_DELEG_REVOKED:
 			case -NFS4ERR_ADMIN_REVOKED:
 			case -NFS4ERR_BAD_STATEID:
+				nfs_inode_find_state_and_recover(state->inode,
+						stateid);
 				nfs4_schedule_stateid_recovery(server, state);
 			case -EKEYEXPIRED:
 				/*
@@ -1822,7 +1838,7 @@ static struct nfs4_state *nfs4_do_open(struct inode *dir, struct dentry *dentry,
 		 * the user though...
 		 */
 		if (status == -NFS4ERR_BAD_SEQID) {
-			printk(KERN_WARNING "NFS: v4 server %s "
+			pr_warn_ratelimited("NFS: v4 server %s "
 					" returned a bad sequence-id error!\n",
 					NFS_SERVER(dir)->nfs_client->cl_hostname);
 			exception.retry = 1;
@@ -1893,7 +1909,10 @@ static int nfs4_do_setattr(struct inode *inode, struct rpc_cred *cred,
 			   struct nfs4_state *state)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
-	struct nfs4_exception exception = { };
+	struct nfs4_exception exception = {
+		.state = state,
+		.inode = inode,
+	};
 	int err;
 	do {
 		err = nfs4_handle_exception(server,
@@ -2223,11 +2242,12 @@ static int nfs4_lookup_root(struct nfs_server *server, struct nfs_fh *fhandle,
 		switch (err) {
 		case 0:
 		case -NFS4ERR_WRONGSEC:
-			break;
+			goto out;
 		default:
 			err = nfs4_handle_exception(server, err, &exception);
 		}
 	} while (exception.retry);
+out:
 	return err;
 }
 
@@ -3430,19 +3450,6 @@ static inline int nfs4_server_supports_acls(struct nfs_server *server)
  */
 #define NFS4ACL_MAXPAGES (XATTR_SIZE_MAX >> PAGE_CACHE_SHIFT)
 
-static void buf_to_pages(const void *buf, size_t buflen,
-		struct page **pages, unsigned int *pgbase)
-{
-	const void *p = buf;
-
-	*pgbase = offset_in_page(buf);
-	p -= *pgbase;
-	while (p < buf + buflen) {
-		*(pages++) = virt_to_page(p);
-		p += PAGE_CACHE_SIZE;
-	}
-}
-
 static int buf_to_pages_noslab(const void *buf, size_t buflen,
 		struct page **pages, unsigned int *pgbase)
 {
@@ -3539,9 +3546,19 @@ out:
 	nfs4_set_cached_acl(inode, acl);
 }
 
+/*
+ * The getxattr API returns the required buffer length when called with a
+ * NULL buf. The NFSv4 acl tool then calls getxattr again after allocating
+ * the required buf.  On a NULL buf, we send a page of data to the server
+ * guessing that the ACL request can be serviced by a page. If so, we cache
+ * up to the page of ACL data, and the 2nd call to getxattr is serviced by
+ * the cache. If not so, we throw away the page, and cache the required
+ * length. The next getxattr call will then produce another round trip to
+ * the server, this time with the input buf of the required size.
+ */
 static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t buflen)
 {
-	struct page *pages[NFS4ACL_MAXPAGES];
+	struct page *pages[NFS4ACL_MAXPAGES] = {NULL, };
 	struct nfs_getaclargs args = {
 		.fh = NFS_FH(inode),
 		.acl_pages = pages,
@@ -3556,41 +3573,60 @@ static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t bu
 		.rpc_argp = &args,
 		.rpc_resp = &res,
 	};
-	struct page *localpage = NULL;
-	int ret;
+	int ret = -ENOMEM, npages, i, acl_len = 0;
 
-	if (buflen < PAGE_SIZE) {
-		/* As long as we're doing a round trip to the server anyway,
-		 * let's be prepared for a page of acl data. */
-		localpage = alloc_page(GFP_KERNEL);
-		resp_buf = page_address(localpage);
-		if (localpage == NULL)
-			return -ENOMEM;
-		args.acl_pages[0] = localpage;
-		args.acl_pgbase = 0;
-		args.acl_len = PAGE_SIZE;
-	} else {
-		resp_buf = buf;
-		buf_to_pages(buf, buflen, args.acl_pages, &args.acl_pgbase);
+	npages = (buflen + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	/* As long as we're doing a round trip to the server anyway,
+	 * let's be prepared for a page of acl data. */
+	if (npages == 0)
+		npages = 1;
+
+	for (i = 0; i < npages; i++) {
+		pages[i] = alloc_page(GFP_KERNEL);
+		if (!pages[i])
+			goto out_free;
 	}
-	ret = nfs4_call_sync(NFS_SERVER(inode)->client, NFS_SERVER(inode), &msg, &args.seq_args, &res.seq_res, 0);
+	if (npages > 1) {
+		/* for decoding across pages */
+		res.acl_scratch = alloc_page(GFP_KERNEL);
+		if (!res.acl_scratch)
+			goto out_free;
+	}
+	args.acl_len = npages * PAGE_SIZE;
+	args.acl_pgbase = 0;
+	/* Let decode_getfacl know not to fail if the ACL data is larger than
+	 * the page we send as a guess */
+	if (buf == NULL)
+		res.acl_flags |= NFS4_ACL_LEN_REQUEST;
+	resp_buf = page_address(pages[0]);
+
+	dprintk("%s  buf %p buflen %ld npages %d args.acl_len %ld\n",
+		__func__, buf, buflen, npages, args.acl_len);
+	ret = nfs4_call_sync(NFS_SERVER(inode)->client, NFS_SERVER(inode),
+			     &msg, &args.seq_args, &res.seq_res, 0);
 	if (ret)
 		goto out_free;
-	if (res.acl_len > args.acl_len)
-		nfs4_write_cached_acl(inode, NULL, res.acl_len);
+
+	acl_len = res.acl_len - res.acl_data_offset;
+	if (acl_len > args.acl_len)
+		nfs4_write_cached_acl(inode, NULL, acl_len);
 	else
-		nfs4_write_cached_acl(inode, resp_buf, res.acl_len);
+		nfs4_write_cached_acl(inode, resp_buf + res.acl_data_offset,
+				      acl_len);
 	if (buf) {
 		ret = -ERANGE;
-		if (res.acl_len > buflen)
+		if (acl_len > buflen)
 			goto out_free;
-		if (localpage)
-			memcpy(buf, resp_buf, res.acl_len);
+		_copy_from_pages(buf, pages, res.acl_data_offset,
+				res.acl_len);
 	}
-	ret = res.acl_len;
+	ret = acl_len;
 out_free:
-	if (localpage)
-		__free_page(localpage);
+	for (i = 0; i < npages; i++)
+		if (pages[i])
+			__free_page(pages[i]);
+	if (res.acl_scratch)
+		__free_page(res.acl_scratch);
 	return ret;
 }
 
@@ -3621,6 +3657,8 @@ static ssize_t nfs4_proc_get_acl(struct inode *inode, void *buf, size_t buflen)
 		nfs_zap_acl_cache(inode);
 	ret = nfs4_read_cached_acl(inode, buf, buflen);
 	if (ret != -ENOENT)
+		/* -ENOENT is returned if there is no ACL or if there is an ACL
+		 * but no cached acl data, just the acl length */
 		return ret;
 	return nfs4_get_acl_uncached(inode, buf, buflen);
 }
@@ -3689,8 +3727,11 @@ nfs4_async_handle_error(struct rpc_task *task, const struct nfs_server *server, 
 	if (task->tk_status >= 0)
 		return 0;
 	switch(task->tk_status) {
+		case -NFS4ERR_DELEG_REVOKED:
 		case -NFS4ERR_ADMIN_REVOKED:
 		case -NFS4ERR_BAD_STATEID:
+			if (state != NULL)
+				nfs_remove_bad_delegation(state->inode);
 		case -NFS4ERR_OPENMODE:
 			if (state == NULL)
 				break;
@@ -4508,7 +4549,9 @@ out:
 
 static int nfs4_proc_setlk(struct nfs4_state *state, int cmd, struct file_lock *request)
 {
-	struct nfs4_exception exception = { };
+	struct nfs4_exception exception = {
+		.state = state,
+	};
 	int err;
 
 	do {
@@ -4601,6 +4644,7 @@ int nfs4_lock_delegation_recall(struct nfs4_state *state, struct file_lock *fl)
 				 * The show must go on: exit, but mark the
 				 * stateid as needing recovery.
 				 */
+			case -NFS4ERR_DELEG_REVOKED:
 			case -NFS4ERR_ADMIN_REVOKED:
 			case -NFS4ERR_BAD_STATEID:
 			case -NFS4ERR_OPENMODE:
@@ -4858,8 +4902,10 @@ int nfs4_proc_exchange_id(struct nfs_client *clp, struct rpc_cred *cred)
 				clp->cl_rpcclient->cl_auth->au_flavor);
 
 	res.server_scope = kzalloc(sizeof(struct server_scope), GFP_KERNEL);
-	if (unlikely(!res.server_scope))
-		return -ENOMEM;
+	if (unlikely(!res.server_scope)) {
+		status = -ENOMEM;
+		goto out;
+	}
 
 	status = rpc_call_sync(clp->cl_rpcclient, &msg, RPC_TASK_TIMEOUT);
 	if (!status)
@@ -4876,12 +4922,13 @@ int nfs4_proc_exchange_id(struct nfs_client *clp, struct rpc_cred *cred)
 			clp->server_scope = NULL;
 		}
 
-		if (!clp->server_scope)
+		if (!clp->server_scope) {
 			clp->server_scope = res.server_scope;
-		else
-			kfree(res.server_scope);
+			goto out;
+		}
 	}
-
+	kfree(res.server_scope);
+out:
 	dprintk("<-- %s status= %d\n", __func__, status);
 	return status;
 }
@@ -5936,21 +5983,22 @@ nfs4_layoutcommit_done(struct rpc_task *task, void *calldata)
 		return;
 
 	switch (task->tk_status) { /* Just ignore these failures */
-	case NFS4ERR_DELEG_REVOKED: /* layout was recalled */
-	case NFS4ERR_BADIOMODE:     /* no IOMODE_RW layout for range */
-	case NFS4ERR_BADLAYOUT:     /* no layout */
-	case NFS4ERR_GRACE:	    /* loca_recalim always false */
+	case -NFS4ERR_DELEG_REVOKED: /* layout was recalled */
+	case -NFS4ERR_BADIOMODE:     /* no IOMODE_RW layout for range */
+	case -NFS4ERR_BADLAYOUT:     /* no layout */
+	case -NFS4ERR_GRACE:	    /* loca_recalim always false */
 		task->tk_status = 0;
-	}
-
-	if (nfs4_async_handle_error(task, server, NULL) == -EAGAIN) {
-		rpc_restart_call_prepare(task);
-		return;
-	}
-
-	if (task->tk_status == 0)
+		break;
+	case 0:
 		nfs_post_op_update_inode_force_wcc(data->args.inode,
 						   data->res.fattr);
+		break;
+	default:
+		if (nfs4_async_handle_error(task, server, NULL) == -EAGAIN) {
+			rpc_restart_call_prepare(task);
+			return;
+		}
+	}
 }
 
 static void nfs4_layoutcommit_release(void *calldata)
@@ -6053,11 +6101,12 @@ nfs41_proc_secinfo_no_name(struct nfs_server *server, struct nfs_fh *fhandle,
 		case 0:
 		case -NFS4ERR_WRONGSEC:
 		case -NFS4ERR_NOTSUPP:
-			break;
+			goto out;
 		default:
 			err = nfs4_handle_exception(server, err, &exception);
 		}
 	} while (exception.retry);
+out:
 	return err;
 }
 
