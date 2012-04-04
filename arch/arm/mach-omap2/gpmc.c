@@ -480,6 +480,11 @@ int gpmc_read_status(int cmd)
 		status = regval & GPMC_STATUS_BUFF_EMPTY;
 		break;
 
+	case GPMC_STATUS_WAIT:
+		regval = gpmc_read_reg(GPMC_STATUS);
+		status = regval & 0x100;
+		break;
+
 	default:
 		printk(KERN_ERR "gpmc_read_status: Not supported\n");
 	}

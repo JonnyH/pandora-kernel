@@ -92,6 +92,7 @@ static struct omap_nand_platform_data pandora_nand_data = {
 	.xfer_type	= NAND_OMAP_PREFETCH_DMA,
 	.parts		= omap3pandora_nand_partitions,
 	.nr_parts	= ARRAY_SIZE(omap3pandora_nand_partitions),
+	.dev_ready	= true,
 };
 
 static struct gpio_led pandora_gpio_leds[] = {

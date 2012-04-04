@@ -869,26 +869,7 @@ static void omap_enable_hwecc(struct mtd_info *mtd, int mode)
  */
 static int omap_dev_ready(struct mtd_info *mtd)
 {
-	unsigned int val = 0;
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
-
-	val = gpmc_read_status(GPMC_GET_IRQ_STATUS);
-	if ((val & 0x100) == 0x100) {
-		/* Clear IRQ Interrupt */
-		val |= 0x100;
-		val &= ~(0x0);
-		gpmc_cs_configure(info->gpmc_cs, GPMC_SET_IRQ_STATUS, val);
-	} else {
-		unsigned int cnt = 0;
-		while (cnt++ < 0x1FF) {
-			if  ((val & 0x100) == 0x100)
-				return 0;
-			val = gpmc_read_status(GPMC_GET_IRQ_STATUS);
-		}
-	}
-
-	return 1;
+	return !!gpmc_read_status(GPMC_STATUS_WAIT);
 }
 
 static int __devinit omap_nand_probe(struct platform_device *pdev)

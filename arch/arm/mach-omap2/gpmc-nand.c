@@ -102,11 +102,6 @@ int __init gpmc_nand_init(struct omap_nand_platform_data *gpmc_nand_data)
 		return err;
 	}
 
-	/* Enable RD PIN Monitoring Reg */
-	if (gpmc_nand_data->dev_ready) {
-		gpmc_cs_configure(gpmc_nand_data->cs, GPMC_CONFIG_RDY_BSY, 1);
-	}
-
 	err = platform_device_register(&gpmc_nand_device);
 	if (err < 0) {
 		dev_err(dev, "Unable to register NAND device\n");

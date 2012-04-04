@@ -36,6 +36,7 @@
 #define GPMC_PREFETCH_FIFO_CNT	0x00000007 /* bytes available in FIFO for r/w */
 #define GPMC_PREFETCH_COUNT	0x00000008 /* remaining bytes to be read/write*/
 #define GPMC_STATUS_BUFFER	0x00000009 /* 1: buffer is available to write */
+#define GPMC_STATUS_WAIT	0x0000000e
 
 #define GPMC_NAND_COMMAND	0x0000000a
 #define GPMC_NAND_ADDRESS	0x0000000b
