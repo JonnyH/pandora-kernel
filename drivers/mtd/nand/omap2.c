@@ -864,42 +864,6 @@ static void omap_enable_hwecc(struct mtd_info *mtd, int mode)
 }
 
 /**
- * omap_wait - wait until the command is done
- * @mtd: MTD device structure
- * @chip: NAND Chip structure
- *
- * Wait function is called during Program and erase operations and
- * the way it is called from MTD layer, we should wait till the NAND
- * chip is ready after the programming/erase operation has completed.
- *
- * Erase can take up to 400ms and program up to 20ms according to
- * general NAND and SmartMedia specs
- */
-static int omap_wait(struct mtd_info *mtd, struct nand_chip *chip)
-{
-	struct nand_chip *this = mtd->priv;
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
-	unsigned long timeo = jiffies;
-	int status = NAND_STATUS_FAIL, state = this->state;
-
-	if (state == FL_ERASING)
-		timeo += (HZ * 400) / 1000;
-	else
-		timeo += (HZ * 20) / 1000;
-
-	gpmc_nand_write(info->gpmc_cs,
-			GPMC_NAND_COMMAND, (NAND_CMD_STATUS & 0xFF));
-	while (time_before(jiffies, timeo)) {
-		status = gpmc_nand_read(info->gpmc_cs, GPMC_NAND_DATA);
-		if (status & NAND_STATUS_READY)
-			break;
-		cond_resched();
-	}
-	return status;
-}
-
-/**
  * omap_dev_ready - calls the platform specific dev_ready function
  * @mtd: MTD device structure
  */
@@ -992,7 +956,6 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		info->nand.dev_ready = omap_dev_ready;
 		info->nand.chip_delay = 0;
 	} else {
-		info->nand.waitfunc = omap_wait;
 		info->nand.chip_delay = 50;
 	}
 
