@@ -73,6 +73,7 @@ struct omap_uart_state {
 	void __iomem *wk_en;
 	u32 wk_mask;
 	u32 padconf;
+	u32 padconf2;
 	u32 dma_enabled;
 
 	struct clk *ick;
@@ -288,10 +289,17 @@ static void omap_uart_enable_wakeup(struct omap_uart_state *uart)
 	}
 
 	/* Ensure IOPAD wake-enables are set */
-	if (cpu_is_omap34xx() && uart->padconf) {
-		u16 v = omap_ctrl_readw(uart->padconf);
-		v |= OMAP3_PADCONF_WAKEUPENABLE0;
-		omap_ctrl_writew(v, uart->padconf);
+	if (cpu_is_omap34xx()) {
+		if (uart->padconf) {
+			u16 v = omap_ctrl_readw(uart->padconf);
+			v |= OMAP3_PADCONF_WAKEUPENABLE0;
+			omap_ctrl_writew(v, uart->padconf);
+		}
+		if (uart->padconf2) {
+			u16 v = omap_ctrl_readw(uart->padconf2);
+			v |= OMAP3_PADCONF_WAKEUPENABLE0;
+			omap_ctrl_writew(v, uart->padconf2);
+		}
 	}
 }
 
@@ -305,10 +313,17 @@ static void omap_uart_disable_wakeup(struct omap_uart_state *uart)
 	}
 
 	/* Ensure IOPAD wake-enables are cleared */
-	if (cpu_is_omap34xx() && uart->padconf) {
-		u16 v = omap_ctrl_readw(uart->padconf);
-		v &= ~OMAP3_PADCONF_WAKEUPENABLE0;
-		omap_ctrl_writew(v, uart->padconf);
+	if (cpu_is_omap34xx()) {
+		if (uart->padconf) {
+			u16 v = omap_ctrl_readw(uart->padconf);
+			v &= ~OMAP3_PADCONF_WAKEUPENABLE0;
+			omap_ctrl_writew(v, uart->padconf);
+		}
+		if (uart->padconf2) {
+			u16 v = omap_ctrl_readw(uart->padconf2);
+			v &= ~OMAP3_PADCONF_WAKEUPENABLE0;
+			omap_ctrl_writew(v, uart->padconf2);
+		}
 	}
 }
 
@@ -388,8 +403,12 @@ void omap_uart_resume_idle(int num)
 			omap_uart_enable_clocks(uart);
 
 			/* Check for IO pad wakeup */
-			if (cpu_is_omap34xx() && uart->padconf) {
-				u16 p = omap_ctrl_readw(uart->padconf);
+			if (cpu_is_omap34xx()) {
+				u16 p = 0;
+				if (uart->padconf)
+					p |= omap_ctrl_readw(uart->padconf);
+				if (uart->padconf2)
+					p |= omap_ctrl_readw(uart->padconf2);
 
 				if (p & OMAP3_PADCONF_WAKEUPEVENT0)
 					omap_uart_block_sleep(uart);
@@ -468,6 +487,7 @@ static void omap_uart_idle_init(struct omap_uart_state *uart)
 		u32 mod = (uart->num > 1) ? OMAP3430_PER_MOD : CORE_MOD;
 		u32 wk_mask = 0;
 		u32 padconf = 0;
+		u32 padconf2 = 0;
 
 		/* XXX These PRM accesses do not belong here */
 		uart->wk_en = OMAP34XX_PRM_REGADDR(mod, PM_WKEN1);
@@ -476,6 +496,7 @@ static void omap_uart_idle_init(struct omap_uart_state *uart)
 		case 0:
 			wk_mask = OMAP3430_ST_UART1_MASK;
 			padconf = 0x182;
+			padconf2 = 0x180;
 			break;
 		case 1:
 			wk_mask = OMAP3430_ST_UART2_MASK;
@@ -492,6 +513,7 @@ static void omap_uart_idle_init(struct omap_uart_state *uart)
 		}
 		uart->wk_mask = wk_mask;
 		uart->padconf = padconf;
+		uart->padconf2 = padconf2;
 	} else if (cpu_is_omap24xx()) {
 		u32 wk_mask = 0;
 		u32 wk_en = PM_WKEN1, wk_st = PM_WKST1;
@@ -522,6 +544,7 @@ static void omap_uart_idle_init(struct omap_uart_state *uart)
 		uart->wk_st = NULL;
 		uart->wk_mask = 0;
 		uart->padconf = 0;
+		uart->padconf2 = 0;
 	}
 
 	uart->irqflags |= IRQF_SHARED;
@@ -821,7 +844,7 @@ void __init omap_serial_init_port(struct omap_board_data *bdata)
 
 	console_unlock();
 
-	if ((cpu_is_omap34xx() && uart->padconf) ||
+	if ((cpu_is_omap34xx() && (uart->padconf || uart->padconf2)) ||
 	    (uart->wk_en && uart->wk_mask)) {
 		device_init_wakeup(&pdev->dev, true);
 		DEV_CREATE_FILE(&pdev->dev, &dev_attr_sleep_timeout);
