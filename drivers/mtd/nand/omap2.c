@@ -24,6 +24,7 @@
 #include <plat/dma.h>
 #include <plat/gpmc.h>
 #include <plat/nand.h>
+#include <asm/system.h>
 
 #define	DRIVER_NAME	"omap2-nand"
 #define	OMAP_NAND_TIMEOUT_MS	5000
@@ -404,12 +405,16 @@ static inline int omap_nand_dma_transfer(struct mtd_info *mtd, void *addr,
 		/* PFPW engine is busy, use cpu copy method */
 		goto out_copy_unmap;
 
+	/* this will be short, avoid CPU wakeup latency */
+	disable_hlt();
 	init_completion(&info->comp);
 
 	omap_start_dma(info->dma_ch);
 
 	/* setup and start DMA using dma_addr */
 	wait_for_completion(&info->comp);
+	enable_hlt();
+
 	tim = 0;
 	limit = (loops_per_jiffy * msecs_to_jiffies(OMAP_NAND_TIMEOUT_MS));
 	while (gpmc_read_status(GPMC_PREFETCH_COUNT) && (tim++ < limit))
