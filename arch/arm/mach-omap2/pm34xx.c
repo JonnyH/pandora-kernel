@@ -377,10 +377,12 @@ void omap_sram_idle(void)
 			if (!console_trylock())
 				goto console_still_active;
 
-	pwrdm_pre_transition(NULL);
+	if (mpu_next_state < PWRDM_POWER_ON)
+		pwrdm_pre_transition(mpu_pwrdm);
 
 	/* PER */
 	if (per_next_state < PWRDM_POWER_ON) {
+		pwrdm_pre_transition(per_pwrdm);
 		per_going_off = (per_next_state == PWRDM_POWER_OFF) ? 1 : 0;
 		omap_uart_prepare_idle(2);
 		omap_uart_prepare_idle(3);
@@ -393,6 +395,7 @@ void omap_sram_idle(void)
 	if (core_next_state < PWRDM_POWER_ON) {
 		omap_uart_prepare_idle(0);
 		omap_uart_prepare_idle(1);
+		pwrdm_pre_transition(core_pwrdm);
 		if (core_next_state == PWRDM_POWER_OFF) {
 			omap3_core_save_context();
 			omap3_cm_save_context();
@@ -447,10 +450,9 @@ void omap_sram_idle(void)
 			omap2_prm_clear_mod_reg_bits(OMAP3430_AUTO_OFF_MASK,
 					       OMAP3430_GR_MOD,
 					       OMAP3_PRM_VOLTCTRL_OFFSET);
+		pwrdm_post_transition(core_pwrdm);
 	}
 	omap3_intc_resume_idle();
-
-	pwrdm_post_transition(NULL);
 
 	/* PER */
 	if (per_next_state < PWRDM_POWER_ON) {
@@ -460,6 +462,7 @@ void omap_sram_idle(void)
 			omap3_per_restore_context();
 		omap_uart_resume_idle(2);
 		omap_uart_resume_idle(3);
+		pwrdm_post_transition(per_pwrdm);
 	}
 
 	if (!is_suspending())
@@ -475,6 +478,9 @@ console_still_active:
 		if (omap3_has_io_chain_ctrl())
 			omap3_disable_io_chain();
 	}
+
+	if (mpu_next_state < PWRDM_POWER_ON)
+		pwrdm_post_transition(mpu_pwrdm);
 
 	clkdm_allow_idle(mpu_pwrdm->pwrdm_clkdms[0]);
 }
