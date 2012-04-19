@@ -1067,7 +1067,7 @@ static struct omap_hwmod omap3xxx_timer11_hwmod = {
 	.class		= &omap3xxx_timer_hwmod_class,
 };
 
-/* timer12*/
+/* timer12 */
 static struct omap_hwmod omap3xxx_timer12_hwmod;
 static struct omap_hwmod_irq_info omap3xxx_timer12_mpu_irqs[] = {
 	{ .irq = 95, },
@@ -2614,7 +2614,7 @@ static struct omap_hwmod_ocp_if *omap3_sr1_slaves[] = {
 };
 
 static struct omap_hwmod omap34xx_sr1_hwmod = {
-	.name		= "sr1_hwmod",
+	.name		= "sr1",
 	.class		= &omap34xx_smartreflex_hwmod_class,
 	.main_clk	= "sr1_fck",
 	.vdd_name	= "mpu_iva",
@@ -2633,7 +2633,7 @@ static struct omap_hwmod omap34xx_sr1_hwmod = {
 };
 
 static struct omap_hwmod omap36xx_sr1_hwmod = {
-	.name		= "sr1_hwmod",
+	.name		= "sr1",
 	.class		= &omap36xx_smartreflex_hwmod_class,
 	.main_clk	= "sr1_fck",
 	.vdd_name	= "mpu_iva",
@@ -2656,7 +2656,7 @@ static struct omap_hwmod_ocp_if *omap3_sr2_slaves[] = {
 };
 
 static struct omap_hwmod omap34xx_sr2_hwmod = {
-	.name		= "sr2_hwmod",
+	.name		= "sr2",
 	.class		= &omap34xx_smartreflex_hwmod_class,
 	.main_clk	= "sr2_fck",
 	.vdd_name	= "core",
@@ -2675,7 +2675,7 @@ static struct omap_hwmod omap34xx_sr2_hwmod = {
 };
 
 static struct omap_hwmod omap36xx_sr2_hwmod = {
-	.name		= "sr2_hwmod",
+	.name		= "sr2",
 	.class		= &omap36xx_smartreflex_hwmod_class,
 	.main_clk	= "sr2_fck",
 	.vdd_name	= "core",
