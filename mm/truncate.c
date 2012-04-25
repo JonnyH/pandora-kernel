@@ -626,3 +626,4 @@ int vmtruncate_range(struct inode *inode, loff_t lstart, loff_t lend)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(vmtruncate_range);
