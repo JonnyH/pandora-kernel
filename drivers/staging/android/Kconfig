@@ -13,7 +13,7 @@ config ANDROID_BINDER_IPC
 	default n
 
 config ASHMEM
-	bool "Enable the Anonymous Shared Memory Subsystem"
+	tristate "Enable the Anonymous Shared Memory Subsystem"
 	default n
 	depends on SHMEM || TINY_SHMEM
 	help
