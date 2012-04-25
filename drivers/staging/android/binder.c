@@ -46,6 +46,11 @@ static HLIST_HEAD(binder_dead_nodes);
 
 static struct dentry *binder_debugfs_dir_entry_root;
 static struct dentry *binder_debugfs_dir_entry_proc;
+static struct dentry *binder_debugfs_state;
+static struct dentry *binder_debugfs_stats;
+static struct dentry *binder_debugfs_transactions;
+static struct dentry *binder_debugfs_transaction_log;
+static struct dentry *binder_debugfs_failed_transaction_log;
 static struct binder_node *binder_context_mgr_node;
 static uid_t binder_context_mgr_uid = -1;
 static int binder_last_id;
@@ -3577,27 +3582,32 @@ static int __init binder_init(void)
 						 binder_debugfs_dir_entry_root);
 	ret = misc_register(&binder_miscdev);
 	if (binder_debugfs_dir_entry_root) {
-		debugfs_create_file("state",
+		binder_debugfs_state = debugfs_create_file(
+				    "state",
 				    S_IRUGO,
 				    binder_debugfs_dir_entry_root,
 				    NULL,
 				    &binder_state_fops);
-		debugfs_create_file("stats",
+		binder_debugfs_stats = debugfs_create_file(
+				    "stats",
 				    S_IRUGO,
 				    binder_debugfs_dir_entry_root,
 				    NULL,
 				    &binder_stats_fops);
-		debugfs_create_file("transactions",
+		binder_debugfs_transactions = debugfs_create_file(
+				    "transactions",
 				    S_IRUGO,
 				    binder_debugfs_dir_entry_root,
 				    NULL,
 				    &binder_transactions_fops);
-		debugfs_create_file("transaction_log",
+		binder_debugfs_transaction_log = debugfs_create_file(
+				    "transaction_log",
 				    S_IRUGO,
 				    binder_debugfs_dir_entry_root,
 				    &binder_transaction_log,
 				    &binder_transaction_log_fops);
-		debugfs_create_file("failed_transaction_log",
+		binder_debugfs_failed_transaction_log = debugfs_create_file(
+				    "failed_transaction_log",
 				    S_IRUGO,
 				    binder_debugfs_dir_entry_root,
 				    &binder_transaction_log_failed,
@@ -3606,6 +3616,25 @@ static int __init binder_init(void)
 	return ret;
 }
 
-device_initcall(binder_init);
+static void __exit binder_exit(void)
+{
+	if (binder_debugfs_dir_entry_root) {
+		debugfs_remove(binder_debugfs_dir_entry_proc);
+		debugfs_remove(binder_debugfs_state);
+		debugfs_remove(binder_debugfs_stats);
+		debugfs_remove(binder_debugfs_transactions);
+		debugfs_remove(binder_debugfs_transaction_log);
+		debugfs_remove(binder_debugfs_failed_transaction_log);
+		debugfs_remove(binder_debugfs_dir_entry_root);
+	}
+
+	misc_deregister(&binder_miscdev);
+	destroy_workqueue(binder_deferred_workqueue);
+
+	printk(KERN_INFO "binder: unloaded\n");
+}
+
+module_init(binder_init);
+module_exit(binder_exit);
 
 MODULE_LICENSE("GPL v2");
