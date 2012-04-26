@@ -410,6 +410,7 @@ int dispc_runtime_get(void)
 	WARN_ON(r < 0);
 	return r < 0 ? r : 0;
 }
+EXPORT_SYMBOL(dispc_runtime_get);
 
 void dispc_runtime_put(void)
 {
@@ -420,6 +421,7 @@ void dispc_runtime_put(void)
 	r = pm_runtime_put_sync(&dispc.pdev->dev);
 	WARN_ON(r < 0);
 }
+EXPORT_SYMBOL(dispc_runtime_put);
 
 static inline bool dispc_mgr_is_lcd(enum omap_channel channel)
 {
