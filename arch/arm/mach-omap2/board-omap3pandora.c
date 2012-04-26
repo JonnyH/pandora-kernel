@@ -690,6 +690,76 @@ static void __init pandora_usb_host_init(void)
 		pr_err("Cannot set vbus GPIO, ret=%d\n", ret);
 }
 
+#include <linux/spi/ads7846.h>
+#include <asm/system.h>
+
+static DECLARE_COMPLETION(ts_completion);
+static struct timespec ts_last_framedone;
+
+static void vsync_irq_wait_handler(void *data, u32 mask)
+{
+	getnstimeofday(&ts_last_framedone);
+	complete(&ts_completion);
+}
+
+static void ads7846_wait_for_sync(void)
+{
+	struct timespec now, diff;
+	u32 diff_us;
+
+	getnstimeofday(&now);
+	diff = timespec_sub(now, ts_last_framedone);
+	diff_us = diff.tv_nsec / NSEC_PER_USEC + diff.tv_sec * USEC_PER_SEC;
+	if (diff_us < 1023 || diff_us > 40000)
+		/* still blanking or display inactive */
+		return;
+
+	/* wait for blanking period */
+	disable_hlt();
+	wait_for_completion_timeout(&ts_completion, HZ / 30);
+	enable_hlt();
+}
+
+static int pandora_pendown_state(void)
+{
+	static int val_old;
+	int val;
+	int ret;
+	
+	val = !gpio_get_value(OMAP3_PANDORA_TS_GPIO);
+	if (!in_irq() && val != val_old) {
+		init_completion(&ts_completion);
+		dispc_runtime_get();
+		if (val)
+			ret = omap_dispc_register_isr(vsync_irq_wait_handler,
+				NULL, DISPC_IRQ_VSYNC);
+		else
+			ret = omap_dispc_unregister_isr(vsync_irq_wait_handler,
+				NULL, DISPC_IRQ_VSYNC);
+		dispc_runtime_put();
+		if (ret != 0)
+			pr_err("%s: can't (un)register isr: %d %d\n",
+				__func__, val, ret);
+		val_old = val;
+	}
+
+	return val;
+}
+
+static struct ads7846_platform_data pandora_ads7846_cfg = {
+	.x_max			= 0x0fff,
+	.y_max			= 0x0fff,
+	.x_plate_ohms		= 180,
+	.pressure_max		= 255,
+	.debounce_max		= 10,
+	.debounce_tol		= 3,
+	.debounce_rep		= 1,
+	.gpio_pendown		= OMAP3_PANDORA_TS_GPIO,
+	.keep_vref_on		= 1,
+	.wait_for_sync		= ads7846_wait_for_sync,
+	.get_pendown_state	= pandora_pendown_state,
+};
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
 	&pandora_leds_pwm,
@@ -789,7 +859,7 @@ static void __init omap3pandora_init(void)
 
 	spi_register_board_info(omap3pandora_spi_board_info,
 			ARRAY_SIZE(omap3pandora_spi_board_info));
-	omap_ads7846_init(1, OMAP3_PANDORA_TS_GPIO, 0, NULL);
+	omap_ads7846_init(1, OMAP3_PANDORA_TS_GPIO, 4, &pandora_ads7846_cfg);
 	usbhs_init(&usbhs_bdata);
 	usb_musb_init(NULL);
 	gpmc_nand_init(&pandora_nand_data);
