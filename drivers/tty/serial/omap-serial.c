@@ -269,6 +269,7 @@ static void serial_omap_start_tx(struct uart_port *port)
 	int ret = 0;
 
 	if (!up->use_dma) {
+		omap_uart_block_sleep_id(up->pdev->id);
 		serial_omap_enable_ier_thri(up);
 		return;
 	}

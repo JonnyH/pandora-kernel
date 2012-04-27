@@ -28,6 +28,7 @@
 #include <linux/serial_8250.h>
 #include <linux/pm_runtime.h>
 #include <linux/console.h>
+#include <linux/module.h>
 
 #ifdef CONFIG_SERIAL_OMAP
 #include <plat/omap-serial.h>
@@ -374,6 +375,19 @@ static void omap_uart_allow_sleep(struct omap_uart_state *uart)
 	uart->can_sleep = 1;
 	del_timer(&uart->timer);
 }
+
+void omap_uart_block_sleep_id(int num)
+{
+	struct omap_uart_state *uart;
+
+	list_for_each_entry(uart, &uart_list, node) {
+		if (num == uart->num && uart->can_sleep) {
+			omap_uart_block_sleep(uart);
+			return;
+		}
+	}
+}
+EXPORT_SYMBOL(omap_uart_block_sleep_id);
 
 static void omap_uart_idle_timer(unsigned long data)
 {

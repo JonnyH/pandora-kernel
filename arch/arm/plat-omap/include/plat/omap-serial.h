@@ -116,4 +116,7 @@ struct uart_omap_port {
 	unsigned long		port_activity;
 };
 
+/* HACK */
+void omap_uart_block_sleep_id(int num);
+
 #endif /* __OMAP_SERIAL_H__ */
