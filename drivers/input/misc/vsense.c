@@ -248,7 +248,7 @@ static int vsense_proc_mode_read(char *page, char **start, off_t off, int count,
 	}
 
 	*eof = 1;
-	return len + 1;
+	return len;
 }
 
 static int vsense_proc_mode_write(struct file *file, const char __user *buffer,
@@ -305,7 +305,7 @@ static int vsense_proc_int_read(char *page, char **start, off_t off,
 
 	len = sprintf(page, "%d\n", *val);
 	*eof = 1;
-	return len + 1;
+	return len;
 }
 
 static int vsense_proc_int_write(const char __user *buffer,
