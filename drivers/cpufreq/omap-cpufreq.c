@@ -242,6 +242,8 @@ static int freq_notifier_call(struct notifier_block *nb, unsigned long type,
 	if (ret)
 		dev_err(mpu_dev, "%s: cpufreq_frequency_table_cpuinfo: %d\n",
 			__func__, ret);
+	omap_freq_policy->user_policy.min = omap_freq_policy->cpuinfo.min_freq;
+	omap_freq_policy->user_policy.max = omap_freq_policy->cpuinfo.max_freq;
 
 	return ret;
 }
