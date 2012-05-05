@@ -876,6 +876,8 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 {
 	struct ads7846 *ts = handle;
 
+	disable_irq_nosync(ts->spi->irq);
+
 	/* Start with a small delay before checking pendown state */
 	msleep(TS_POLL_DELAY);
 
@@ -901,6 +903,11 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 		ts->pendown = false;
 		dev_vdbg(&ts->spi->dev, "UP\n");
 	}
+
+	mutex_lock(&ts->lock);
+	if (!ts->stopped)
+		enable_irq(ts->spi->irq);
+	mutex_unlock(&ts->lock);
 
 	return IRQ_HANDLED;
 }
