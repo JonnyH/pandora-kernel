@@ -727,7 +727,7 @@ static int pandora_pendown_state(void)
 	int ret;
 	
 	val = !gpio_get_value(OMAP3_PANDORA_TS_GPIO);
-	if (!in_irq() && val != val_old) {
+	if (!in_irq() && !in_atomic() && val != val_old) {
 		init_completion(&ts_completion);
 		dispc_runtime_get();
 		if (val)
