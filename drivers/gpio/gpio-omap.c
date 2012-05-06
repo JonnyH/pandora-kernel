@@ -44,6 +44,7 @@ struct gpio_bank {
 	u32 saved_datain;
 	u32 saved_fallingdetect;
 	u32 saved_risingdetect;
+	u32 saved_irqstatus;
 	u32 level_mask;
 	u32 toggle_mask;
 	spinlock_t lock;
@@ -1359,6 +1360,10 @@ void omap2_gpio_prepare_for_idle(int off_mode)
 		 * problems if GPIO module doesn't go idle for some reason.
 		 */
 		if (bank->dbck_enable_mask != 0) {
+			reg = bank->base + bank->regs->datain;
+			bank->saved_datain = __raw_readl(reg);
+			reg = bank->base + bank->regs->irqstatus;
+			bank->saved_irqstatus = __raw_readl(reg);
 			reg = bank->base + bank->regs->debounce_en;
 			__raw_writel(0, reg);
 		}
@@ -1438,6 +1443,16 @@ void omap2_gpio_resume_after_idle(void)
 		if (bank->dbck_enable_mask != 0) {
 			reg = bank->base + bank->regs->debounce_en;
 			__raw_writel(bank->dbck_enable_mask, reg);
+			/* clear irqs that could come from glitches
+			 * because debounce was disabled */
+			reg = bank->base + bank->regs->irqstatus;
+			gen = __raw_readl(reg) & ~bank->saved_irqstatus;
+			reg = bank->base + bank->regs->datain;
+			l = __raw_readl(reg) ^ bank->saved_datain;
+			l = gen & ~l;
+			l = l & bank->dbck_enable_mask & ~bank->level_mask;
+			if (l)
+				_clear_gpio_irqbank(bank, l);
 		}
 
 		if (!workaround_enabled)
