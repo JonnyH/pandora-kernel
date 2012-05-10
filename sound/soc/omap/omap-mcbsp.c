@@ -614,6 +614,9 @@ static int omap_mcbsp_dai_prepare(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int size;
 
+	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
+		return 0;
+
 	size = omap_mcbsp_get_fifo_size(mcbsp_data->bus_id);
 	size /= substream->runtime->channels;
 
