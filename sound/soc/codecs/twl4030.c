@@ -55,7 +55,7 @@ static const u8 twl4030_reg[TWL4030_CACHEREGNUM] = {
 	0x00, /* REG_OPTION		(0x2)	*/
 	0x00, /* REG_UNKNOWN		(0x3)	*/
 	0x00, /* REG_MICBIAS_CTL	(0x4)	*/
-	0x00, /* REG_ANAMICL		(0x5)	*/
+	0x01, /* REG_ANAMICL		(0x5)	*/
 	0x00, /* REG_ANAMICR		(0x6)	*/
 	0x00, /* REG_AVADC_CTL		(0x7)	*/
 	0x00, /* REG_ADCMICSEL		(0x8)	*/
@@ -501,12 +501,16 @@ SOC_DAPM_ENUM("Route", twl4030_vibrapath_enum);
 static const struct snd_kcontrol_new twl4030_dapm_analoglmic_controls[] = {
 	SOC_DAPM_SINGLE("Main Mic Capture Switch",
 			TWL4030_REG_ANAMICL, 0, 1, 0),
+#if 0
 	SOC_DAPM_SINGLE("Headset Mic Capture Switch",
 			TWL4030_REG_ANAMICL, 1, 1, 0),
+#endif
 	SOC_DAPM_SINGLE("AUXL Capture Switch",
 			TWL4030_REG_ANAMICL, 2, 1, 0),
+#if 0
 	SOC_DAPM_SINGLE("Carkit Mic Capture Switch",
 			TWL4030_REG_ANAMICL, 3, 1, 0),
+#endif
 };
 
 /* Right analog microphone selection */
@@ -1125,6 +1129,7 @@ static const struct soc_enum twl4030_digimicswap_enum =
 			twl4030_digimicswap_texts);
 
 static const struct snd_kcontrol_new twl4030_snd_controls[] = {
+#if 0
 	/* Codec operation mode control */
 	SOC_ENUM_EXT("Codec Operation Mode", twl4030_op_modes_enum,
 		snd_soc_get_enum_double,
@@ -1194,10 +1199,10 @@ static const struct snd_kcontrol_new twl4030_snd_controls[] = {
 	SOC_DOUBLE_R_TLV("TX2 Digital Capture Volume",
 		TWL4030_REG_AVTXL2PGA, TWL4030_REG_AVTXR2PGA,
 		0, 0x1f, 0, digital_capture_tlv),
-
+#endif
 	SOC_DOUBLE_TLV("Analog Capture Volume", TWL4030_REG_ANAMIC_GAIN,
 		0, 3, 5, 0, input_gain_tlv),
-
+#if 0
 	SOC_ENUM("AVADC Clock Priority", twl4030_avadc_clk_priority_enum),
 
 	SOC_ENUM("HS ramp delay", twl4030_rampdelay_enum),
@@ -1206,6 +1211,7 @@ static const struct snd_kcontrol_new twl4030_snd_controls[] = {
 	SOC_ENUM("Vibra H-bridge direction", twl4030_vibradir_enum),
 
 	SOC_ENUM("Digimic LR Swap", twl4030_digimicswap_enum),
+#endif
 };
 
 static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
@@ -1234,8 +1240,9 @@ static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("VIBRA"),
 
 	/* AIF and APLL clocks for running DAIs (including loopback) */
-	SND_SOC_DAPM_OUTPUT("Virtual HiFi OUT"),
 	SND_SOC_DAPM_INPUT("Virtual HiFi IN"),
+#if 0
+	SND_SOC_DAPM_OUTPUT("Virtual HiFi OUT"),
 	SND_SOC_DAPM_OUTPUT("Virtual Voice OUT"),
 
 	/* DACs */
@@ -1297,13 +1304,13 @@ static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
 			TWL4030_REG_ARXL2_APGA_CTL, 0, 0, NULL, 0),
 	SND_SOC_DAPM_MIXER("Analog Voice Playback Mixer",
 			TWL4030_REG_VDL_APGA_CTL, 0, 0, NULL, 0),
-
+#endif
 	SND_SOC_DAPM_SUPPLY("APLL Enable", SND_SOC_NOPM, 0, 0, apll_event,
 			    SND_SOC_DAPM_PRE_PMU|SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_SUPPLY("AIF Enable", SND_SOC_NOPM, 0, 0, aif_event,
 			    SND_SOC_DAPM_PRE_PMU|SND_SOC_DAPM_POST_PMD),
-
+#if 0
 	/* Output MIXER controls */
 	/* Earpiece */
 	SND_SOC_DAPM_MIXER("Earpiece Mixer", SND_SOC_NOPM, 0, 0,
@@ -1374,13 +1381,14 @@ static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
 			   SND_SOC_DAPM_PRE_PMU),
 	SND_SOC_DAPM_MUX("Vibra Route", SND_SOC_NOPM, 0, 0,
 		&twl4030_dapm_vibrapath_control),
-
+#endif
 	/* Introducing four virtual ADC, since TWL4030 have four channel for
 	   capture */
 	SND_SOC_DAPM_ADC("ADC Virtual Left1", "Left Front Capture",
 		SND_SOC_NOPM, 0, 0),
 	SND_SOC_DAPM_ADC("ADC Virtual Right1", "Right Front Capture",
 		SND_SOC_NOPM, 0, 0),
+#if 0
 	SND_SOC_DAPM_ADC("ADC Virtual Left2", "Left Rear Capture",
 		SND_SOC_NOPM, 0, 0),
 	SND_SOC_DAPM_ADC("ADC Virtual Right2", "Right Rear Capture",
@@ -1393,7 +1401,7 @@ static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
 		&twl4030_dapm_micpathtx1_control),
 	SND_SOC_DAPM_MUX("TX2 Capture Route", SND_SOC_NOPM, 0, 0,
 		&twl4030_dapm_micpathtx2_control),
-
+#endif
 	/* Analog input mixers for the capture amplifiers */
 	SND_SOC_DAPM_MIXER("Analog Left",
 		TWL4030_REG_ANAMICL, 4, 0,
@@ -1408,7 +1416,7 @@ static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
 		TWL4030_REG_AVADC_CTL, 3, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("ADC Physical Right",
 		TWL4030_REG_AVADC_CTL, 1, 0, NULL, 0),
-
+#if 0
 	SND_SOC_DAPM_PGA_E("Digimic0 Enable",
 		TWL4030_REG_ADCMICSEL, 1, 0, NULL, 0,
 		digimic_event, SND_SOC_DAPM_POST_PMU),
@@ -1420,14 +1428,16 @@ static const struct snd_soc_dapm_widget twl4030_dapm_widgets[] = {
 			    NULL, 0),
 	SND_SOC_DAPM_SUPPLY("micbias2 select", TWL4030_REG_MICBIAS_CTL, 6, 0,
 			    NULL, 0),
-
+#endif
 	SND_SOC_DAPM_MICBIAS("Mic Bias 1", TWL4030_REG_MICBIAS_CTL, 0, 0),
 	SND_SOC_DAPM_MICBIAS("Mic Bias 2", TWL4030_REG_MICBIAS_CTL, 1, 0),
+#if 0
 	SND_SOC_DAPM_MICBIAS("Headset Mic Bias", TWL4030_REG_MICBIAS_CTL, 2, 0),
-
+#endif
 };
 
 static const struct snd_soc_dapm_route intercon[] = {
+#if 0
 	{"Digital L1 Playback Mixer", NULL, "DAC Left1"},
 	{"Digital R1 Playback Mixer", NULL, "DAC Right1"},
 	{"Digital L2 Playback Mixer", NULL, "DAC Left2"},
@@ -1530,25 +1540,25 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"HFR", NULL, "HandsfreeR PGA"},
 	{"Vibra Route", "Audio", "Vibra Mux"},
 	{"VIBRA", NULL, "Vibra Route"},
-
+#endif
 	/* Capture path */
 	/* Must be always connected (for AIF and APLL) */
 	{"ADC Virtual Left1", NULL, "Virtual HiFi IN"},
 	{"ADC Virtual Right1", NULL, "Virtual HiFi IN"},
-	{"ADC Virtual Left2", NULL, "Virtual HiFi IN"},
-	{"ADC Virtual Right2", NULL, "Virtual HiFi IN"},
+//	{"ADC Virtual Left2", NULL, "Virtual HiFi IN"},
+//	{"ADC Virtual Right2", NULL, "Virtual HiFi IN"},
 	/* Physical inputs */
 	{"Analog Left", "Main Mic Capture Switch", "MAINMIC"},
-	{"Analog Left", "Headset Mic Capture Switch", "HSMIC"},
+//	{"Analog Left", "Headset Mic Capture Switch", "HSMIC"},
 	{"Analog Left", "AUXL Capture Switch", "AUXL"},
-	{"Analog Left", "Carkit Mic Capture Switch", "CARKITMIC"},
+//	{"Analog Left", "Carkit Mic Capture Switch", "CARKITMIC"},
 
 	{"Analog Right", "Sub Mic Capture Switch", "SUBMIC"},
 	{"Analog Right", "AUXR Capture Switch", "AUXR"},
 
 	{"ADC Physical Left", NULL, "Analog Left"},
 	{"ADC Physical Right", NULL, "Analog Right"},
-
+#if 0
 	{"Digimic0 Enable", NULL, "DIGIMIC0"},
 	{"Digimic1 Enable", NULL, "DIGIMIC1"},
 
@@ -1567,14 +1577,15 @@ static const struct snd_soc_dapm_route intercon[] = {
 	/* TX2 Right capture path */
 	{"TX2 Capture Route", "Analog", "ADC Physical Right"},
 	{"TX2 Capture Route", "Digimic1", "Digimic1 Enable"},
-
-	{"ADC Virtual Left1", NULL, "TX1 Capture Route"},
-	{"ADC Virtual Right1", NULL, "TX1 Capture Route"},
-	{"ADC Virtual Left2", NULL, "TX2 Capture Route"},
-	{"ADC Virtual Right2", NULL, "TX2 Capture Route"},
+#endif
+	{"ADC Virtual Left1", NULL, "ADC Physical Left"},
+	{"ADC Virtual Right1", NULL, "ADC Physical Right"},
+//	{"ADC Virtual Left2", NULL, "TX2 Capture Route"},
+//	{"ADC Virtual Right2", NULL, "TX2 Capture Route"},
 
 	{"ADC Virtual Left1", NULL, "AIF Enable"},
 	{"ADC Virtual Right1", NULL, "AIF Enable"},
+#if 0
 	{"ADC Virtual Left2", NULL, "AIF Enable"},
 	{"ADC Virtual Right2", NULL, "AIF Enable"},
 
@@ -1606,7 +1617,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"Digital R2 Playback Mixer", NULL, "Right Digital Loopback"},
 	{"Digital L2 Playback Mixer", NULL, "Left Digital Loopback"},
 	{"Digital Voice Playback Mixer", NULL, "Voice Digital Loopback"},
-
+#endif
 };
 
 static int twl4030_set_bias_level(struct snd_soc_codec *codec,
