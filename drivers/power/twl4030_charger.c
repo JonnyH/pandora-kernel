@@ -28,7 +28,10 @@
 #define TWL4030_BCIVAC		0x0a
 #define TWL4030_BCIVBUS		0x0c
 #define TWL4030_BCIMFSTS4	0x10
+#define TWL4030_BCIMFKEY	0x11
 #define TWL4030_BCICTL1		0x23
+#define TWL4030_BCIIREF1	0x27
+#define TWL4030_BCIIREF2	0x28
 
 #define TWL4030_BCIAUTOWEN	BIT(5)
 #define TWL4030_CONFIG_DONE	BIT(4)
@@ -62,6 +65,8 @@
 #define TWL4030_MSTATEC_COMPLETE1	0x0b
 #define TWL4030_MSTATEC_COMPLETE4	0x0e
 
+#define TWL4030_KEY_IIREF		0xe7
+
 static bool allow_usb = 1;
 module_param(allow_usb, bool, 0644);
 MODULE_PARM_DESC(allow_usb, "Allow USB charge drawing default current");
@@ -77,6 +82,9 @@ struct twl4030_bci {
 	int			irq_bci;
 	bool			ac_charge_enable;
 	bool			usb_charge_enable;
+	int			usb_current;
+	int			ac_current;
+	enum power_supply_type	current_supply;
 
 	unsigned long		event;
 	struct ratelimit_state	ratelimit;
@@ -103,6 +111,11 @@ static int twl4030_clear_set(u8 mod_no, u8 clear, u8 set, u8 reg)
 static int twl4030_bci_read(u8 reg, u8 *val)
 {
 	return twl_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE, val, reg);
+}
+
+static int twl4030_bci_write(u8 reg, u8 val)
+{
+	return twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, val, reg);
 }
 
 static int twl4030_clear_set_boot_bci(u8 clear, u8 set)
@@ -204,6 +217,71 @@ static int twl4030_charger_enable_ac(bool enable)
 		ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOAC);
 	else
 		ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOAC, 0);
+
+	return ret;
+}
+
+static int set_charge_current(struct twl4030_bci *bci, int new_current)
+{
+	u8 tmp, boot_bci_prev, cgain_set, cgain_clear;
+	int ret;
+
+	ret = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &boot_bci_prev,
+		TWL4030_PM_MASTER_BOOT_BCI);
+	if (ret)
+		goto out;
+
+	/* 
+	 * Stop automatic charging here, because charge current change
+	 * requires multiple register writes and CGAIN change requires
+	 * automatic charge to be stopped.
+	 */
+	ret = twl4030_clear_set_boot_bci(
+		TWL4030_BCIAUTOAC | TWL4030_BCIAUTOUSB | 4, 0);
+	if (ret)
+		goto out;
+
+	ret = twl4030_bci_write(TWL4030_BCIMFKEY, TWL4030_KEY_IIREF);
+	if (ret)
+		goto out;
+
+	ret = twl4030_bci_write(TWL4030_BCIIREF1, new_current & 0xff);
+	if (ret)
+		goto out;
+
+	ret = twl4030_bci_write(TWL4030_BCIMFKEY, TWL4030_KEY_IIREF);
+	if (ret)
+		goto out;
+
+	ret = twl4030_bci_write(TWL4030_BCIIREF2, (new_current >> 8) & 0x1);
+	if (ret)
+		goto out;
+
+	/* Set CGAIN = 0 or 1 */
+	if (new_current > 511) {
+		cgain_set = TWL4030_CGAIN;
+		cgain_clear = 0;
+	} else {
+		cgain_set = 0;
+		cgain_clear = TWL4030_CGAIN;
+	}
+
+	ret = twl4030_clear_set(TWL4030_MODULE_MAIN_CHARGE,
+			cgain_clear, cgain_set, TWL4030_BCICTL1);
+	if (ret)
+		goto out;
+
+	ret = twl4030_bci_read(TWL4030_BCICTL1, &tmp);
+	if (ret != 0 || (tmp & TWL4030_CGAIN) != cgain_set) {
+		dev_err(bci->dev, "CGAIN change failed\n");
+		goto out;
+	}
+
+	ret = twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER, boot_bci_prev,
+		TWL4030_PM_MASTER_BOOT_BCI);
+out:
+	if (ret != 0)
+		dev_err(bci->dev, "charge current change failed\n");
 
 	return ret;
 }
@@ -365,7 +443,7 @@ static ssize_t twl4030_bci_ac_store_enable(struct device *dev,
 
 	return count;
 }
-static const struct device_attribute dev_attr_enable_ac =
+static struct device_attribute dev_attr_enable_ac =
 	__ATTR(enable, S_IRUGO | S_IWUSR, twl4030_bci_ac_show_enable,
 	twl4030_bci_ac_store_enable);
 
@@ -402,9 +480,76 @@ static ssize_t twl4030_bci_usb_store_enable(struct device *dev,
 
 	return count;
 }
-static const struct device_attribute dev_attr_enable_usb =
+static struct device_attribute dev_attr_enable_usb =
 	__ATTR(enable, S_IRUGO | S_IWUSR, twl4030_bci_usb_show_enable,
 	twl4030_bci_usb_store_enable);
+
+static ssize_t show_charge_current(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	int ret, val;
+	u8 ctl;
+	
+	val = twl4030bci_read_adc_val(TWL4030_BCIIREF1);
+	if (val < 0)
+		return val;
+	ret = twl4030_bci_read(TWL4030_BCICTL1, &ctl);
+	if (ret < 0)
+		return ret;
+
+	val &= 0x1ff;
+	if (ctl & TWL4030_CGAIN)
+		val |= 0x200;
+
+	return sprintf(buf, "%d\n", val);
+}
+
+static ssize_t store_charge_current(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct power_supply *psy = dev_get_drvdata(dev);
+	struct twl4030_bci *bci = dev_get_drvdata(psy->dev->parent);
+	unsigned long new_current;
+	int ret;
+
+	ret = strict_strtoul(buf, 10, &new_current);
+	if (ret)
+		return -EINVAL;
+
+	ret = set_charge_current(bci, new_current);
+	if (ret)
+		return ret;
+
+	if (bci->current_supply == POWER_SUPPLY_TYPE_MAINS)
+		bci->ac_current = new_current;
+	else
+		bci->usb_current = new_current;
+
+	return count;
+}
+static DEVICE_ATTR(charge_current, S_IRUGO | S_IWUSR, show_charge_current,
+	store_charge_current);
+
+static struct attribute *bci_ac_attrs[] = {
+	&dev_attr_enable_ac.attr,
+	&dev_attr_charge_current.attr,
+	NULL,
+};
+
+static struct attribute *bci_usb_attrs[] = {
+	&dev_attr_enable_usb.attr,
+	&dev_attr_charge_current.attr,
+	NULL,
+};
+	
+static const struct attribute_group bci_ac_attr_group = {
+	.attrs = bci_ac_attrs,
+};
+
+static const struct attribute_group bci_usb_attr_group = {
+	.attrs = bci_usb_attrs,
+};
 
 /*
  * Returns the main charge FSM state
@@ -455,6 +600,13 @@ static int twl4030_bci_get_property(struct power_supply *psy,
 		is_charging = state & TWL4030_MSTATEC_USB;
 	else
 		is_charging = state & TWL4030_MSTATEC_AC;
+	if (is_charging && psy->type != bci->current_supply) {
+		if (psy->type == POWER_SUPPLY_TYPE_USB)
+			set_charge_current(bci, bci->usb_current);
+		else
+			set_charge_current(bci, bci->ac_current);
+		bci->current_supply = psy->type;
+	}
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -528,6 +680,8 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->dev = &pdev->dev;
 	bci->irq_chg = platform_get_irq(pdev, 0);
 	bci->irq_bci = platform_get_irq(pdev, 1);
+	bci->ac_current = 860; /* ~1.2A */
+	bci->usb_current = 360; /* ~600mA */
 
 	platform_set_drvdata(pdev, bci);
 
@@ -585,15 +739,15 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 		otg_register_notifier(bci->transceiver, &bci->otg_nb);
 	}
 
-	ret = device_create_file(bci->ac.dev, &dev_attr_enable_ac);
+	ret = sysfs_create_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to create sysfs file: %d\n", ret);
+		dev_err(&pdev->dev, "failed to create sysfs group: %d\n", ret);
 		goto fail_sysfs1;
 	}
 
-	ret = device_create_file(bci->usb.dev, &dev_attr_enable_usb);
+	ret = sysfs_create_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to create sysfs file: %d\n", ret);
+		dev_err(&pdev->dev, "failed to create sysfs group: %d\n", ret);
 		goto fail_sysfs2;
 	}
 
@@ -621,9 +775,9 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	return 0;
 
 fail_unmask_interrupts:
-	device_remove_file(bci->usb.dev, &dev_attr_enable_usb);
+	sysfs_remove_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
 fail_sysfs2:
-	device_remove_file(bci->ac.dev, &dev_attr_enable_ac);
+	sysfs_remove_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
 fail_sysfs1:
 	if (bci->transceiver != NULL) {
 		otg_unregister_notifier(bci->transceiver, &bci->otg_nb);
@@ -647,8 +801,8 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 {
 	struct twl4030_bci *bci = platform_get_drvdata(pdev);
 
-	device_remove_file(bci->usb.dev, &dev_attr_enable_usb);
-	device_remove_file(bci->ac.dev, &dev_attr_enable_ac);
+	sysfs_remove_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
+	sysfs_remove_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
 
 	twl4030_charger_enable_ac(false);
 	twl4030_charger_enable_usb(bci, false);
