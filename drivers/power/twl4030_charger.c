@@ -22,6 +22,7 @@
 #include <linux/notifier.h>
 #include <linux/usb/otg.h>
 #include <linux/ratelimit.h>
+#include <linux/regulator/machine.h>
 
 #define TWL4030_BCIMSTATEC	0x02
 #define TWL4030_BCIICHG		0x08
@@ -85,6 +86,8 @@ struct twl4030_bci {
 	int			usb_current;
 	int			ac_current;
 	enum power_supply_type	current_supply;
+	struct regulator	*usb_reg;
+	int			usb_enabled;
 
 	unsigned long		event;
 	struct ratelimit_state	ratelimit;
@@ -191,6 +194,12 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			return -EACCES;
 		}
 
+		/* Need to keep regulator on */
+		if (!bci->usb_enabled &&
+		    bci->usb_reg &&
+		    regulator_enable(bci->usb_reg) == 0)
+			bci->usb_enabled = 1;
+
 		/* forcing the field BCIAUTOUSB (BOOT_BCI[1]) to 1 */
 		ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOUSB);
 		if (ret < 0)
@@ -201,6 +210,9 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			TWL4030_USBFASTMCHG, TWL4030_BCIMFSTS4);
 	} else {
 		ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOUSB, 0);
+		if (bci->usb_enabled &&
+		    regulator_disable(bci->usb_reg) == 0)
+			bci->usb_enabled = 0;
 	}
 
 	return ret;
@@ -708,6 +720,12 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->usb.get_property = twl4030_bci_get_property;
 	bci->usb.supplied_to = pdata->supplied_to;
 	bci->usb.num_supplicants = pdata->num_supplicants;
+
+	bci->usb_reg = regulator_get(bci->dev, "bci3v1");
+	if (IS_ERR(bci->usb_reg)) {
+		dev_warn(&pdev->dev, "regulator get bci3v1 failed\n");
+		bci->usb_reg = NULL;
+	}
 
 	ret = power_supply_register(&pdev->dev, &bci->usb);
 	if (ret) {
