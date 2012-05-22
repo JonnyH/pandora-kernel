@@ -1020,7 +1020,9 @@ static int configure_dispc(void)
 	busy = false;
 
 	for (i = 0; i < num_mgrs; i++) {
-		mgr_busy[i] = dispc_mgr_go_busy(i);
+		/* pandora HACK: if something is running faster than display,
+		 * it's ok to lose older frame config. */
+		mgr_busy[i] = false; /*dispc_mgr_go_busy(i);*/
 		mgr_go[i] = false;
 	}
 

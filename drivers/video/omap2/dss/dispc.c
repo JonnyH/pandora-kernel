@@ -485,7 +485,9 @@ void dispc_mgr_go(enum omap_channel channel)
 		go_bit = REG_GET(DISPC_CONTROL, bit, bit) == 1;
 
 	if (go_bit) {
+#if 0 /* pandora hack */
 		DSSERR("GO bit not down for channel %d\n", channel);
+#endif
 		return;
 	}
 
