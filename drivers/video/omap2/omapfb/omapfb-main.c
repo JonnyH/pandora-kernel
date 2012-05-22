@@ -48,6 +48,7 @@ static int def_rotate;
 static int def_mirror;
 static bool auto_update;
 static unsigned int auto_update_freq;
+static bool def_vram_cache = true;
 module_param(auto_update, bool, 0);
 module_param(auto_update_freq, uint, 0644);
 
@@ -1119,7 +1120,10 @@ static int omapfb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
 
 	vma->vm_pgoff = off >> PAGE_SHIFT;
 	vma->vm_flags |= VM_IO | VM_RESERVED;
-	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+	if (def_vram_cache)
+		vma->vm_page_prot = pgprot_writethrough(vma->vm_page_prot);
+	else
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	vma->vm_ops = &mmap_user_ops;
 	vma->vm_private_data = rg;
 	if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
@@ -2584,6 +2588,7 @@ module_param_named(vram, def_vram, charp, 0);
 module_param_named(rotate, def_rotate, int, 0);
 module_param_named(vrfb, def_vrfb, bool, 0);
 module_param_named(mirror, def_mirror, bool, 0);
+module_param_named(vram_cache, def_vram_cache, bool, 0644);
 
 /* late_initcall to let panel/ctrl drivers loaded first.
  * I guess better option would be a more dynamic approach,

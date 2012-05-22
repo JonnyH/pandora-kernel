@@ -294,6 +294,16 @@ omapfb.rotate=<angle>
 omapfb.mirror=<y|n>
 	- Default mirror for all framebuffers. Only works with DMA rotation.
 
+omapfb.vram_cache=<y|n>
+	- Sets the framebuffer memory to be write-through cached. This may be
+	  useful in the configurations where only CPU is allowed to write to
+	  the framebuffer and eliminate the need for enabling shadow
+	  framebuffer in Xorg DDX drivers such as xf86-video-fbdev and
+	  xf86-video-omapfb. Enabling write-through cache is only useful
+	  for ARM11 and Cortex-A8 processors. Cortex-A9 does not support
+	  write-through cache well, see "Cortex-A9 behavior for Normal Memory
+	  Cacheable memory regions" section in Cortex-A9 TRM for more details.
+
 omapdss.def_disp=<display>
 	- Name of default display, to which all overlays will be connected.
 	  Common examples are "lcd" or "tv".
