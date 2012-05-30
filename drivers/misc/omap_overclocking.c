@@ -272,7 +272,10 @@ static int cpu_maxopp_write(struct file *file, const char __user *buffer,
 	if (retval < 0)
 		return retval;
 
-	if (val < 1 || val > opp_max_avail)
+	if (val > opp_max_avail)
+		val = opp_max_avail;
+
+	if (val < 1)
 		return -EINVAL;
 
 	ret = set_opp_max(val);
