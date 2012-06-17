@@ -143,6 +143,7 @@ struct task_struct *find_lock_task_mm(struct task_struct *p)
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(find_lock_task_mm);
 
 /* return true if the task is not adequate as candidate victim task. */
 static bool oom_unkillable_task(struct task_struct *p,
