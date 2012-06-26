@@ -28,14 +28,14 @@ static const unsigned long nominal_freqs_36xx[] = {
 
 static const unsigned long *nominal_freqs;
 
-static int opp_max_avail, opp_max;
+static int opp_max_avail, opp_max_now, opp_max_ceil;
 
 static int set_opp_max(int new_opp_max)
 {
 	struct device *mpu_dev;
 	int i, ret;
 
-	if (new_opp_max == opp_max)
+	if (new_opp_max == opp_max_now)
 		return 0;
 
 	mpu_dev = omap_device_get_by_hwmod_name("mpu");
@@ -59,10 +59,16 @@ static int set_opp_max(int new_opp_max)
 				__func__, ret);
 	}
 
-	opp_max = new_opp_max;
-	dev_info(mpu_dev, "max OPP set to %d\n", opp_max);
+	dev_info(mpu_dev, "max OPP set to %d\n", new_opp_max);
+	opp_max_now = new_opp_max;
 
 	return 0;
+}
+
+static int set_opp_max_ceil(int new_opp_max)
+{
+	opp_max_ceil = new_opp_max;
+	return set_opp_max(new_opp_max);
 }
 
 static int set_cpu_mhz_max(unsigned long new_mhz_max)
@@ -73,16 +79,18 @@ static int set_cpu_mhz_max(unsigned long new_mhz_max)
 
 	new_mhz_max *= 1000000;
 
-	if (opp_max < 1 || opp_max > opp_max_avail) {
-		pr_err("%s: corrupt opp_max: %d\n", __func__, opp_max);
+	if (opp_max_ceil < 1 || opp_max_ceil > opp_max_avail) {
+		pr_err("%s: corrupt opp_max_ceil: %d\n",
+			__func__, opp_max_ceil);
 		return -EINVAL;
 	}
-	index = opp_max - 1;
+	index = opp_max_ceil - 1;
 
-	/* going below nominal makes no sense, it will save us nothing,
-	 * user should reduce max OPP instead */
-	if (new_mhz_max < nominal_freqs[index])
-		new_mhz_max = nominal_freqs[index];
+	/* find the minimum opp needed for this clock
+	 * and make it max allowed for cpufreq */
+	while (index > 0 && new_mhz_max <= nominal_freqs[index - 1])
+		index--;
+	set_opp_max(index + 1);
 
 	mpu_dev = omap_device_get_by_hwmod_name("mpu");
 	if (IS_ERR(mpu_dev)) {
@@ -110,8 +118,8 @@ static int get_cpu_mhz_max(void)
 	unsigned long cur_mhz_max = 0;
 	struct device *mpu_dev;
 
-	if (opp_max < 1 || opp_max > opp_max_avail) {
-		pr_err("%s: corrupt opp_max: %d\n", __func__, opp_max);
+	if (opp_max_now < 1 || opp_max_now > opp_max_avail) {
+		pr_err("%s: corrupt opp_max: %d\n", __func__, opp_max_now);
 		return -EINVAL;
 	}
 
@@ -122,7 +130,7 @@ static int get_cpu_mhz_max(void)
 		return -ENODEV;
 	}
 
-	opp_hack_get_freq(mpu_dev, opp_max - 1, &cur_mhz_max);
+	opp_hack_get_freq(mpu_dev, opp_max_now - 1, &cur_mhz_max);
 
 	return cur_mhz_max / 1000000;
 }
@@ -141,15 +149,16 @@ static int init_opp_hacks(void)
 	if (cpu_is_omap3630()) {
 		nominal_freqs = nominal_freqs_36xx;
 		opp_max_avail = sizeof(nominal_freqs_36xx) / sizeof(nominal_freqs_36xx[0]);
-		opp_max = 2;
+		opp_max_ceil = 2;
 	} else if (cpu_is_omap34xx()) {
 		nominal_freqs = nominal_freqs_35xx;
 		opp_max_avail = sizeof(nominal_freqs_35xx) / sizeof(nominal_freqs_35xx[0]);
-		opp_max = opp_max_avail;
+		opp_max_ceil = opp_max_avail;
 	} else {
 		dev_err(mpu_dev, "%s: unsupported CPU\n", __func__);
 		return -ENODEV;
 	}
+	opp_max_now = opp_max_ceil;
 
 	return 0;
 }
@@ -259,7 +268,7 @@ static int cpu_clk_write(struct file *file, const char __user *buffer,
 static int cpu_maxopp_read(char *page, char **start, off_t off, int count,
 		int *eof, void *data)
 {
-	return proc_read_val(page, start, off, count, eof, opp_max);
+	return proc_read_val(page, start, off, count, eof, opp_max_ceil);
 }
 
 static int cpu_maxopp_write(struct file *file, const char __user *buffer,
@@ -278,7 +287,7 @@ static int cpu_maxopp_write(struct file *file, const char __user *buffer,
 	if (val < 1)
 		return -EINVAL;
 
-	ret = set_opp_max(val);
+	ret = set_opp_max_ceil(val);
 	if (ret != 0)
 		return ret;
 
