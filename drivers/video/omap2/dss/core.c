@@ -32,6 +32,7 @@
 #include <linux/io.h>
 #include <linux/device.h>
 #include <linux/regulator/consumer.h>
+#include <linux/suspend.h>
 
 #include <video/omapdss.h>
 
@@ -168,7 +169,29 @@ static inline void dss_uninitialize_debugfs(void)
 #endif /* CONFIG_DEBUG_FS && CONFIG_OMAP2_DSS_DEBUG_SUPPORT */
 
 /* PLATFORM DEVICE */
-static int omap_dss_probe(struct platform_device *pdev)
+static int omap_dss_pm_notif(struct notifier_block *b, unsigned long v, void *d)
+{
+	DSSDBG("pm notif %lu\n", v);
+
+	switch (v) {
+	case PM_SUSPEND_PREPARE:
+		DSSDBG("suspending displays\n");
+		return dss_suspend_all_devices();
+
+	case PM_POST_SUSPEND:
+		DSSDBG("resuming displays\n");
+		return dss_resume_all_devices();
+
+	default:
+		return 0;
+	}
+}
+
+static struct notifier_block omap_dss_pm_notif_block = {
+	.notifier_call = omap_dss_pm_notif,
+};
+
+static int __init omap_dss_probe(struct platform_device *pdev)
 {
 	struct omap_dss_board_info *pdata = pdev->dev.platform_data;
 	int r;
@@ -203,6 +226,8 @@ static int omap_dss_probe(struct platform_device *pdev)
 			pdata->default_device = dssdev;
 	}
 
+	register_pm_notifier(&omap_dss_pm_notif_block);
+
 	return 0;
 
 err_register:
@@ -216,6 +241,8 @@ static int omap_dss_remove(struct platform_device *pdev)
 {
 	struct omap_dss_board_info *pdata = pdev->dev.platform_data;
 	int i;
+
+	unregister_pm_notifier(&omap_dss_pm_notif_block);
 
 	dss_uninitialize_debugfs();
 
@@ -234,26 +261,10 @@ static void omap_dss_shutdown(struct platform_device *pdev)
 	dss_disable_all_devices();
 }
 
-static int omap_dss_suspend(struct platform_device *pdev, pm_message_t state)
-{
-	DSSDBG("suspend %d\n", state.event);
-
-	return dss_suspend_all_devices();
-}
-
-static int omap_dss_resume(struct platform_device *pdev)
-{
-	DSSDBG("resume\n");
-
-	return dss_resume_all_devices();
-}
-
 static struct platform_driver omap_dss_driver = {
 	.probe          = omap_dss_probe,
 	.remove         = omap_dss_remove,
 	.shutdown	= omap_dss_shutdown,
-	.suspend	= omap_dss_suspend,
-	.resume		= omap_dss_resume,
 	.driver         = {
 		.name   = "omapdss",
 		.owner  = THIS_MODULE,
