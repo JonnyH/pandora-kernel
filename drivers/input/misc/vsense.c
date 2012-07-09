@@ -21,6 +21,7 @@
 #include <linux/idr.h>
 #include <linux/i2c/vsense.h>
 #include <linux/gpio.h>
+#include <linux/regulator/consumer.h>
 
 #define VSENSE_INTERVAL		25
 
@@ -42,6 +43,7 @@ struct vsense_drvdata {
 	char dev_name[12];
 	struct input_dev *input;
 	struct i2c_client *client;
+	struct regulator *reg;
 	struct delayed_work work;
 	int reset_gpio;
 	int irq_gpio;
@@ -466,7 +468,7 @@ static int vsense_probe(struct i2c_client *client,
 	ret = idr_pre_get(&vsense_proc_id, GFP_KERNEL);
 	if (ret == 0) {
 		ret = -ENOMEM;
-		goto fail0;
+		goto err_idr;
 	}
 
 	mutex_lock(&vsense_mutex);
@@ -474,41 +476,34 @@ static int vsense_probe(struct i2c_client *client,
 	ret = idr_get_new(&vsense_proc_id, client, &ddata->proc_id);
 	if (ret < 0) {
 		mutex_unlock(&vsense_mutex);
-		goto fail0;
+		goto err_idr;
 	}
 
 	if (!vsense_reset_refcount) {
 		ret = gpio_request(pdata->gpio_reset, "vsense reset");
 		if (ret < 0) {
-			dev_err(&ddata->client->dev, "gpio_request error: %d, %d\n",
-				ddata->reset_gpio, ret);
+			dev_err(&client->dev, "gpio_request error: %d, %d\n",
+				pdata->gpio_reset, ret);
 			mutex_unlock(&vsense_mutex);
-			goto fail0;
+			goto err_gpio_reset;
 		}
 	}
 	vsense_reset_refcount++;
 
 	mutex_unlock(&vsense_mutex);
 
-	ret = gpio_request(pdata->gpio_irq, client->name);
+	ret = gpio_request_one(pdata->gpio_irq, GPIOF_IN, client->name);
 	if (ret < 0) {
 		dev_err(&client->dev, "failed to request GPIO %d,"
 			" error %d\n", pdata->gpio_irq, ret);
-		goto fail1;
-	}
-
-	ret = gpio_direction_input(pdata->gpio_irq);
-	if (ret < 0) {
-		dev_err(&client->dev, "failed to configure input direction "
-			"for GPIO %d, error %d\n", pdata->gpio_irq, ret);
-		goto fail2;
+		goto err_gpio_irq;
 	}
 
 	ret = gpio_to_irq(pdata->gpio_irq);
 	if (ret < 0) {
 		dev_err(&client->dev, "unable to get irq number for GPIO %d, "
 			"error %d\n", pdata->gpio_irq, ret);
-		goto fail2;
+		goto err_gpio_to_irq;
 	}
 	client->irq = ret;
 
@@ -527,14 +522,30 @@ static int vsense_probe(struct i2c_client *client,
 	ddata->mbutton_threshold = 20;
 	i2c_set_clientdata(client, ddata);
 
-	/* resetting drains power, so keep it out of reset at all times */
+	vsense_reset(ddata, 1);
+
+	ddata->reg = regulator_get(&client->dev, "vcc");
+	if (IS_ERR(ddata->reg)) {
+		ret = PTR_ERR(ddata->reg);
+		dev_err(&client->dev, "unable to get regulator: %d\n", ret);
+		goto err_regulator_get;
+	}
+
+	ret = regulator_enable(ddata->reg);
+	if (ret) {
+		dev_err(&client->dev, "unable to enable regulator: %d\n", ret);
+		goto err_regulator_enable;
+	}
+
+	/* resetting drains power, as well as disabling supply,
+	 * so keep it powered and out of reset at all times */
 	vsense_reset(ddata, 0);
 
 	ret = vsense_input_register(ddata, ddata->mode);
 	if (ret) {
 		dev_err(&client->dev, "failed to register input device, "
 			"error %d\n", ret);
-		goto fail2;
+		goto err_input_register;
 	}
 
 	ret = request_irq(client->irq, vsense_isr,
@@ -543,7 +554,7 @@ static int vsense_probe(struct i2c_client *client,
 	if (ret) {
 		dev_err(&client->dev, "unable to claim irq %d, error %d\n",
 			client->irq, ret);
-		goto fail3;
+		goto err_request_irq;
 	}
 
 	dev_dbg(&client->dev, "probe %02x, gpio %i, irq %i, \"%s\"\n",
@@ -571,14 +582,19 @@ static int vsense_probe(struct i2c_client *client,
 
 	return 0;
 
-fail3:
+err_request_irq:
 	vsense_input_unregister(ddata);
-fail2:
+err_input_register:
+err_regulator_enable:
+	regulator_put(ddata->reg);
+err_regulator_get:
+err_gpio_to_irq:
 	gpio_free(pdata->gpio_irq);
-fail1:
+err_gpio_irq:
 	gpio_free(pdata->gpio_reset);
+err_gpio_reset:
 	idr_remove(&vsense_proc_id, ddata->proc_id);
-fail0:
+err_idr:
 	kfree(ddata);
 	return ret;
 }
@@ -615,6 +631,7 @@ static int __devexit vsense_remove(struct i2c_client *client)
 	free_irq(client->irq, ddata);
 	vsense_input_unregister(ddata);
 	gpio_free(ddata->irq_gpio);
+	regulator_put(ddata->reg);
 	kfree(ddata);
 
 	return 0;
