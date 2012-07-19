@@ -480,7 +480,8 @@ static int vsense_probe(struct i2c_client *client,
 	}
 
 	if (!vsense_reset_refcount) {
-		ret = gpio_request(pdata->gpio_reset, "vsense reset");
+		ret = gpio_request_one(pdata->gpio_reset, GPIOF_OUT_INIT_HIGH,
+			"vsense reset");
 		if (ret < 0) {
 			dev_err(&client->dev, "gpio_request error: %d, %d\n",
 				pdata->gpio_reset, ret);
@@ -522,8 +523,6 @@ static int vsense_probe(struct i2c_client *client,
 	ddata->mbutton_threshold = 20;
 	i2c_set_clientdata(client, ddata);
 
-	vsense_reset(ddata, 1);
-
 	ddata->reg = regulator_get(&client->dev, "vcc");
 	if (IS_ERR(ddata->reg)) {
 		ret = PTR_ERR(ddata->reg);
@@ -537,9 +536,11 @@ static int vsense_probe(struct i2c_client *client,
 		goto err_regulator_enable;
 	}
 
-	/* resetting drains power, as well as disabling supply,
-	 * so keep it powered and out of reset at all times */
-	vsense_reset(ddata, 0);
+	/* HACK */
+	if (vsense_reset_refcount == 2)
+		/* resetting drains power, as well as disabling supply,
+		 * so keep it powered and out of reset at all times */
+		vsense_reset(ddata, 0);
 
 	ret = vsense_input_register(ddata, ddata->mode);
 	if (ret) {
