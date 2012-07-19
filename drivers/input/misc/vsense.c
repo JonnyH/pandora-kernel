@@ -638,6 +638,32 @@ static int __devexit vsense_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int vsense_i2c_suspend(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct vsense_drvdata *ddata = i2c_get_clientdata(client);
+
+	/* we can't process irqs while i2c is suspended and we can't
+	 * ask the device to not generate them, so just disable instead */
+	cancel_delayed_work_sync(&ddata->work);
+	disable_irq(client->irq);
+
+	return 0;
+}
+
+static int vsense_i2c_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	enable_irq(client->irq);
+
+	return 0;
+}
+#endif /* CONFIG_PM_SLEEP */
+
+static SIMPLE_DEV_PM_OPS(vsense_pm_ops, vsense_i2c_suspend, vsense_i2c_resume);
+
 static const struct i2c_device_id vsense_id[] = {
 	{ "vsense", 0 },
 	{ }
@@ -646,6 +672,8 @@ static const struct i2c_device_id vsense_id[] = {
 static struct i2c_driver vsense_driver = {
 	.driver = {
 		.name	= "vsense",
+		.owner	= THIS_MODULE,
+		.pm	= &vsense_pm_ops,
 	},
 	.probe		= vsense_probe,
 	.remove		= __devexit_p(vsense_remove),
