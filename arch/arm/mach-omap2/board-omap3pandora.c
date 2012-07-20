@@ -508,8 +508,8 @@ static struct regulator_init_data pandora_vaux2 = {
 /* VAUX4 for ads7846 and nubs */
 static struct regulator_init_data pandora_vaux4 = {
 	.constraints = {
-		.min_uV			= 2800000,
-		.max_uV			= 2800000,
+		.min_uV			= 3000000,
+		.max_uV			= 3000000,
 		.apply_uV		= true,
 		.valid_modes_mask	= REGULATOR_MODE_NORMAL
 					| REGULATOR_MODE_STANDBY,
