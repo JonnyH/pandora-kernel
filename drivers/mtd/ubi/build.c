@@ -708,16 +708,15 @@ static int io_init(struct ubi_device *ubi)
 	 * read-only mode.
 	 */
 	if (ubi->vid_hdr_offset + UBI_VID_HDR_SIZE <= ubi->hdrs_min_io_size) {
-		ubi_warn("EC and VID headers are in the same minimal I/O unit, "
-			 "switch to read-only mode");
+		ubi_warn("EC and VID headers are in the same minimal I/O unit, switch to read-only mode");
 		ubi->ro_mode = 1;
 	}
 
 	ubi->leb_size = ubi->peb_size - ubi->leb_start;
 
 	if (!(ubi->mtd->flags & MTD_WRITEABLE)) {
-		ubi_msg("MTD device %d is write-protected, attach in "
-			"read-only mode", ubi->mtd->index);
+		ubi_msg("MTD device %d is write-protected, attach in read-only mode",
+			ubi->mtd->index);
 		ubi->ro_mode = 1;
 	}
 
@@ -844,8 +843,8 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset)
 	 * no sense to attach emulated MTD devices, so we prohibit this.
 	 */
 	if (mtd->type == MTD_UBIVOLUME) {
-		ubi_err("refuse attaching mtd%d - it is already emulated on "
-			"top of UBI", mtd->index);
+		ubi_err("refuse attaching mtd%d - it is already emulated on top of UBI",
+			mtd->index);
 		return -EINVAL;
 	}
 
@@ -1309,14 +1308,13 @@ static int __init ubi_mtd_param_parse(const char *val, struct kernel_param *kp)
 
 	len = strnlen(val, MTD_PARAM_LEN_MAX);
 	if (len == MTD_PARAM_LEN_MAX) {
-		printk(KERN_ERR "UBI error: parameter \"%s\" is too long, "
-		       "max. is %d\n", val, MTD_PARAM_LEN_MAX);
+		printk(KERN_ERR "UBI error: parameter \"%s\" is too long, max. is %d\n",
+		       val, MTD_PARAM_LEN_MAX);
 		return -EINVAL;
 	}
 
 	if (len == 0) {
-		printk(KERN_WARNING "UBI warning: empty 'mtd=' parameter - "
-		       "ignored\n");
+		printk(KERN_WARNING "UBI warning: empty 'mtd=' parameter - ignored\n");
 		return 0;
 	}
 
