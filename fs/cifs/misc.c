@@ -645,7 +645,10 @@ dump_smb(struct smb_hdr *smb_buf, int smb_buf_length)
 void
 cifs_autodisable_serverino(struct cifs_sb_info *cifs_sb)
 {
-	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM) {
+	extern bool no_serverino_autodisable;
+
+	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM &&
+	    !no_serverino_autodisable) {
 		cifs_sb->mnt_cifs_flags &= ~CIFS_MOUNT_SERVER_INUM;
 		cERROR(1, "Autodisabling the use of server inode numbers on "
 			   "%s. This server doesn't seem to support them "
