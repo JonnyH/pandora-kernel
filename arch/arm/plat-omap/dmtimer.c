@@ -121,8 +121,8 @@ static void omap_dm_timer_reset(struct omap_dm_timer *timer)
 	}
 
 	__omap_dm_timer_reset(timer, 0, 0);
+	__omap_dm_timer_enable_posted(timer);
 	omap_dm_timer_disable(timer);
-	timer->posted = 1;
 }
 
 int omap_dm_timer_prepare(struct omap_dm_timer *timer)
@@ -664,6 +664,7 @@ static int __devinit omap_dm_timer_probe(struct platform_device *pdev)
 	}
 
 	timer->id = pdev->id;
+	timer->errata = pdata->timer_errata;
 	timer->irq = irq->start;
 	timer->reserved = pdata->reserved;
 	timer->pdev = pdev;
