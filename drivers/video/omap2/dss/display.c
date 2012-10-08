@@ -248,6 +248,38 @@ static ssize_t display_wss_store(struct device *dev,
 	return size;
 }
 
+#include <linux/ctype.h>
+
+static ssize_t display_dss_gamma_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct omap_dss_device *dssdev = to_dss_device(dev);
+	unsigned int table[256];
+	char *end = NULL;
+	int i;
+
+	for (i = 0; i < 256; ) {
+		table[i++] = simple_strtoul(buf, &end, 0);
+		while (isspace(*end))
+			end++;
+		if (*end == 0)
+			break;
+		buf = end;
+	}
+	
+	if (i == 1 && table[0] == 0)
+		dispc_set_gamma_table(NULL, 0);
+	else if (i < 256) {
+		dev_err(dev, "not enough gamma values supplied (%d)\n", i);
+		dispc_set_gamma_table(NULL, 0);
+	} else
+		dispc_set_gamma_table(table, 256 * 4);
+
+	dispc_mgr_go(dssdev->manager->id);
+
+	return size;
+}
+
 static DEVICE_ATTR(enabled, S_IRUGO|S_IWUSR,
 		display_enabled_show, display_enabled_store);
 static DEVICE_ATTR(tear_elim, S_IRUGO|S_IWUSR,
@@ -260,6 +292,8 @@ static DEVICE_ATTR(mirror, S_IRUGO|S_IWUSR,
 		display_mirror_show, display_mirror_store);
 static DEVICE_ATTR(wss, S_IRUGO|S_IWUSR,
 		display_wss_show, display_wss_store);
+static DEVICE_ATTR(dss_gamma, S_IRUGO|S_IWUSR,
+		NULL, display_dss_gamma_store);
 
 static struct device_attribute *display_sysfs_attrs[] = {
 	&dev_attr_enabled,
@@ -413,6 +447,12 @@ void dss_init_device(struct platform_device *pdev,
 	i = 0;
 	while ((attr = display_sysfs_attrs[i++]) != NULL) {
 		r = device_create_file(&dssdev->dev, attr);
+		if (r)
+			DSSERR("failed to create sysfs file\n");
+	}
+
+	if (dssdev->channel == OMAP_DSS_CHANNEL_LCD) {
+		r = device_create_file(&dssdev->dev, &dev_attr_dss_gamma);
 		if (r)
 			DSSERR("failed to create sysfs file\n");
 	}

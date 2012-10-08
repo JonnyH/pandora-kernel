@@ -58,6 +58,8 @@
 
 #define DISPC_MAX_NR_ISRS		8
 
+#define TABLE_SIZE (256 * 4)
+
 struct omap_dispc_isr_data {
 	omap_dispc_isr_t	isr;
 	void			*arg;
@@ -117,6 +119,10 @@ static struct {
 
 	bool		ctx_valid;
 	u32		ctx[DISPC_SZ_REGS / sizeof(u32)];
+
+	/* palette/gamma table */
+	void		*table_virt;
+	dma_addr_t	table_phys;
 
 #ifdef CONFIG_OMAP2_DSS_COLLECT_IRQ_STATS
 	spinlock_t irq_stats_lock;
@@ -1028,6 +1034,20 @@ void dispc_enable_gamma_table(bool enable)
 	}
 
 	REG_FLD_MOD(DISPC_CONFIG, enable, 9, 9);
+}
+
+void dispc_set_gamma_table(void *table, u32 size)
+{
+	if (table == NULL || size == 0 || size > TABLE_SIZE) {
+		REG_FLD_MOD(DISPC_CONFIG, 0, 3, 3);
+		return;
+	}
+
+	memcpy(dispc.table_virt, table, size);
+
+	dispc_write_reg(DISPC_OVL_TABLE_BA(0), dispc.table_phys);
+	dispc_set_loadmode(OMAP_DSS_LOAD_CLUT_ONCE_FRAME);
+	REG_FLD_MOD(DISPC_CONFIG, 1, 3, 3);
 }
 
 void dispc_mgr_enable_cpr(enum omap_channel channel, bool enable)
@@ -3463,6 +3483,15 @@ static int omap_dispchw_probe(struct platform_device *pdev)
 		goto err_irq;
 	}
 
+	pdev->dev.coherent_dma_mask = ~0;
+	dispc.table_virt = dma_alloc_writecombine(&pdev->dev,
+		TABLE_SIZE, &dispc.table_phys, GFP_KERNEL);
+	if (dispc.table_virt == NULL) {
+		dev_err(&pdev->dev, "failed to alloc palette memory\n");
+		goto err_palette;
+	}
+	memset(dispc.table_virt, 0, TABLE_SIZE);
+
 	pm_runtime_enable(&pdev->dev);
 
 	r = dispc_runtime_get();
@@ -3483,6 +3512,9 @@ static int omap_dispchw_probe(struct platform_device *pdev)
 
 err_runtime_get:
 	pm_runtime_disable(&pdev->dev);
+	dma_free_writecombine(&pdev->dev, TABLE_SIZE,
+		dispc.table_virt, dispc.table_phys);
+err_palette:
 	free_irq(dispc.irq, dispc.pdev);
 err_irq:
 	iounmap(dispc.base);
@@ -3495,6 +3527,9 @@ err_get_clk:
 static int omap_dispchw_remove(struct platform_device *pdev)
 {
 	pm_runtime_disable(&pdev->dev);
+
+	dma_free_writecombine(&pdev->dev, TABLE_SIZE,
+		dispc.table_virt, dispc.table_phys);
 
 	clk_put(dispc.dss_clk);
 
