@@ -55,7 +55,8 @@ struct vsense_drvdata {
 	int scrolly_multiplier;
 	int scroll_counter;
 	int scroll_steps;
-	int mbutton_threshold;
+	int mbutton_threshold_x;
+	int mbutton_threshold_y;
 	int mbutton_stage;
 };
 
@@ -103,16 +104,13 @@ dosync:
 		break;
 	case VSENSE_MODE_MBUTTONS:
 		d = m = l = r = 0;
-		if (abs(ay) > abs(ax)) {
-			if (ay >= ddata->mbutton_threshold) d = 1;
-			else if (ay <= -ddata->mbutton_threshold) d = 3;
-		} else {
-			if (ax >= ddata->mbutton_threshold) d = 2;
-			else if (ax <= -ddata->mbutton_threshold) d = 4;
-		}
+		if      (ax >= ddata->mbutton_threshold_x) d = 2;
+		else if (ax <= -ddata->mbutton_threshold_x) d = 4;
+		else if (ay >= ddata->mbutton_threshold_y) d = 1;
+		else if (ay <= -ddata->mbutton_threshold_y) d = 3;
 		if (d != 1) ddata->mbutton_stage = 0;
 		switch (d) {
-			case 1:
+		case 1:
 			ddata->mbutton_stage++;
 			switch (ddata->mbutton_stage) {
 				case 1: case 2: case 5: case 6:
@@ -120,9 +118,9 @@ dosync:
 				break;
 			}
 			break;
-			case 2:	r = 1; break;
-			case 3: m = 1; break;
-			case 4: l = 1; break;
+		case 2:	r = 1; break;
+		case 3: m = 1; break;
+		case 4: l = 1; break;
 		}
 		input_report_key(ddata->input, BTN_LEFT, l);
 		input_report_key(ddata->input, BTN_RIGHT, r);
@@ -520,7 +518,8 @@ static int vsense_probe(struct i2c_client *client,
 	ddata->scrollx_multiplier =
 	ddata->scrolly_multiplier = 8 * 256 / 100;
 	ddata->scroll_steps = 1000 / VSENSE_INTERVAL / 3;
-	ddata->mbutton_threshold = 20;
+	ddata->mbutton_threshold_x = 20;
+	ddata->mbutton_threshold_y = 26;
 	i2c_set_clientdata(client, ddata);
 
 	ddata->reg = regulator_get(&client->dev, "vcc");
@@ -574,7 +573,9 @@ static int vsense_probe(struct i2c_client *client,
 				vsense_proc_mult_read, vsense_proc_mult_write);
 		vsense_create_proc(ddata, &ddata->scroll_steps, "scroll_rate",
 				vsense_proc_rate_read, vsense_proc_rate_write);
-		vsense_create_proc(ddata, &ddata->mbutton_threshold, "mbutton_threshold",
+		vsense_create_proc(ddata, &ddata->mbutton_threshold_x, "mbutton_threshold",
+				vsense_proc_int_read, vsense_proc_treshold_write);
+		vsense_create_proc(ddata, &ddata->mbutton_threshold_y, "mbutton_threshold_y",
 				vsense_proc_int_read, vsense_proc_treshold_write);
 	} else
 		dev_err(&client->dev, "can't create proc dir");
@@ -625,6 +626,7 @@ static int __devexit vsense_remove(struct i2c_client *client)
 	remove_proc_entry("scrolly_sensitivity", ddata->proc_root);
 	remove_proc_entry("scroll_rate", ddata->proc_root);
 	remove_proc_entry("mbutton_threshold", ddata->proc_root);
+	remove_proc_entry("mbutton_threshold_y", ddata->proc_root);
 	snprintf(buff, sizeof(buff), "pandora/nub%d", ddata->proc_id);
 	remove_proc_entry(buff, NULL);
 	idr_remove(&vsense_proc_id, ddata->proc_id);
