@@ -55,17 +55,52 @@ struct vsense_drvdata {
 	int scrolly_multiplier;
 	int scroll_counter;
 	int scroll_steps;
-	int mbutton_threshold_x;
-	int mbutton_threshold_y;
-	int mbutton_stage;
+	struct {
+		int threshold_x;
+		int threshold_y;
+		int delay;
+		int dblclick_stage;
+		int state_l;
+		int state_m;
+		int state_r;
+		int pos_active;
+		int pos_prev;
+		int pos_stable_counter;
+	} mbutton;
 };
+
+enum nub_position {
+	NUB_POS_CENTER = 0,
+	NUB_POS_UP,
+	NUB_POS_RIGHT,
+	NUB_POS_DOWN,
+	NUB_POS_LEFT,
+};
+
+static void release_mbuttons(struct vsense_drvdata *ddata)
+{
+	if (ddata->mbutton.state_l) {
+		input_report_key(ddata->input, BTN_LEFT, 0);
+		ddata->mbutton.state_l = 0;
+	}
+	if (ddata->mbutton.state_m) {
+		input_report_key(ddata->input, BTN_MIDDLE, 0);
+		ddata->mbutton.state_m = 0;
+	}
+	if (ddata->mbutton.state_r) {
+		input_report_key(ddata->input, BTN_RIGHT, 0);
+		ddata->mbutton.state_r = 0;
+	}
+	ddata->mbutton.pos_active = NUB_POS_CENTER;
+}
 
 static void vsense_work(struct work_struct *work)
 {
 	struct vsense_drvdata *ddata;
 	int ax = 0, ay = 0, rx = 0, ry = 0;
+	int update_pending = 0;
 	signed char buff[4];
-	int ret, l, r, m, d;
+	int ret, pos, l, m, r;
 
 	ddata = container_of(work, struct vsense_drvdata, work.work);
 
@@ -84,6 +119,7 @@ static void vsense_work(struct work_struct *work)
 	ay = (signed int)buff[3];
 
 	schedule_delayed_work(&ddata->work, msecs_to_jiffies(VSENSE_INTERVAL));
+	update_pending = 1;
 
 dosync:
 	switch (ddata->mode) {
@@ -103,28 +139,57 @@ dosync:
 		input_report_rel(ddata->input, REL_WHEEL, ay);
 		break;
 	case VSENSE_MODE_MBUTTONS:
-		d = m = l = r = 0;
-		if      (ax >= ddata->mbutton_threshold_x) d = 2;
-		else if (ax <= -ddata->mbutton_threshold_x) d = 4;
-		else if (ay >= ddata->mbutton_threshold_y) d = 1;
-		else if (ay <= -ddata->mbutton_threshold_y) d = 3;
-		if (d != 1) ddata->mbutton_stage = 0;
-		switch (d) {
-		case 1:
-			ddata->mbutton_stage++;
-			switch (ddata->mbutton_stage) {
+		if (!update_pending) {
+			release_mbuttons(ddata);
+			break;
+		}
+
+		pos = NUB_POS_CENTER;
+		if      (ax >= ddata->mbutton.threshold_x) pos = NUB_POS_RIGHT;
+		else if (ax <= -ddata->mbutton.threshold_x) pos = NUB_POS_LEFT;
+		else if (ay >= ddata->mbutton.threshold_y) pos = NUB_POS_UP;
+		else if (ay <= -ddata->mbutton.threshold_y) pos = NUB_POS_DOWN;
+
+		if (pos != ddata->mbutton.pos_prev) {
+			ddata->mbutton.pos_prev = pos;
+			ddata->mbutton.pos_stable_counter = 0;
+		}
+		else
+			ddata->mbutton.pos_stable_counter++;
+
+		if (ddata->mbutton.pos_stable_counter < ddata->mbutton.delay)
+			pos = ddata->mbutton.pos_active;
+
+		if (pos != NUB_POS_UP)
+			ddata->mbutton.dblclick_stage = 0;
+
+		l = m = r = 0;
+		switch (pos) {
+		case NUB_POS_UP:
+			ddata->mbutton.dblclick_stage++;
+			switch (ddata->mbutton.dblclick_stage) {
 				case 1: case 2: case 5: case 6:
 				l = 1;
 				break;
 			}
 			break;
-		case 2:	r = 1; break;
-		case 3: m = 1; break;
-		case 4: l = 1; break;
+		case NUB_POS_RIGHT:
+			r = 1;
+			break;
+		case NUB_POS_DOWN:
+			m = 1;
+			break;
+		case NUB_POS_LEFT:
+			l = 1;
+			break;
 		}
 		input_report_key(ddata->input, BTN_LEFT, l);
 		input_report_key(ddata->input, BTN_RIGHT, r);
 		input_report_key(ddata->input, BTN_MIDDLE, m);
+		ddata->mbutton.pos_active = pos;
+		ddata->mbutton.state_l = l;
+		ddata->mbutton.state_m = m;
+		ddata->mbutton.state_r = r;
 		break;
 	default:
 		input_report_abs(ddata->input, ABS_X, ax * 8);
@@ -148,6 +213,9 @@ static int vsense_reset(struct vsense_drvdata *ddata, int val)
 	int ret;
 
 	dev_dbg(&ddata->client->dev, "vsense_reset: %i\n", val);
+
+	if (ddata->mode != VSENSE_MODE_ABS)
+		release_mbuttons(ddata);
 
 	ret = gpio_direction_output(ddata->reset_gpio, val);
 	if (ret < 0) {
@@ -281,6 +349,9 @@ static int vsense_proc_mode_write(struct file *file, const char __user *buffer,
 		return -EINVAL;
 	}
 
+	if (ddata->mode != VSENSE_MODE_ABS)
+		release_mbuttons(ddata);
+
 	if ((mode == VSENSE_MODE_ABS && ddata->mode != VSENSE_MODE_ABS) ||
 	    (mode != VSENSE_MODE_ABS && ddata->mode == VSENSE_MODE_ABS)) {
 		disable_irq(ddata->client->irq);
@@ -308,12 +379,13 @@ static int vsense_proc_int_read(char *page, char **start, off_t off,
 	return len;
 }
 
-static int vsense_proc_int_write(const char __user *buffer,
-		unsigned long count, int *value)
+static int vsense_proc_int_write(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
 {
 	char buff[32];
 	long val;
 	int ret;
+	int *value = data;
 
 	count = strncpy_from_user(buff, buffer,
 			count < sizeof(buff) ? count : sizeof(buff) - 1);
@@ -340,7 +412,7 @@ static int vsense_proc_mult_write(struct file *file, const char __user *buffer,
 	int *multiplier = data;
 	int ret, val, adj;
 
-	ret = vsense_proc_int_write(buffer, count, &val);
+	ret = vsense_proc_int_write(file, buffer, count, &val);
 	if (ret < 0)
 		return ret;
 	if (val == 0)
@@ -367,7 +439,7 @@ static int vsense_proc_rate_write(struct file *file, const char __user *buffer,
 	int *steps = data;
 	int ret, val;
 
-	ret = vsense_proc_int_write(buffer, count, &val);
+	ret = vsense_proc_int_write(file, buffer, count, &val);
 	if (ret < 0)
 		return ret;
 	if (val < 1)
@@ -385,7 +457,7 @@ static int vsense_proc_treshold_write(struct file *file, const char __user *buff
 	int *value = data;
 	int ret, val;
 
-	ret = vsense_proc_int_write(buffer, count, &val);
+	ret = vsense_proc_int_write(file, buffer, count, &val);
 	if (ret < 0)
 		return ret;
 	if (val < 1 || val > 32)
@@ -518,8 +590,9 @@ static int vsense_probe(struct i2c_client *client,
 	ddata->scrollx_multiplier =
 	ddata->scrolly_multiplier = 8 * 256 / 100;
 	ddata->scroll_steps = 1000 / VSENSE_INTERVAL / 3;
-	ddata->mbutton_threshold_x = 20;
-	ddata->mbutton_threshold_y = 26;
+	ddata->mbutton.threshold_x = 20;
+	ddata->mbutton.threshold_y = 26;
+	ddata->mbutton.delay = 1;
 	i2c_set_clientdata(client, ddata);
 
 	ddata->reg = regulator_get(&client->dev, "vcc");
@@ -573,10 +646,12 @@ static int vsense_probe(struct i2c_client *client,
 				vsense_proc_mult_read, vsense_proc_mult_write);
 		vsense_create_proc(ddata, &ddata->scroll_steps, "scroll_rate",
 				vsense_proc_rate_read, vsense_proc_rate_write);
-		vsense_create_proc(ddata, &ddata->mbutton_threshold_x, "mbutton_threshold",
+		vsense_create_proc(ddata, &ddata->mbutton.threshold_x, "mbutton_threshold",
 				vsense_proc_int_read, vsense_proc_treshold_write);
-		vsense_create_proc(ddata, &ddata->mbutton_threshold_y, "mbutton_threshold_y",
+		vsense_create_proc(ddata, &ddata->mbutton.threshold_y, "mbutton_threshold_y",
 				vsense_proc_int_read, vsense_proc_treshold_write);
+		vsense_create_proc(ddata, &ddata->mbutton.delay, "mbutton_delay",
+				vsense_proc_int_read, vsense_proc_int_write);
 	} else
 		dev_err(&client->dev, "can't create proc dir");
 
@@ -627,6 +702,7 @@ static int __devexit vsense_remove(struct i2c_client *client)
 	remove_proc_entry("scroll_rate", ddata->proc_root);
 	remove_proc_entry("mbutton_threshold", ddata->proc_root);
 	remove_proc_entry("mbutton_threshold_y", ddata->proc_root);
+	remove_proc_entry("mbutton_delay", ddata->proc_root);
 	snprintf(buff, sizeof(buff), "pandora/nub%d", ddata->proc_id);
 	remove_proc_entry(buff, NULL);
 	idr_remove(&vsense_proc_id, ddata->proc_id);
