@@ -695,10 +695,15 @@ static void __init pandora_usb_host_init(void)
 
 static DECLARE_COMPLETION(ts_completion);
 static struct timespec ts_last_framedone;
+static int pendown_state;
 
 static void vsync_irq_wait_handler(void *data, u32 mask)
 {
 	getnstimeofday(&ts_last_framedone);
+
+	/* reliable to read here */
+	pendown_state = !gpio_get_value(OMAP3_PANDORA_TS_GPIO);
+
 	complete(&ts_completion);
 }
 
@@ -723,11 +728,34 @@ static void ads7846_wait_for_sync(void)
 static int pandora_pendown_state(void)
 {
 	static int val_old;
+	struct timespec now, diff;
+	u32 diff_us;
 	int val;
 	int ret;
 	
+	/* This line is a noisy mess. It doesn't trigger spuriously, i.e.
+	 * there is no signal when pen is up, but when it's down we have
+	 * white noise of sorts. */
 	val = !gpio_get_value(OMAP3_PANDORA_TS_GPIO);
-	if (!in_irq() && !in_atomic() && val != val_old) {
+	pendown_state |= val;
+
+	if (in_irq() || in_atomic())
+		/* no time to fight noise.. */
+		return val | pendown_state;
+
+	if (val == 0) {
+		getnstimeofday(&now);
+		diff = timespec_sub(now, ts_last_framedone);
+		diff_us = diff.tv_nsec / NSEC_PER_USEC + diff.tv_sec * USEC_PER_SEC;
+
+		if (diff_us < 40000)
+			/* assume pendown_state is up-to-date */
+			val = pendown_state;
+		else
+			pendown_state = 0;
+	}
+
+	if (val != val_old) {
 		init_completion(&ts_completion);
 		dispc_runtime_get();
 		if (val)
@@ -861,7 +889,7 @@ static void __init omap3pandora_init(void)
 
 	spi_register_board_info(omap3pandora_spi_board_info,
 			ARRAY_SIZE(omap3pandora_spi_board_info));
-	omap_ads7846_init(1, OMAP3_PANDORA_TS_GPIO, 4, &pandora_ads7846_cfg);
+	omap_ads7846_init(1, OMAP3_PANDORA_TS_GPIO, 31, &pandora_ads7846_cfg);
 	usbhs_init(&usbhs_bdata);
 	usb_musb_init(NULL);
 	gpmc_nand_init(&pandora_nand_data);
