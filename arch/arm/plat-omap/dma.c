@@ -2013,7 +2013,7 @@ static int __devinit omap_system_dma_probe(struct platform_device *pdev)
 	errata			= p->errata;
 
 	if ((d->dev_caps & RESERVE_CHANNEL) && omap_dma_reserve_channels
-			&& (omap_dma_reserve_channels <= dma_lch_count))
+			&& (omap_dma_reserve_channels < d->lch_count))
 		d->lch_count	= omap_dma_reserve_channels;
 
 	dma_lch_count		= d->lch_count;
