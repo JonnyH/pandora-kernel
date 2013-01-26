@@ -89,7 +89,6 @@ static int omap3_enter_idle(struct cpuidle_device *dev,
 	struct omap3_idle_statedata *cx =
 			cpuidle_get_statedata(&dev->states_usage[index]);
 	struct timespec ts_preidle, ts_postidle, ts_idle;
-	u32 mpu_state = cx->mpu_state, core_state = cx->core_state;
 	int idle_time;
 
 	/* Used to keep track of the total time in idle */
@@ -97,23 +96,22 @@ static int omap3_enter_idle(struct cpuidle_device *dev,
 
 	local_irq_disable();
 
-	pwrdm_set_next_pwrst(mpu_pd, mpu_state);
-	pwrdm_set_next_pwrst(core_pd, core_state);
-
 	if (omap_irq_pending() || need_resched())
 		goto return_sleep_time;
 
 	/* Deny idle for C1 */
 	if (index == 0) {
 		clkdm_deny_idle(mpu_pd->pwrdm_clkdms[0]);
-		clkdm_deny_idle(core_pd->pwrdm_clkdms[0]);
+	} else {
+		pwrdm_set_next_pwrst(mpu_pd, cx->mpu_state);
+		pwrdm_set_next_pwrst(core_pd, cx->core_state);
 	}
 
 	/*
 	 * Call idle CPU PM enter notifier chain so that
 	 * VFP context is saved.
 	 */
-	if (mpu_state == PWRDM_POWER_OFF)
+	if (cx->mpu_state == PWRDM_POWER_OFF)
 		cpu_pm_enter();
 
 	/* Execute ARM wfi */
@@ -123,14 +121,13 @@ static int omap3_enter_idle(struct cpuidle_device *dev,
 	 * Call idle CPU PM enter notifier chain to restore
 	 * VFP context.
 	 */
-	if (pwrdm_read_prev_pwrst(mpu_pd) == PWRDM_POWER_OFF)
+	if (cx->mpu_state == PWRDM_POWER_OFF &&
+	    pwrdm_read_prev_pwrst(mpu_pd) == PWRDM_POWER_OFF)
 		cpu_pm_exit();
 
 	/* Re-allow idle for C1 */
-	if (index == 0) {
+	if (index == 0)
 		clkdm_allow_idle(mpu_pd->pwrdm_clkdms[0]);
-		clkdm_allow_idle(core_pd->pwrdm_clkdms[0]);
-	}
 
 return_sleep_time:
 	getnstimeofday(&ts_postidle);
