@@ -19,7 +19,6 @@
 #include <linux/sched.h>
 #include <linux/highmem.h>
 #include <linux/perf_event.h>
-#include <linux/hugetlb.h>
 
 #include <asm/exception.h>
 #include <asm/system.h>
@@ -472,7 +471,6 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 }
 #endif					/* CONFIG_MMU */
 
-#ifndef CONFIG_ARM_HUGETLB_SUPPORT
 /*
  * Some section permission faults need to be handled gracefully.
  * They can happen due to a __{get,put}_user during an oops.
@@ -483,19 +481,6 @@ do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	do_bad_area(addr, fsr, regs);
 	return 0;
 }
-
-#else
-
-/* Since normal 4K page based vma will never fault into section traps,
- * This will enable us to use do_page_fault for section permission fault.
- */
-static int
-do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	do_page_fault(addr, fsr, regs);
-	return 0;
-}
-#endif
 
 /*
  * This abort handler always returns "fault".
