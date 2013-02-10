@@ -28,6 +28,7 @@
 #define TWL4030_BCIICHG		0x08
 #define TWL4030_BCIVAC		0x0a
 #define TWL4030_BCIVBUS		0x0c
+#define TWL4030_BCIMFSTS3	0x0f
 #define TWL4030_BCIMFSTS4	0x10
 #define TWL4030_BCIMFKEY	0x11
 #define TWL4030_BCICTL1		0x23
@@ -36,6 +37,7 @@
 
 #define TWL4030_BCIAUTOWEN	BIT(5)
 #define TWL4030_CONFIG_DONE	BIT(4)
+#define TWL4030_CVENAC		BIT(2)
 #define TWL4030_BCIAUTOUSB	BIT(1)
 #define TWL4030_BCIAUTOAC	BIT(0)
 #define TWL4030_CGAIN		BIT(5)
@@ -67,6 +69,7 @@
 #define TWL4030_MSTATEC_COMPLETE4	0x0e
 
 #define TWL4030_KEY_IIREF		0xe7
+#define TWL4030_BATSTSMCHG		BIT(6)
 
 static bool allow_usb = 1;
 module_param(allow_usb, bool, 0644);
@@ -235,21 +238,30 @@ static int twl4030_charger_enable_ac(bool enable)
 
 static int set_charge_current(struct twl4030_bci *bci, int new_current)
 {
-	u8 tmp, boot_bci_prev, cgain_set, cgain_clear;
-	int ret;
+	u8 val, boot_bci_prev, cgain_set, cgain_clear;
+	int ret, ret2;
+
+	ret = twl4030_bci_read(TWL4030_BCIMFSTS3, &val);
+	if (ret)
+		goto out_norestore;
+
+	if (!(val & TWL4030_BATSTSMCHG)) {
+		dev_err(bci->dev, "missing battery, can't change charge_current\n");
+		goto out_norestore;
+	}
 
 	ret = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &boot_bci_prev,
 		TWL4030_PM_MASTER_BOOT_BCI);
 	if (ret)
-		goto out;
+		goto out_norestore;
 
 	/* 
 	 * Stop automatic charging here, because charge current change
 	 * requires multiple register writes and CGAIN change requires
-	 * automatic charge to be stopped.
+	 * automatic charge to be stopped (and CV mode disabled too).
 	 */
 	ret = twl4030_clear_set_boot_bci(
-		TWL4030_BCIAUTOAC | TWL4030_BCIAUTOUSB | 4, 0);
+		TWL4030_CVENAC | TWL4030_BCIAUTOAC | TWL4030_BCIAUTOUSB, 0);
 	if (ret)
 		goto out;
 
@@ -283,17 +295,21 @@ static int set_charge_current(struct twl4030_bci *bci, int new_current)
 	if (ret)
 		goto out;
 
-	ret = twl4030_bci_read(TWL4030_BCICTL1, &tmp);
-	if (ret != 0 || (tmp & TWL4030_CGAIN) != cgain_set) {
+	ret = twl4030_bci_read(TWL4030_BCICTL1, &val);
+	if (ret != 0 || (val & TWL4030_CGAIN) != cgain_set) {
 		dev_err(bci->dev, "CGAIN change failed\n");
 		goto out;
 	}
 
-	ret = twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER, boot_bci_prev,
-		TWL4030_PM_MASTER_BOOT_BCI);
 out:
+	ret2 = twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER, boot_bci_prev,
+		TWL4030_PM_MASTER_BOOT_BCI);
+	if (ret2 != 0)
+		dev_err(bci->dev, "failed boot_bci restore: %d\n", ret2);
+
+out_norestore:
 	if (ret != 0)
-		dev_err(bci->dev, "charge current change failed\n");
+		dev_err(bci->dev, "charge current change failed: %d\n", ret);
 
 	return ret;
 }
@@ -533,7 +549,7 @@ static ssize_t store_charge_current(struct device *dev,
 	if (ret)
 		return ret;
 
-	if (bci->current_supply == POWER_SUPPLY_TYPE_MAINS)
+	if (psy->type == POWER_SUPPLY_TYPE_MAINS)
 		bci->ac_current = new_current;
 	else
 		bci->usb_current = new_current;
