@@ -251,7 +251,6 @@ static int omap2_can_sleep(void)
 static void omap2_pm_idle(void)
 {
 	local_irq_disable();
-	local_fiq_disable();
 
 	if (!omap2_can_sleep()) {
 		if (omap_irq_pending())
@@ -266,7 +265,6 @@ static void omap2_pm_idle(void)
 	omap2_enter_full_retention();
 
 out:
-	local_fiq_enable();
 	local_irq_enable();
 }
 

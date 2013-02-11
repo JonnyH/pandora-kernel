@@ -485,7 +485,6 @@ console_still_active:
 static void omap3_pm_idle(void)
 {
 	local_irq_disable();
-	local_fiq_disable();
 
 	if (omap_irq_pending() || need_resched())
 		goto out;
@@ -499,7 +498,6 @@ static void omap3_pm_idle(void)
 	trace_cpu_idle(PWR_EVENT_EXIT, smp_processor_id());
 
 out:
-	local_fiq_enable();
 	local_irq_enable();
 }
 
@@ -924,14 +922,12 @@ static int __init omap3_pm_init(void)
 					"allocating for secure sram context\n");
 
 		local_irq_disable();
-		local_fiq_disable();
 
 		omap_dma_global_context_save();
 		omap3_save_secure_ram_context();
 		omap_dma_global_context_restore();
 
 		local_irq_enable();
-		local_fiq_enable();
 	}
 
 	omap3_save_scratchpad_contents();

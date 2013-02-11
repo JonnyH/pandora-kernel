@@ -109,7 +109,6 @@ static int omap3_enter_idle(struct cpuidle_device *dev,
 	getnstimeofday(&ts_preidle);
 
 	local_irq_disable();
-	local_fiq_disable();
 
 	pwrdm_set_next_pwrst(mpu_pd, mpu_state);
 	pwrdm_set_next_pwrst(core_pd, core_state);
@@ -137,7 +136,6 @@ return_sleep_time:
 	ts_idle = timespec_sub(ts_postidle, ts_preidle);
 
 	local_irq_enable();
-	local_fiq_enable();
 
 	idle_time = ts_idle.tv_nsec / NSEC_PER_USEC + ts_idle.tv_sec * \
 								USEC_PER_SEC;
