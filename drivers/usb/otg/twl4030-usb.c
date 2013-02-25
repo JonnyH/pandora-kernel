@@ -246,10 +246,30 @@ twl4030_usb_clear_bits(struct twl4030_usb *twl, u8 reg, u8 bits)
 
 /*-------------------------------------------------------------------------*/
 
+static bool twl4030_is_driving_vbus(struct twl4030_usb *twl)
+{
+	int ret;
+
+	ret = twl4030_usb_read(twl, PHY_CLK_CTRL_STS);
+	if (ret < 0 || !(ret & PHY_DPLL_CLK))
+		/*
+		 * if clocks are off, registers are not updated,
+		 * but we can assume we don't drive VBUS in this case
+		 */
+		return false;
+
+	ret = twl4030_usb_read(twl, ULPI_OTG_CTRL);
+	if (ret < 0)
+		return false;
+
+	return (ret & (ULPI_OTG_DRVVBUS | ULPI_OTG_CHRGVBUS)) ? true : false;
+}
+
 static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 {
 	int	status;
 	int	linkstat = USB_EVENT_NONE;
+	bool	driving_vbus = false;
 
 	twl->vbus_supplied = false;
 
@@ -268,18 +288,22 @@ static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 	if (status < 0)
 		dev_err(twl->dev, "USB link status err %d\n", status);
 	else if (status & (BIT(7) | BIT(2))) {
-		if (status & (BIT(7)))
-                        twl->vbus_supplied = true;
+		if (status & BIT(7)) {
+			driving_vbus = twl4030_is_driving_vbus(twl);
+			if (driving_vbus)
+				status &= ~BIT(7);
+		}
 
 		if (status & BIT(2))
 			linkstat = USB_EVENT_ID;
-		else
+		else if (status & BIT(7)) {
 			linkstat = USB_EVENT_VBUS;
-	} else
-		linkstat = USB_EVENT_NONE;
+			twl->vbus_supplied = true;
+		}
+	}
 
-	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
-			status, status, linkstat);
+	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x; link %d, driving_vbus %d\n",
+			status, linkstat, driving_vbus);
 
 	if (twl->otg.last_event == linkstat)
 		return linkstat;
