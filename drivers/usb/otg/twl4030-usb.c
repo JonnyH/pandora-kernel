@@ -569,19 +569,17 @@ static void twl4030_usb_phy_init(struct twl4030_usb *twl)
 {
 	int status;
 
-	status = twl4030_usb_linkstat(twl);
-	if (status >= 0) {
-		if (status == USB_EVENT_NONE) {
-			__twl4030_phy_power(twl, 0);
-			twl->asleep = 1;
-		} else {
-			__twl4030_phy_resume(twl);
-			twl->asleep = 0;
-		}
+	/*
+	 * Start in sleep state, we'll get otg.set_suspend(false) call
+	 * and power up when musb runtime_pm enable kicks in.
+	 */
+	__twl4030_phy_power(twl, 0);
+	twl->asleep = 1;
 
-		atomic_notifier_call_chain(&twl->otg.notifier, status,
-				twl->otg.gadget);
-	}
+	status = twl4030_usb_linkstat(twl);
+	atomic_notifier_call_chain(&twl->otg.notifier, status,
+		twl->otg.gadget);
+
 	sysfs_notify(&twl->dev->kobj, NULL, "vbus");
 }
 
@@ -692,9 +690,6 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 		return status;
 	}
 
-	/* Power down phy or make it work according to
-	 * current link state.
-	 */
 	twl4030_usb_phy_init(twl);
 
 	dev_info(&pdev->dev, "Initialized TWL4030 USB module\n");
