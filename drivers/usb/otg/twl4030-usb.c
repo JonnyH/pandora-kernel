@@ -556,11 +556,6 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		 * USB_LINK_VBUS state.  musb_hdrc won't care until it
 		 * starts to handle softconnect right.
 		 */
-		if (status == USB_EVENT_NONE)
-			twl4030_phy_suspend(twl, 0);
-		else
-			twl4030_phy_resume(twl);
-
 		if (status != status_old)
 			atomic_notifier_call_chain(&twl->otg.notifier, status,
 				twl->otg.gadget);
