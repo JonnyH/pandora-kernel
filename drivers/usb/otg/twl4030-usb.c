@@ -281,6 +281,9 @@ static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
 			status, status, linkstat);
 
+	if (twl->otg.last_event == linkstat)
+		return linkstat;
+
 	twl->otg.last_event = linkstat;
 
 	/* REVISIT this assumes host and peripheral controllers
@@ -537,6 +540,7 @@ static DEVICE_ATTR(id, 0444, twl4030_usb_id_show, NULL);
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
 	struct twl4030_usb *twl = _twl;
+	int status_old = twl->otg.last_event;
 	int status;
 
 	status = twl4030_usb_linkstat(twl);
@@ -557,7 +561,8 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		else
 			twl4030_phy_resume(twl);
 
-		atomic_notifier_call_chain(&twl->otg.notifier, status,
+		if (status != status_old)
+			atomic_notifier_call_chain(&twl->otg.notifier, status,
 				twl->otg.gadget);
 	}
 	sysfs_notify(&twl->dev->kobj, NULL, "vbus");
@@ -577,8 +582,9 @@ static void twl4030_usb_phy_init(struct twl4030_usb *twl)
 	twl->asleep = 1;
 
 	status = twl4030_usb_linkstat(twl);
-	atomic_notifier_call_chain(&twl->otg.notifier, status,
-		twl->otg.gadget);
+	if (status >= 0 && status != USB_EVENT_NONE)
+		atomic_notifier_call_chain(&twl->otg.notifier, status,
+			twl->otg.gadget);
 
 	sysfs_notify(&twl->dev->kobj, NULL, "vbus");
 }
