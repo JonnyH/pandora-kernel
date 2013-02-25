@@ -163,6 +163,8 @@ struct twl4030_usb {
 	bool			vbus_supplied;
 	u8			asleep;
 	bool			irq_enabled;
+
+	struct delayed_work	id_workaround_work;
 };
 
 /* internal define on top of container_of */
@@ -446,7 +448,16 @@ static void twl4030_phy_resume(struct twl4030_usb *twl)
 		return;
 	__twl4030_phy_resume(twl);
 	twl->asleep = 0;
-	dev_dbg(twl->dev, "%s\n", __func__);
+
+	/*
+	 * XXX When VBUS gets driven after musb goes to A mode,
+	 * ID_PRES related interrupts no longer arrive, why?
+	 * Register itself is updated fine though, so we must poll.
+	 */
+	if (twl->otg.last_event == USB_EVENT_ID) {
+		cancel_delayed_work(&twl->id_workaround_work);
+		schedule_delayed_work(&twl->id_workaround_work, HZ);
+	}
 }
 
 static int twl4030_usb_ldo_init(struct twl4030_usb *twl)
@@ -589,6 +600,28 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 	return IRQ_HANDLED;
 }
 
+static void twl4030_id_workaround_work(struct work_struct *work)
+{
+	struct twl4030_usb *twl = container_of(work, struct twl4030_usb,
+		id_workaround_work.work);
+	int status_old = twl->otg.last_event;
+	int status;
+
+	status = twl4030_usb_linkstat(twl);
+	if (status != status_old) {
+		dev_dbg(twl->dev, "handle missing status change: %d->%d\n",
+			status_old, status);
+		twl->otg.last_event = status_old;
+		twl4030_usb_irq(0, twl);
+	}
+
+	/* don't schedule during sleep - irq works right then */
+	if (status == USB_EVENT_ID && !twl->asleep) {
+		cancel_delayed_work(&twl->id_workaround_work);
+		schedule_delayed_work(&twl->id_workaround_work, HZ);
+	}
+}
+
 static void twl4030_usb_phy_init(struct twl4030_usb *twl)
 {
 	int status;
@@ -680,6 +713,8 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 	/* init spinlock for workqueue */
 	spin_lock_init(&twl->lock);
 
+	INIT_DELAYED_WORK(&twl->id_workaround_work, twl4030_id_workaround_work);
+
 	err = twl4030_usb_ldo_init(twl);
 	if (err) {
 		dev_err(&pdev->dev, "ldo init failed\n");
@@ -726,6 +761,7 @@ static int __exit twl4030_usb_remove(struct platform_device *pdev)
 	struct twl4030_usb *twl = platform_get_drvdata(pdev);
 	int val;
 
+	cancel_delayed_work(&twl->id_workaround_work);
 	free_irq(twl->irq, twl);
 	device_remove_file(twl->dev, &dev_attr_id);
 	device_remove_file(twl->dev, &dev_attr_vbus);
