@@ -2066,9 +2066,13 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 				? 'B' : 'A'));
 
 	} else /* peripheral is enabled */ {
-		MUSB_DEV_MODE(musb);
-		musb->xceiv->default_a = 0;
-		musb->xceiv->state = OTG_STATE_B_IDLE;
+		if (musb->xceiv->default_a) {
+			MUSB_HST_MODE(musb);
+			musb->xceiv->state = OTG_STATE_A_IDLE;
+		} else {
+			MUSB_DEV_MODE(musb);
+			musb->xceiv->state = OTG_STATE_B_IDLE;
+		}
 
 		status = musb_gadget_setup(musb);
 
