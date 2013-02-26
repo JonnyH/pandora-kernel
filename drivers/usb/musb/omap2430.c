@@ -264,6 +264,8 @@ static int musb_otg_notifications(struct notifier_block *nb,
 	case USB_EVENT_NONE:
 		dev_dbg(musb->controller, "VBUS Disconnect\n");
 
+		omap2430_musb_set_vbus(musb, 0);
+
 		if (is_otg_enabled(musb) || is_peripheral_enabled(musb))
 			if (musb->gadget_driver) {
 				pm_runtime_mark_last_busy(musb->controller);
