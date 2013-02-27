@@ -2366,7 +2366,7 @@ static int musb_suspend(struct device *dev)
 
 	spin_lock_irqsave(&musb->lock, flags);
 
-	if (is_peripheral_active(musb)) {
+	{
 		/* FIXME force disconnect unless we know USB will wake
 		 * the system up quickly enough to respond ...
 		 */
@@ -2384,10 +2384,6 @@ static int musb_suspend(struct device *dev)
 				pm_usage_count);
 			ret = -EBUSY;
 		}
-	} else if (is_host_active(musb)) {
-		/* we know all the children are suspended; sometimes
-		 * they will even be wakeup-enabled.
-		 */
 	}
 
 	spin_unlock_irqrestore(&musb->lock, flags);
