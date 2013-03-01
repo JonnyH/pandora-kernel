@@ -44,6 +44,7 @@
 #define TWL4030_USBFASTMCHG	BIT(2)
 #define TWL4030_STS_VBUS	BIT(7)
 #define TWL4030_STS_USB_ID	BIT(2)
+#define TWL4030_STS_CHG		BIT(1)
 
 /* BCI interrupts */
 #define TWL4030_WOVF		BIT(0) /* Watchdog overflow */
@@ -91,6 +92,7 @@ struct twl4030_bci {
 	enum power_supply_type	current_supply;
 	struct regulator	*usb_reg;
 	int			usb_enabled;
+	int			irq_had_charger;
 
 	unsigned long		event;
 	struct ratelimit_state	ratelimit;
@@ -320,11 +322,27 @@ out_norestore:
 static irqreturn_t twl4030_charger_interrupt(int irq, void *arg)
 {
 	struct twl4030_bci *bci = arg;
+	int have_charger;
+	u8 hw_cond;
+	int ret;
 
-	dev_dbg(bci->dev, "CHG_PRES irq\n");
+	ret = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &hw_cond,
+			      TWL4030_PM_MASTER_STS_HW_CONDITIONS);
+	if (ret < 0) {
+		dev_err(bci->dev, "HW_CONDITIONS read failed: %d\n", ret);
+		goto out;
+	}
+
+	have_charger = (hw_cond & TWL4030_STS_CHG) ? 1 : 0;
+	if (have_charger == bci->irq_had_charger)
+		goto out;
+	bci->irq_had_charger = have_charger;
+
+	dev_dbg(bci->dev, "CHG_PRES irq, hw_cond %02x\n", hw_cond);
 	power_supply_changed(&bci->ac);
 	power_supply_changed(&bci->usb);
 
+out:
 	return IRQ_HANDLED;
 }
 
@@ -710,6 +728,7 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->irq_bci = platform_get_irq(pdev, 1);
 	bci->ac_current = 860; /* ~1.2A */
 	bci->usb_current = 360; /* ~600mA */
+	bci->irq_had_charger = -1;
 
 	platform_set_drvdata(pdev, bci);
 
