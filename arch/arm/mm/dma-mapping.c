@@ -642,6 +642,7 @@ static inline pgprot_t __get_dma_pgprot(struct dma_attrs *attrs, pgprot_t prot)
 
 #define nommu() 1
 
+#define __get_dma_pgprot(attrs, prot)	__pgprot(0)
 #define __alloc_remap_buffer(dev, size, gfp, prot, ret, c)	NULL
 #define __alloc_from_pool(dev, size, ret_page, c)		NULL
 #define __alloc_from_contiguous(dev, size, prot, ret)		NULL
@@ -741,6 +742,7 @@ int arm_dma_mmap(struct device *dev, struct vm_area_struct *vma,
 	int ret = -ENXIO;
 #ifdef CONFIG_MMU
 	unsigned long pfn = dma_to_pfn(dev, dma_addr);
+	vma->vm_page_prot = __get_dma_pgprot(attrs, vma->vm_page_prot);
 
 	if (dma_mmap_from_coherent(dev, vma, cpu_addr, size, &ret))
 		return ret;
