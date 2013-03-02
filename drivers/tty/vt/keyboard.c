@@ -1198,9 +1198,9 @@ static void kbd_keycode(unsigned int keycode, int down, int hw_raw)
 	raw_mode = (kbd->kbdmode == VC_RAW);
 	if (raw_mode && !hw_raw)
 		if (emulate_raw(vc, keycode, !down << 7))
-			if (keycode < BTN_MISC && printk_ratelimit())
+			/*if (keycode < BTN_MISC && printk_ratelimit())
 				pr_warning("can't emulate rawmode for keycode %d\n",
-					   keycode);
+					   keycode)*/;
 
 #ifdef CONFIG_SPARC
 	if (keycode == KEY_A && sparc_l1_a_state) {
