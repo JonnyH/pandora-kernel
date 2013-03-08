@@ -23,6 +23,7 @@
 #include <linux/usb/otg.h>
 #include <linux/ratelimit.h>
 #include <linux/regulator/machine.h>
+#include <linux/leds.h>
 
 #define TWL4030_BCIMSTATEC	0x02
 #define TWL4030_BCIICHG		0x08
@@ -100,6 +101,9 @@ struct twl4030_bci {
 	unsigned long		irq_check_count_time;
 	int 			irq_check_count;
 	int 			irq_check_ac_disabled;
+
+	struct led_trigger	*charging_any_trig;
+	int			was_charging_any;
 
 	unsigned long		event;
 	struct ratelimit_state	ratelimit;
@@ -665,7 +669,8 @@ static int twl4030_bci_get_property(struct power_supply *psy,
 				    union power_supply_propval *val)
 {
 	struct twl4030_bci *bci = dev_get_drvdata(psy->dev->parent);
-	int is_charging;
+	int is_charging_any = 0;
+	int is_charging = 0;
 	int state;
 	int ret;
 
@@ -673,10 +678,22 @@ static int twl4030_bci_get_property(struct power_supply *psy,
 	if (state < 0)
 		return state;
 
-	if (psy->type == POWER_SUPPLY_TYPE_USB)
-		is_charging = state & TWL4030_MSTATEC_USB;
-	else
-		is_charging = state & TWL4030_MSTATEC_AC;
+	if (twl4030_bci_state_to_status(state) ==
+	    POWER_SUPPLY_STATUS_CHARGING) {
+		is_charging_any =
+			state & (TWL4030_MSTATEC_USB | TWL4030_MSTATEC_AC);
+		if (psy->type == POWER_SUPPLY_TYPE_USB)
+			is_charging = state & TWL4030_MSTATEC_USB;
+		else
+			is_charging = state & TWL4030_MSTATEC_AC;
+	}
+
+	if (is_charging_any != bci->was_charging_any) {
+		led_trigger_event(bci->charging_any_trig,
+			is_charging_any ? LED_FULL : LED_OFF);
+		bci->was_charging_any = is_charging_any;
+	}
+
 	if (is_charging && psy->type != bci->current_supply) {
 		if (psy->type == POWER_SUPPLY_TYPE_USB)
 			set_charge_current(bci, bci->usb_current);
@@ -836,6 +853,9 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 		goto fail_sysfs2;
 	}
 
+	led_trigger_register_simple("twl4030_bci-charging",
+		&bci->charging_any_trig);
+
 	/* Enable interrupts now. */
 	reg = ~(u32)(TWL4030_ICHGLOW | TWL4030_ICHGEOC | TWL4030_TBATOR2 |
 		TWL4030_TBATOR1 | TWL4030_BATSTS);
@@ -860,6 +880,7 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	return 0;
 
 fail_unmask_interrupts:
+	led_trigger_unregister_simple(bci->charging_any_trig);
 	sysfs_remove_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
 fail_sysfs2:
 	sysfs_remove_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
@@ -888,6 +909,7 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 
 	sysfs_remove_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
 	sysfs_remove_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
+	led_trigger_unregister_simple(bci->charging_any_trig);
 
 	twl4030_charger_enable_ac(false);
 	twl4030_charger_enable_usb(bci, false);
