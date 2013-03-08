@@ -136,7 +136,7 @@ static struct led_pwm pandora_pwm_leds[] = {
 		.pwm_id			= 1, /* LEDB */
 	}, {
 		.name			= "pandora::charger",
-		.default_trigger	= "bq27500-0-charging",
+		.default_trigger	= "twl4030_bci-charging",
 		.pwm_id			= 3, /* PWM1 */
 	}
 };
