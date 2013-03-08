@@ -390,11 +390,13 @@ static irqreturn_t twl4030_bci_interrupt(int irq, void *arg)
 	if (irqs2 & TWL4030_ACCHGOV && __ratelimit(&bci->ratelimit))
 		dev_crit(bci->dev, "Ac charger overvoltage\n");
 
+#if 0
 	/* ack the interrupts */
 	twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, irqs1,
 			 TWL4030_INTERRUPTS_BCIISR1A);
 	twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, irqs2,
 			 TWL4030_INTERRUPTS_BCIISR2A);
+#endif
 
 	return IRQ_HANDLED;
 }
