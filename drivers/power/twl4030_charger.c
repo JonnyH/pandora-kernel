@@ -72,6 +72,9 @@
 #define TWL4030_KEY_IIREF		0xe7
 #define TWL4030_BATSTSMCHG		BIT(6)
 
+#define IRQ_CHECK_PERIOD	(3 * HZ)
+#define IRQ_CHECK_THRESHOLD	4
+
 static bool allow_usb = 1;
 module_param(allow_usb, bool, 0644);
 MODULE_PARM_DESC(allow_usb, "Allow USB charge drawing default current");
@@ -93,6 +96,10 @@ struct twl4030_bci {
 	struct regulator	*usb_reg;
 	int			usb_enabled;
 	int			irq_had_charger;
+
+	unsigned long		irq_check_count_time;
+	int 			irq_check_count;
+	int 			irq_check_ac_disabled;
 
 	unsigned long		event;
 	struct ratelimit_state	ratelimit;
@@ -339,6 +346,28 @@ static irqreturn_t twl4030_charger_interrupt(int irq, void *arg)
 	bci->irq_had_charger = have_charger;
 
 	dev_dbg(bci->dev, "CHG_PRES irq, hw_cond %02x\n", hw_cond);
+
+	/*
+	 * deal with rare mysterious issue of CHG_PRES changing states at ~4Hz
+	 * without any charger connected or anything
+	 */
+	if (time_before(jiffies, bci->irq_check_count_time + IRQ_CHECK_PERIOD)) {
+		bci->irq_check_count++;
+		if (have_charger && bci->irq_check_count > IRQ_CHECK_THRESHOLD) {
+			dev_err(bci->dev, "spurious CHG_PRES irqs detected (%d), disabling charger\n",
+				bci->irq_check_count);
+			twl4030_charger_enable_ac(false);
+			bci->irq_check_ac_disabled = true;
+		}
+	} else {
+		bci->irq_check_count_time = jiffies;
+		bci->irq_check_count = 1;
+		if (have_charger && bci->irq_check_ac_disabled) {
+			twl4030_charger_enable_ac(true);
+			bci->irq_check_ac_disabled = false;
+		}
+	}
+
 	power_supply_changed(&bci->ac);
 	power_supply_changed(&bci->usb);
 
@@ -731,6 +760,7 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->ac_current = 860; /* ~1.2A */
 	bci->usb_current = 360; /* ~600mA */
 	bci->irq_had_charger = -1;
+	bci->irq_check_count_time = jiffies;
 
 	platform_set_drvdata(pdev, bci);
 
