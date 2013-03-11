@@ -379,8 +379,8 @@ struct omap_hwmod_omap4_prcm {
  *
  * HWMOD_SWSUP_SIDLE: omap_hwmod code should manually bring module in and out
  *     of idle, rather than relying on module smart-idle
- * HWMOD_SWSUP_MSTDBY: omap_hwmod code should manually bring module in and out
- *     of standby, rather than relying on module smart-standby
+ * HWMOD_SWSUP_MSTANDBY: omap_hwmod code should manually bring module in and
+ *     out of standby, rather than relying on module smart-standby
  * HWMOD_INIT_NO_RESET: don't reset this module at boot - important for
  *     SDRAM controller, etc. XXX probably belongs outside the main hwmod file
  *     XXX Should be HWMOD_SETUP_NO_RESET
@@ -398,6 +398,10 @@ struct omap_hwmod_omap4_prcm {
  *     in order to complete the reset. Optional clocks will be disabled
  *     again after the reset.
  * HWMOD_16BIT_REG: Module has 16bit registers
+ * HWMOD_FORCE_MSTANDBY: Always keep MIDLEMODE bits cleared so that device
+ *     is kept in force-standby mode. Failing to do so causes PM problems
+ *     with musb on OMAP3630 at least. Note that musb has a dedicated register
+ *     to control MSTANDBY signal when MIDLEMODE is set to force-standby.
  */
 #define HWMOD_SWSUP_SIDLE			(1 << 0)
 #define HWMOD_SWSUP_MSTANDBY			(1 << 1)
@@ -408,6 +412,7 @@ struct omap_hwmod_omap4_prcm {
 #define HWMOD_NO_IDLEST				(1 << 6)
 #define HWMOD_CONTROL_OPT_CLKS_IN_RESET		(1 << 7)
 #define HWMOD_16BIT_REG				(1 << 8)
+#define HWMOD_FORCE_MSTANDBY			(1 << 11)
 
 /*
  * omap_hwmod._int_flags definitions
