@@ -281,8 +281,14 @@ PMD_BIT_FUNC(mknexec,	|= PMD_SECT_XN);
 	pmdret;									\
 })
 
+#define pmd_hugewillfault(pmd) (	!pmd_young(pmd) ||	\
+					!pmd_write(pmd) ||	\
+					!pmd_dirty(pmd) )
+#define pmd_thp_or_huge(pmd)		((pmd_val(pmd) & PMD_TYPE_MASK) == PMD_TYPE_SECT)
 #else
 #define HPAGE_SIZE 0
+#define pmd_hugewillfault(pmd)	(0)
+#define pmd_thp_or_huge(pmd)	(0)
 #endif /* CONFIG_SYS_SUPPORTS_HUGETLBFS */
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE

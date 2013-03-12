@@ -190,6 +190,9 @@ static inline pmd_t *pmd_offset(pud_t *pud, unsigned long addr)
 #define __HAVE_ARCH_PMD_WRITE
 #define pmd_write(pmd)		(!(pmd_val(pmd) & PMD_SECT_RDONLY))
 
+#define pmd_hugewillfault(pmd) ( !pmd_young(pmd) || !pmd_write(pmd) )
+#define pmd_thp_or_huge(pmd)	((pmd_val(pmd) & PMD_TYPE_MASK) == PMD_TYPE_SECT)
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define pmd_trans_huge(pmd)	((pmd_val(pmd) & PMD_TYPE_MASK) == PMD_TYPE_SECT)
 #define pmd_trans_splitting(pmd) (pmd_val(pmd) & PMD_SECT_SPLITTING)
