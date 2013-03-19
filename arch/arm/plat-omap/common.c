@@ -64,5 +64,7 @@ void __init omap_reserve(void)
 {
 	omapfb_reserve_sdram_memblock();
 	omap_vram_reserve_sdram_memblock();
+#ifndef CONFIG_CMA
 	omap_dsp_reserve_sdram_memblock();
+#endif
 }
