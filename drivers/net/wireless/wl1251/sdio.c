@@ -31,6 +31,15 @@
 
 #include "wl1251.h"
 
+static bool force_nvs_file = false;
+module_param(force_nvs_file, bool, 0644);
+MODULE_PARM_DESC(force_nvs_file, "Force loading NVS data from file, "
+				 "not EEPROM. Default: n/N/0");
+static bool dump_eeprom = false;
+module_param(dump_eeprom, bool, 0644);
+MODULE_PARM_DESC(dump_eeprom, "Dump EEPROM on module load and makes it "
+			      "accessable through debugfs. Default: n/N/0");
+
 #ifndef SDIO_VENDOR_ID_TI
 #define SDIO_VENDOR_ID_TI		0x104c
 #endif
@@ -258,6 +267,10 @@ static int wl1251_sdio_probe(struct sdio_func *func,
 		wl->irq = wl12xx_board_data->irq;
 		wl->use_eeprom = wl12xx_board_data->use_eeprom;
 	}
+
+	if (force_nvs_file)
+		wl->use_eeprom = false;
+	wl->dump_eeprom = dump_eeprom;
 
 	if (wl->irq) {
 		irq_set_status_flags(wl->irq, IRQ_NOAUTOEN);

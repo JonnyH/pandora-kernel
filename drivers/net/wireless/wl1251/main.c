@@ -1293,6 +1293,34 @@ static int wl1251_read_eeprom_mac(struct wl1251 *wl)
 	return 0;
 }
 
+/* temporary (?) hack for EEPROM dumping
+ * (it seems this can only be done before fw is running) */
+static int wl1251_dump_eeprom(struct wl1251 *wl)
+{
+	int ret;
+
+	wl1251_set_partition(wl, 0, 0, REGISTERS_BASE, REGISTERS_DOWN_SIZE);
+
+	wl->eeprom_dump = kzalloc(1024, GFP_KERNEL);
+	if (wl->eeprom_dump == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = wl1251_read_eeprom(wl, 0, wl->eeprom_dump, 1024);
+	if (ret != 0) {
+		wl1251_error("eeprom dump failed: %d", ret);
+		kfree(wl->eeprom_dump);
+		wl->eeprom_dump = NULL;
+		goto out;
+	}
+
+	wl1251_info("eeprom dumped.");
+
+out:
+	return ret;
+}
+
 static int wl1251_register_hw(struct wl1251 *wl)
 {
 	int ret;
@@ -1342,6 +1370,8 @@ int wl1251_init_ieee80211(struct wl1251 *wl)
 
 	if (wl->use_eeprom)
 		wl1251_read_eeprom_mac(wl);
+	if (wl->dump_eeprom)
+		wl1251_dump_eeprom(wl);
 
 	ret = wl1251_register_hw(wl);
 	if (ret)
@@ -1449,6 +1479,9 @@ int wl1251_free_hw(struct wl1251 *wl)
 	wl->rx_descriptor = NULL;
 
 	ieee80211_free_hw(wl->hw);
+
+	if (wl->eeprom_dump != NULL)
+		kfree(wl->eeprom_dump);
 
 	return 0;
 }

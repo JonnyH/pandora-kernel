@@ -255,6 +255,9 @@ struct wl1251_debugfs {
 
 	struct dentry *retry_count;
 	struct dentry *excessive_retries;
+
+	struct dentry *dump_nvs;
+	struct dentry *dump_full;
 };
 
 struct wl1251_if_operations {
@@ -278,6 +281,7 @@ struct wl1251 {
 	void (*set_power)(bool enable);
 	int irq;
 	bool use_eeprom;
+	bool dump_eeprom;
 
 	spinlock_t wl_lock;
 
@@ -391,6 +395,8 @@ struct wl1251 {
 
 	/* Most recently reported noise in dBm */
 	s8 noise;
+
+	void *eeprom_dump;
 };
 
 int wl1251_plt_start(struct wl1251 *wl);

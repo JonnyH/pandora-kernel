@@ -261,6 +261,42 @@ static const struct file_operations tx_queue_status_ops = {
 	.llseek = generic_file_llseek,
 };
 
+static ssize_t dump_nvs_read(struct file *file, char __user *userbuf,
+			     size_t count, loff_t *ppos)
+{
+	struct wl1251 *wl = file->private_data;
+
+	if (wl->eeprom_dump == NULL)
+		return -EINVAL;
+
+	return simple_read_from_buffer(userbuf, count, ppos,
+		wl->eeprom_dump, 752);
+}
+
+static ssize_t dump_full_read(struct file *file, char __user *userbuf,
+			      size_t count, loff_t *ppos)
+{
+	struct wl1251 *wl = file->private_data;
+
+	if (wl->eeprom_dump == NULL)
+		return -EINVAL;
+
+	return simple_read_from_buffer(userbuf, count, ppos,
+		wl->eeprom_dump, 1024);
+}
+
+static const struct file_operations dump_nvs_ops = {
+	.read = dump_nvs_read,
+	.open = wl1251_open_file_generic,
+	.llseek = generic_file_llseek,
+};
+
+static const struct file_operations dump_full_ops = {
+	.read = dump_full_read,
+	.open = wl1251_open_file_generic,
+	.llseek = generic_file_llseek,
+};
+
 static void wl1251_debugfs_delete_files(struct wl1251 *wl)
 {
 	DEBUGFS_FWSTATS_DEL(tx, internal_desc_overflow);
@@ -358,6 +394,11 @@ static void wl1251_debugfs_delete_files(struct wl1251 *wl)
 	DEBUGFS_DEL(tx_queue_status);
 	DEBUGFS_DEL(retry_count);
 	DEBUGFS_DEL(excessive_retries);
+
+	if (wl->eeprom_dump != NULL) {
+		DEBUGFS_DEL(dump_nvs);
+		DEBUGFS_DEL(dump_full);
+	}
 }
 
 static int wl1251_debugfs_add_files(struct wl1251 *wl)
@@ -459,6 +500,12 @@ static int wl1251_debugfs_add_files(struct wl1251 *wl)
 	DEBUGFS_ADD(tx_queue_status, wl->debugfs.rootdir);
 	DEBUGFS_ADD(retry_count, wl->debugfs.rootdir);
 	DEBUGFS_ADD(excessive_retries, wl->debugfs.rootdir);
+
+	/* temporary (?) hack for EEPROM dumping */
+	if (wl->eeprom_dump != NULL) {
+		DEBUGFS_ADD(dump_nvs, wl->debugfs.rootdir);
+		DEBUGFS_ADD(dump_full, wl->debugfs.rootdir);
+	}
 
 out:
 	if (ret < 0)
