@@ -788,12 +788,18 @@ static struct ads7846_platform_data pandora_ads7846_cfg = {
 	.get_pendown_state	= pandora_pendown_state,
 };
 
+static struct platform_device pandora_ram_console = {
+	.name	= "ram_console",
+	.id	= -1,
+};
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
 	&pandora_leds_pwm,
 	&pandora_bl,
 	&pandora_keys_gpio,
 	&pandora_vwlan_device,
+	&pandora_ram_console,
 };
 
 static const struct usbhs_omap_board_data usbhs_bdata __initconst = {
@@ -915,9 +921,32 @@ static int __init proc_pandora_init(void)
 fs_initcall(proc_pandora_init);
 #endif
 
+/* for debug.. */
+#include <../drivers/staging/android/persistent_ram.h>
+
+struct persistent_ram_descriptor ram_console_desc = {
+	.name		= "ram_console",
+	.size		= 0x20000,
+};
+
+struct persistent_ram ram_console_ram = {
+	.start		= 0x80fe0000,
+	.size		= 0x20000,
+	.num_descs	= 1,
+	.descs		= &ram_console_desc,
+};
+
+void __init pandora_reserve(void)
+{
+	omap_reserve();
+#ifdef CONFIG_ANDROID_PERSISTENT_RAM
+	persistent_ram_early_init(&ram_console_ram);
+#endif
+}
+
 MACHINE_START(OMAP3_PANDORA, "Pandora Handheld Console")
 	.atag_offset	= 0x100,
-	.reserve	= omap_reserve,
+	.reserve	= pandora_reserve,
 	.map_io		= omap3_map_io,
 	.init_early	= omap35xx_init_early,
 	.init_irq	= omap3_init_irq,
