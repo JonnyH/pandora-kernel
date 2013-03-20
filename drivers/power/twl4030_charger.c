@@ -783,6 +783,9 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	ratelimit_state_init(&bci->ratelimit, HZ, 2);
 
+	led_trigger_register_simple("twl4030_bci-charging",
+		&bci->charging_any_trig);
+
 	bci->ac.name = "twl4030_ac";
 	bci->ac.type = POWER_SUPPLY_TYPE_MAINS;
 	bci->ac.properties = twl4030_charger_props;
@@ -853,9 +856,6 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 		goto fail_sysfs2;
 	}
 
-	led_trigger_register_simple("twl4030_bci-charging",
-		&bci->charging_any_trig);
-
 	/* Enable interrupts now. */
 	reg = ~(u32)(TWL4030_ICHGLOW | TWL4030_ICHGEOC | TWL4030_TBATOR2 |
 		TWL4030_TBATOR1 | TWL4030_BATSTS);
@@ -880,7 +880,6 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	return 0;
 
 fail_unmask_interrupts:
-	led_trigger_unregister_simple(bci->charging_any_trig);
 	sysfs_remove_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
 fail_sysfs2:
 	sysfs_remove_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
@@ -897,6 +896,7 @@ fail_chg_irq:
 fail_register_usb:
 	power_supply_unregister(&bci->ac);
 fail_register_ac:
+	led_trigger_unregister_simple(bci->charging_any_trig);
 	platform_set_drvdata(pdev, NULL);
 	kfree(bci);
 
@@ -909,7 +909,6 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 
 	sysfs_remove_group(&bci->usb.dev->kobj, &bci_usb_attr_group);
 	sysfs_remove_group(&bci->ac.dev->kobj, &bci_ac_attr_group);
-	led_trigger_unregister_simple(bci->charging_any_trig);
 
 	twl4030_charger_enable_ac(false);
 	twl4030_charger_enable_usb(bci, false);
@@ -928,6 +927,7 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 	free_irq(bci->irq_chg, bci);
 	power_supply_unregister(&bci->usb);
 	power_supply_unregister(&bci->ac);
+	led_trigger_unregister_simple(bci->charging_any_trig);
 	platform_set_drvdata(pdev, NULL);
 	kfree(bci);
 
