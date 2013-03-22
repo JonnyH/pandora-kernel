@@ -1815,6 +1815,8 @@ static void musb_vbus_workaround_work(struct work_struct *work)
 	if (musb_ulpi_access.write == NULL)
 		return;
 
+	pm_runtime_get_sync(musb->controller);
+
 	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
 
 	/*
@@ -1837,6 +1839,8 @@ static void musb_vbus_workaround_work(struct work_struct *work)
 		//if (ret)
 		//	dev_err(musb->controller, "VBUS workaround error\n");
 	}
+
+	pm_runtime_put(musb->controller);
 }
 
 /* --------------------------------------------------------------------------
