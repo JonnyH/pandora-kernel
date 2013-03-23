@@ -285,6 +285,7 @@ static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 	 * signal is active, the OTG module is activated, and
 	 * its interrupt may be raised (may wake the system).
 	 */
+	msleep(50);
 	status = twl4030_readb(twl, TWL4030_MODULE_PM_MASTER,
 			STS_HW_CONDITIONS);
 	if (status < 0)
