@@ -627,6 +627,11 @@ static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 			ret = wl1251_ps_set_mode(wl, STATION_ACTIVE_MODE);
 			if (ret < 0)
 				goto out_sleep;
+
+			ret = wl1251_event_wait(wl, PS_REPORT_EVENT_ID, 100);
+			if (ret < 0)
+				wl1251_error("error waiting for wakeup");
+
 			ret = wl1251_join(wl, wl->bss_type, wl->channel,
 					  wl->beacon_int, wl->dtim_period);
 			if (ret < 0)
