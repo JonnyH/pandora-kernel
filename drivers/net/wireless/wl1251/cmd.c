@@ -50,6 +50,11 @@ int wl1251_cmd_send(struct wl1251 *wl, u16 id, void *buf, size_t len)
 		intr = wl1251_reg_read32(wl, ACX_REG_INTERRUPT_NO_CLEAR);
 	}
 
+	wl1251_mem_read(wl, wl->cmd_box_addr, cmd, sizeof(*cmd));
+
+	if (cmd->status != CMD_STATUS_SUCCESS)
+		wl1251_error("command %d returned %d", id, cmd->status);
+
 	wl1251_reg_write32(wl, ACX_REG_INTERRUPT_ACK,
 			   WL1251_ACX_INTR_CMD_COMPLETE);
 
