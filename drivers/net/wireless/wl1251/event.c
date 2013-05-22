@@ -110,6 +110,19 @@ static int wl1251_event_process(struct wl1251 *wl, struct event_mailbox *mbox)
 		}
 	}
 
+	if (vector & PS_REPORT_EVENT_ID) {
+		if (mbox->ps_status == ENTER_POWER_SAVE_SUCCESS) {
+			/* enable beacon filtering */
+			ret = wl1251_acx_beacon_filter_opt(wl, true);
+			if (ret < 0)
+				wl1251_error("beacon filter enable failed");
+
+		} else if (mbox->ps_status == ENTER_POWER_SAVE_FAIL)
+			wl->station_mode = STATION_ACTIVE_MODE;
+		else if (mbox->ps_status == EXIT_POWER_SAVE_FAIL)
+			wl->station_mode = STATION_POWER_SAVE_MODE;
+	}
+
 	return 0;
 }
 
