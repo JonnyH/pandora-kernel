@@ -67,13 +67,8 @@ static int wl1251_event_process(struct wl1251 *wl, struct event_mailbox *mbox)
 
 	if (vector & BSS_LOSE_EVENT_ID) {
 		wl1251_debug(DEBUG_EVENT, "BSS_LOSE_EVENT");
-
-		if (wl->psm_requested &&
-		    wl->station_mode != STATION_ACTIVE_MODE) {
-			ret = wl1251_ps_set_mode(wl, STATION_ACTIVE_MODE);
-			if (ret < 0)
-				return ret;
-		}
+		wl->bss_lost = 1;
+		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
 	}
 
 	if (vector & SYNCHRONIZATION_TIMEOUT_EVENT_ID) {
@@ -85,11 +80,8 @@ static int wl1251_event_process(struct wl1251 *wl, struct event_mailbox *mbox)
 	}
 
 	if (vector & REGAINED_BSS_EVENT_ID) {
-		if (wl->psm_requested) {
-			ret = wl1251_ps_set_mode(wl, STATION_POWER_SAVE_MODE);
-			if (ret < 0)
-				return ret;
-		}
+		wl->bss_lost = 0;
+		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
 	}
 
 	if (wl->vif && wl->rssi_thold) {
@@ -121,6 +113,9 @@ static int wl1251_event_process(struct wl1251 *wl, struct event_mailbox *mbox)
 			wl->station_mode = STATION_ACTIVE_MODE;
 		else if (mbox->ps_status == EXIT_POWER_SAVE_FAIL)
 			wl->station_mode = STATION_POWER_SAVE_MODE;
+
+		//wl1251_error("ps_status %d", mbox->ps_status);
+		wl->ps_transitioning = false;
 	}
 
 	return 0;

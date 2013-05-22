@@ -457,6 +457,7 @@ static void wl1251_op_stop(struct ieee80211_hw *hw)
 
 	cancel_work_sync(&wl->irq_work);
 	cancel_work_sync(&wl->tx_work);
+	cancel_delayed_work_sync(&wl->ps_work);
 	cancel_delayed_work_sync(&wl->elp_work);
 
 	mutex_lock(&wl->mutex);
@@ -561,6 +562,92 @@ static int wl1251_build_qos_null_data(struct wl1251 *wl)
 				       sizeof(template));
 }
 
+static void wl1251_ps_work(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct wl1251 *wl;
+	unsigned long diff, wait;
+	bool need_ps;
+	bool have_ps;
+	int ret;
+	int i;
+
+	dwork = container_of(work, struct delayed_work, work);
+	wl = container_of(dwork, struct wl1251, ps_work);
+
+	mutex_lock(&wl->mutex);
+
+	/* don't change PS modes while still transitioning, to avoid possbile
+	 * fw bugs (it normally takes ~130ms to enable and ~10ms to disable) */
+	if (wl->ps_transitioning) {
+		diff = jiffies - wl->ps_change_jiffies;
+		if (diff > msecs_to_jiffies(500)) {
+			wl1251_error("PS change taking too long: %lu", diff);
+			wl->ps_transitioning = false;
+		} else {
+			//wl1251_error("PS still transitioning");
+			ieee80211_queue_delayed_work(wl->hw, &wl->ps_work,
+				msecs_to_jiffies(50));
+			goto out;
+		}
+	}
+
+	need_ps = wl->psm_requested && !wl->bss_lost;
+	have_ps = wl->station_mode == STATION_POWER_SAVE_MODE;
+
+	if (need_ps == have_ps) {
+		//wl1251_info("ps: already in mode %d", have_ps);
+		goto out;
+	}
+
+	/* don't enter PS if there was recent activity */
+	if (need_ps) {
+		wait = 0;
+
+		diff = jiffies - wl->last_io_jiffies;
+		if (diff < msecs_to_jiffies(150)) {
+			//wl1251_info("ps: postponed psm, j %ld", diff);
+			wait = msecs_to_jiffies(150) - diff + 1;
+		}
+
+		for (i = 0; i < ARRAY_SIZE(wl->tx_frames); i++) {
+			if (wl->tx_frames[i] != NULL) {
+				//wl1251_error("  frm %d busy", i);
+				if (wait < msecs_to_jiffies(50))
+					wait = msecs_to_jiffies(50);
+				break;
+			}
+		}
+
+		if (wait > 0) {
+			ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, wait);
+			goto out;
+		}
+	}
+
+	ret = wl1251_ps_elp_wakeup(wl);
+	if (ret < 0)
+		goto out;
+
+	if (need_ps) {
+		wl1251_acx_wr_tbtt_and_dtim(wl, wl->beacon_int,
+					    wl->dtim_period);
+	}
+	ret = wl1251_ps_set_mode(wl,
+		need_ps ? STATION_POWER_SAVE_MODE : STATION_ACTIVE_MODE);
+	if (ret < 0)
+		goto out_sleep;
+
+	//wl1251_info("psm %d, j %ld, d %ld", need_ps,
+	//	jiffies - wl->last_io_jiffies);
+
+out_sleep:
+	wl1251_ps_elp_sleep(wl);
+
+out:
+	mutex_unlock(&wl->mutex);
+}
+
 static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 {
 	struct wl1251 *wl = hw->priv;
@@ -596,26 +683,14 @@ static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 
 		wl->dtim_period = conf->ps_dtim_period;
 
-		ret = wl1251_acx_wr_tbtt_and_dtim(wl, wl->beacon_int,
-						  wl->dtim_period);
-
-		/*
-		 * mac80211 enables PSM only if we're already associated.
-		 */
-		ret = wl1251_ps_set_mode(wl, STATION_POWER_SAVE_MODE);
-		if (ret < 0)
-			goto out_sleep;
+		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
 	} else if (!(conf->flags & IEEE80211_CONF_PS) &&
 		   wl->psm_requested) {
 		wl1251_debug(DEBUG_PSM, "psm disabled");
 
 		wl->psm_requested = false;
 
-		if (wl->station_mode != STATION_ACTIVE_MODE) {
-			ret = wl1251_ps_set_mode(wl, STATION_ACTIVE_MODE);
-			if (ret < 0)
-				goto out_sleep;
-		}
+		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
 	}
 
 	if (changed & IEEE80211_CONF_CHANGE_IDLE) {
@@ -1414,6 +1489,7 @@ struct ieee80211_hw *wl1251_alloc_hw(void)
 
 	skb_queue_head_init(&wl->tx_queue);
 
+	INIT_DELAYED_WORK(&wl->ps_work, wl1251_ps_work);
 	INIT_DELAYED_WORK(&wl->elp_work, wl1251_elp_work);
 	wl->channel = WL1251_DEFAULT_CHANNEL;
 	wl->scanning = false;

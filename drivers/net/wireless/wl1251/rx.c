@@ -186,6 +186,8 @@ static void wl1251_rx_body(struct wl1251 *wl,
 
 	if ((*fc & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_BEACON)
 		beacon = 1;
+	else
+		wl->last_io_jiffies = jiffies;
 
 	wl1251_rx_status(wl, desc, &status, beacon);
 

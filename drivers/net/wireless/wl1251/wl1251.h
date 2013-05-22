@@ -397,6 +397,13 @@ struct wl1251 {
 	s8 noise;
 
 	void *eeprom_dump;
+
+	/* PS hacks.. */
+	unsigned long ps_change_jiffies;
+	unsigned long last_io_jiffies;
+	struct delayed_work ps_work;
+	bool bss_lost;
+	bool ps_transitioning;
 };
 
 int wl1251_plt_start(struct wl1251 *wl);

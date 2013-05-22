@@ -523,6 +523,7 @@ void wl1251_tx_complete(struct wl1251 *wl)
 	}
 
 	wl->next_tx_complete = result_index;
+	wl->last_io_jiffies = jiffies;
 }
 
 /* caller must hold wl->mutex */
