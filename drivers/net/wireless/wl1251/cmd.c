@@ -22,6 +22,7 @@ int wl1251_cmd_send(struct wl1251 *wl, u16 id, void *buf, size_t len)
 {
 	struct wl1251_cmd_header *cmd;
 	unsigned long timeout;
+	u32 poll_count = 0;
 	u32 intr;
 	int ret = 0;
 
@@ -45,7 +46,11 @@ int wl1251_cmd_send(struct wl1251 *wl, u16 id, void *buf, size_t len)
 			goto out;
 		}
 
-		msleep(1);
+		poll_count++;
+		if (poll_count < 30)
+			udelay(1);
+		else
+			msleep(1);
 
 		intr = wl1251_reg_read32(wl, ACX_REG_INTERRUPT_NO_CLEAR);
 	}
