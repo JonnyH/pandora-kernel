@@ -123,10 +123,12 @@ int wl1251_ps_set_mode(struct wl1251 *wl, enum wl1251_station_mode mode)
 		if (ret < 0)
 			return ret;
 
+#if 0 /* problems seen on one router */
 		ret = wl1251_acx_bet_enable(wl, WL1251_ACX_BET_ENABLE,
 					    WL1251_DEFAULT_BET_CONSECUTIVE);
 		if (ret < 0)
 			return ret;
+#endif
 
 		ret = wl1251_cmd_ps_mode(wl, CHIP_POWER_SAVE_MODE);
 		if (ret < 0)
@@ -155,11 +157,13 @@ int wl1251_ps_set_mode(struct wl1251 *wl, enum wl1251_station_mode mode)
 		if (ret < 0)
 			return ret;
 
+#if 0
 		/* disable BET */
 		ret = wl1251_acx_bet_enable(wl, WL1251_ACX_BET_DISABLE,
 					    WL1251_DEFAULT_BET_CONSECUTIVE);
 		if (ret < 0)
 			return ret;
+#endif
 
 		/* disable beacon filtering */
 		ret = wl1251_acx_beacon_filter_opt(wl, false);
