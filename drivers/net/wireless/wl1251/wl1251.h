@@ -26,6 +26,7 @@
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/bitops.h>
+#include <linux/interrupt.h>
 #include <net/mac80211.h>
 
 #define DRIVER_NAME "wl1251"
@@ -414,6 +415,7 @@ int wl1251_free_hw(struct wl1251 *wl);
 int wl1251_init_ieee80211(struct wl1251 *wl);
 void wl1251_enable_interrupts(struct wl1251 *wl);
 void wl1251_disable_interrupts(struct wl1251 *wl);
+irqreturn_t wl1251_irq(int irq, void *cookie);
 
 #define DEFAULT_HW_GEN_MODULATION_TYPE    CCK_LONG /* Long Preamble */
 #define DEFAULT_HW_GEN_TX_RATE          RATE_2MBPS

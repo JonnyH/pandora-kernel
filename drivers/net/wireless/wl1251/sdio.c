@@ -160,16 +160,6 @@ static void wl1251_sdio_disable_irq(struct wl1251 *wl)
 	sdio_release_host(func);
 }
 
-/* Interrupts when using dedicated WLAN_IRQ pin */
-static irqreturn_t wl1251_line_irq(int irq, void *cookie)
-{
-	struct wl1251 *wl = cookie;
-
-	ieee80211_queue_work(wl->hw, &wl->irq_work);
-
-	return IRQ_HANDLED;
-}
-
 static void wl1251_enable_line_irq(struct wl1251 *wl)
 {
 	return enable_irq(wl->irq);
@@ -274,7 +264,9 @@ static int wl1251_sdio_probe(struct sdio_func *func,
 
 	if (wl->irq) {
 		irq_set_status_flags(wl->irq, IRQ_NOAUTOEN);
-		ret = request_irq(wl->irq, wl1251_line_irq, 0, "wl1251", wl);
+
+		ret = request_threaded_irq(wl->irq, NULL, wl1251_irq,
+			IRQF_ONESHOT, "wl1251", wl);
 		if (ret < 0) {
 			wl1251_error("request_irq() failed: %d", ret);
 			goto disable;

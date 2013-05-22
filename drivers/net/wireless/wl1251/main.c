@@ -212,12 +212,11 @@ out:
 	return ret;
 }
 
-#define WL1251_IRQ_LOOP_COUNT 10
-static void wl1251_irq_work(struct work_struct *work)
+#define WL1251_IRQ_LOOP_COUNT 100
+irqreturn_t wl1251_irq(int irq, void *cookie)
 {
 	u32 intr, ctr = WL1251_IRQ_LOOP_COUNT;
-	struct wl1251 *wl =
-		container_of(work, struct wl1251, irq_work);
+	struct wl1251 *wl = cookie;
 	int ret;
 
 	mutex_lock(&wl->mutex);
@@ -320,6 +319,16 @@ out_sleep:
 
 out:
 	mutex_unlock(&wl->mutex);
+	return IRQ_HANDLED;
+}
+EXPORT_SYMBOL_GPL(wl1251_irq);
+
+static void wl1251_irq_work(struct work_struct *work)
+{
+	struct wl1251 *wl =
+		container_of(work, struct wl1251, irq_work);
+
+	wl1251_irq(0, wl);
 }
 
 static int wl1251_join(struct wl1251 *wl, u8 bss_type, u8 channel,
