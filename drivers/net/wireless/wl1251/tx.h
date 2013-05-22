@@ -228,4 +228,7 @@ void wl1251_tx_work(struct work_struct *work);
 void wl1251_tx_complete(struct wl1251 *wl);
 void wl1251_tx_flush(struct wl1251 *wl);
 
+int wl1251_tx_path_status(struct wl1251 *wl);
+int wl1251_tx_frame(struct wl1251 *wl, struct sk_buff *skb);
+
 #endif

@@ -50,7 +50,7 @@ static bool wl1251_tx_double_buffer_busy(struct wl1251 *wl, u32 data_out_count)
 		return false;
 }
 
-static int wl1251_tx_path_status(struct wl1251 *wl)
+int wl1251_tx_path_status(struct wl1251 *wl)
 {
 	u32 status, addr, data_out_count;
 	bool busy;
@@ -278,7 +278,7 @@ static void wl1251_tx_trigger(struct wl1251 *wl)
 }
 
 /* caller must hold wl->mutex */
-static int wl1251_tx_frame(struct wl1251 *wl, struct sk_buff *skb)
+int wl1251_tx_frame(struct wl1251 *wl, struct sk_buff *skb)
 {
 	struct ieee80211_tx_info *info;
 	int ret = 0;
