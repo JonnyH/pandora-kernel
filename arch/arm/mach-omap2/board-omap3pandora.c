@@ -348,7 +348,7 @@ static void pandora_wl1251_init_card(struct mmc_card *card)
 	card->cis.vendor = 0x104c;
 	card->cis.device = 0x9066;
 	card->cis.blksize = 512;
-	card->cis.max_dtr = 20000000;
+	card->cis.max_dtr = 24000000;
 }
 
 static struct omap2_hsmmc_info omap3pandora_mmc[] = {
