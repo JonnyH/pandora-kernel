@@ -211,11 +211,12 @@ void ath9k_init_leds(struct ath9k_htc_priv *priv)
 	priv->led_cdev.name = priv->led_name;
 	priv->led_cdev.brightness_set = ath9k_led_brightness;
 
+	INIT_WORK(&priv->led_work, ath9k_led_work);
+
 	ret = led_classdev_register(wiphy_dev(priv->hw->wiphy), &priv->led_cdev);
 	if (ret < 0)
 		return;
 
-	INIT_WORK(&priv->led_work, ath9k_led_work);
 	priv->led_registered = true;
 
 	return;
