@@ -290,7 +290,7 @@ static int mwifiex_pm_wakeup_card(struct mwifiex_adapter *adapter)
 		i++;
 		udelay(10);
 		/* 50ms max wait */
-		if (i == 50000)
+		if (i == 5000)
 			break;
 	}
 
@@ -1821,9 +1821,9 @@ static void mwifiex_pcie_cleanup(struct mwifiex_adapter *adapter)
 	if (pdev) {
 		pci_iounmap(pdev, card->pci_mmap);
 		pci_iounmap(pdev, card->pci_mmap1);
-
-		pci_release_regions(pdev);
 		pci_disable_device(pdev);
+		pci_release_region(pdev, 2);
+		pci_release_region(pdev, 0);
 		pci_set_drvdata(pdev, NULL);
 	}
 }
