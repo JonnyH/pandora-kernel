@@ -584,7 +584,7 @@ static void omap_hsmmc_enable_irq(struct omap_hsmmc_host *host,
 		irq_mask &= ~DTO_ENABLE;
 
 	OMAP_HSMMC_WRITE(host->base, STAT, STAT_CLEAR);
-	OMAP_HSMMC_WRITE(host->base, ISE, irq_mask);
+	OMAP_HSMMC_WRITE(host->base, ISE, host->use_dma ? irq_mask : 0);
 	OMAP_HSMMC_WRITE(host->base, IE, irq_mask);
 }
 
@@ -1613,6 +1613,62 @@ static void omap_hsmmc_pre_req(struct mmc_host *mmc, struct mmc_request *mrq,
 			mrq->data->host_cookie = 0;
 }
 
+#define BWR (1 << 4)
+#define BRR (1 << 5)
+
+static void omap_hsmmc_request_do_pio(struct mmc_host *mmc,
+	struct mmc_request *req)
+{
+	struct omap_hsmmc_host *host = mmc_priv(mmc);
+	u32 *data = sg_virt(req->data->sg);
+	u32 len = req->data->sg->length;
+	int stat;
+	int i;
+
+	for (i = 0; i < 10000000; i++) {
+		stat = OMAP_HSMMC_READ(host->base, STAT);
+		if (stat == 0)
+			continue;
+
+		//dev_err(mmc_dev(host->mmc), "stat %x, l %d\n", stat, i);
+
+		if (stat & (DATA_TIMEOUT | DATA_CRC))
+			omap_hsmmc_reset_controller_fsm(host, SRD);
+
+		if (stat & ERR) {
+			req->cmd->error =
+			req->data->error = -EINVAL; // ?
+			omap_hsmmc_xfer_done(host, host->data);
+			return;
+		}
+	
+		if (req->data->flags & MMC_DATA_WRITE) {
+			while (len > 0 && (stat & BWR)) {
+				OMAP_HSMMC_WRITE(host->base, DATA, *data++);
+				len -= 4;
+			}
+		} else {
+			while (len > 0 && (stat & BRR)) {
+				*data++ = OMAP_HSMMC_READ(host->base, DATA);
+				len -= 4;
+			}
+		}
+
+		if ((stat & CC) && host->cmd)
+			omap_hsmmc_cmd_done(host, host->cmd);
+		if ((stat & TC) && host->mrq) {
+			omap_hsmmc_xfer_done(host, host->data);
+			break;
+		}
+	}
+
+	if (len > 0) {
+		req->cmd->error =
+		req->data->error = -ETIMEDOUT;
+		omap_hsmmc_xfer_done(host, req->data);
+	}
+}
+
 /*
  * Request function. for read/write operation
  */
@@ -1642,6 +1698,15 @@ static void omap_hsmmc_request(struct mmc_host *mmc, struct mmc_request *req)
 		return;
 	} else if (host->reqs_blocked)
 		host->reqs_blocked = 0;
+
+	/* pandora wifi hack.. */
+	if (host->id == OMAP_MMC3_DEVID && req->data != NULL
+	    && req->data->sg_len == 1 && req->data->sg->length <= 16) {
+		host->use_dma = 0;
+	} else {
+		host->use_dma = 1;
+	}
+
 	WARN_ON(host->mrq != NULL);
 	host->mrq = req;
 	err = omap_hsmmc_prepare_data(host, req);
@@ -1655,6 +1720,9 @@ static void omap_hsmmc_request(struct mmc_host *mmc, struct mmc_request *req)
 	}
 
 	omap_hsmmc_start_command(host, req->cmd, req->data);
+
+	if (host->use_dma == 0)
+		omap_hsmmc_request_do_pio(mmc, req);
 }
 
 /* Routine to configure clock values. Exposed API to core */
