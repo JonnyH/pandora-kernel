@@ -1543,6 +1543,17 @@ static const struct driver_info ax88772_info = {
 	.tx_fixup = asix_tx_fixup,
 };
 
+static const struct driver_info hg20f9_info = {
+	.description = "HG20F9 USB 2.0 Ethernet",
+	.bind = ax88772_bind,
+	.status = asix_status,
+	.link_reset = ax88772_link_reset,
+	.reset = ax88772_reset,
+	.flags = FLAG_ETHER | FLAG_FRAMING_AX | FLAG_LINK_INTR,
+	.rx_fixup = asix_rx_fixup,
+	.tx_fixup = asix_tx_fixup,
+};
+
 static const struct driver_info ax88178_info = {
 	.description = "ASIX AX88178 USB 2.0 Ethernet",
 	.bind = ax88178_bind,
@@ -1679,6 +1690,10 @@ static const struct usb_device_id	products [] = {
 	// ASIX 88772a
 	USB_DEVICE(0x0db0, 0xa877),
 	.driver_info = (unsigned long) &ax88772_info,
+}, {
+	// HG20F9
+	USB_DEVICE(0x066B, 0x20F9),
+	.driver_info = (unsigned long) &hg20f9_info,
 }, {
 	// Asus USB Ethernet Adapter
 	USB_DEVICE (0x0b95, 0x7e2b),
