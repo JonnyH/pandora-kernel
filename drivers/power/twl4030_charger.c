@@ -775,7 +775,7 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->irq_chg = platform_get_irq(pdev, 0);
 	bci->irq_bci = platform_get_irq(pdev, 1);
 	bci->ac_current = 860; /* ~1.2A */
-	bci->usb_current = 360; /* ~600mA */
+	bci->usb_current = 330; /* ~560mA */
 	bci->irq_had_charger = -1;
 	bci->irq_check_count_time = jiffies;
 
