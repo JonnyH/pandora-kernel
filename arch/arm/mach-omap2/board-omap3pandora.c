@@ -37,6 +37,8 @@
 #include <linux/mmc/card.h>
 #include <linux/regulator/fixed.h>
 #include <linux/i2c/vsense.h>
+#include <linux/dma-mapping.h>
+#include <linux/dma-contiguous.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -793,6 +795,13 @@ static struct platform_device pandora_ram_console = {
 	.id	= -1,
 };
 
+static struct platform_device pandora_c64_tools = {
+	.name	= "c64_tools",
+	.dev	= {
+		.coherent_dma_mask = DMA_BIT_MASK(32),
+	},
+};
+
 static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_leds_gpio,
 	&pandora_leds_pwm,
@@ -800,6 +809,7 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&pandora_keys_gpio,
 	&pandora_vwlan_device,
 	&pandora_ram_console,
+	&pandora_c64_tools,
 };
 
 static const struct usbhs_omap_board_data usbhs_bdata __initconst = {
@@ -939,6 +949,7 @@ struct persistent_ram ram_console_ram = {
 void __init pandora_reserve(void)
 {
 	omap_reserve();
+	dma_declare_contiguous(&pandora_c64_tools.dev, 4 * SZ_1M, 0x86000000, 0);
 #ifdef CONFIG_ANDROID_PERSISTENT_RAM
 	persistent_ram_early_init(&ram_console_ram);
 #endif
