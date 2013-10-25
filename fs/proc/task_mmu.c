@@ -209,7 +209,135 @@ static int do_maps_open(struct inode *inode, struct file *file,
 	return ret;
 }
 
-static void show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
+#ifdef __arm__
+static int show_arm_cache_attrs(struct seq_file *m, void *pgd,
+	unsigned long start, unsigned long end, vm_flags_t flags)
+{
+	static const char *cache_attrs4[4] = { "noC", "WB-WA", "WT-noWA", "WB-noWA" };
+	u32 *arm_pgd = pgd, *cpt;
+	u32 desc1, desc2;
+	u32 tex_cb = 0;
+	u32 prrr, nmrr = 0;
+	u32 control = 0;
+	u32 xn = 1, ap = 0;
+	int type;
+	char buf[64];
+	char rw[4];
+	int len;
+	int s;
+
+	desc1 = arm_pgd[start >> 20];
+
+	switch (desc1 & 3) {
+	case 0:
+		sprintf(buf, "l1_fault");
+		goto out;
+	case 1:
+		break;
+	case 2:
+		tex_cb = ((desc1 >> 2) & 0x03) | ((desc1 >> 10) & 0x1c);
+		s = (desc1 >> 16) & 1;
+		xn = (desc1 >> 4) & 1;
+		ap = ((desc1 >> 10) & 3) | ((desc1 >> 13) & 4);
+		goto do_tex_cb;
+	case 3:
+		sprintf(buf, "reserved");
+		goto out;
+	}
+
+	cpt = __va(desc1 & 0xfffffc00);
+	desc2 = cpt[(start >> 12) & 0xff];
+
+	switch (desc2 & 3) {
+	case 0:
+		sprintf(buf, "l2_fault");
+		goto out;
+	case 1:
+		tex_cb = ((desc2 >> 2) & 0x03) | ((desc2 >> 10) & 0x1c);
+		s = (desc2 >> 10) & 1;
+		xn = (desc2 >> 15) & 1;
+		ap = ((desc2 >> 4) & 3) | ((desc1 >> 7) & 4);
+		break;
+	case 2:
+	case 3:
+		tex_cb = ((desc2 >> 2) & 0x03) | ((desc2 >> 4) & 0x1c);
+		s = (desc2 >> 10) & 1;
+		xn = desc2 & 1;
+		ap = ((desc2 >> 4) & 3) | ((desc1 >> 7) & 4);
+		break;
+	}
+
+do_tex_cb:
+	asm ("mrc p15, 0, %0, c1, c0, 0" : "=r"(control));
+	asm ("mrc p15, 0, %0, c10, c2, 0" : "=r"(prrr)); // primary region RR
+	asm ("mrc p15, 0, %0, c10, c2, 1" : "=r"(nmrr)); // normal memory RR
+
+	if (control & (1 << 28)) { // TEX remap
+		// S (shareable) bit remapping
+		char s_normal[2] = { (prrr >> 18) & 1, (prrr >> 19) & 1 };
+		char s_device[2] = { (prrr >> 16) & 1, (prrr >> 17) & 1 };
+
+		buf[0] = 0;
+		tex_cb &= 7;
+		type = (prrr >> tex_cb * 2) & 3;
+		switch (type) {
+		case 0:
+			sprintf(buf, "strongly-ordered");
+			break;
+		case 1:
+			sprintf(buf, "device");
+			s = s_device[s];
+			break;
+		case 3:
+			sprintf(buf, "reserved/normal");
+		case 2:
+			s = s_normal[s];
+			sprintf(buf + strlen(buf), "inner-%s-outer-%s",
+				cache_attrs4[(nmrr >> tex_cb * 2) & 3],
+				cache_attrs4[(nmrr >> (tex_cb * 2 + 16)) & 3]);
+		}
+	}
+	else if (tex_cb & 0x10) { // TEX[2] set
+		sprintf(buf, "inner-%s-outer-%s",
+			cache_attrs4[tex_cb & 3], cache_attrs4[(tex_cb >> 2) & 3]);
+	}
+	else {
+		switch (tex_cb) {
+		case 0x00: sprintf(buf, "strongly-ordered"); s = 1; break;
+		case 0x01: sprintf(buf, "shareable-device"); s = 1; break;
+		case 0x02: sprintf(buf, "inner-outer-WT-noWA"); break;
+		case 0x03: sprintf(buf, "inner-outer-WB-noWA"); break;
+		case 0x04: sprintf(buf, "inner-outer-non-cacheable"); break;
+		case 0x06: sprintf(buf, "implementation-defined"); break;
+		case 0x07: sprintf(buf, "inner-outer-WB-WA"); break;
+		case 0x08: sprintf(buf, "non-shareable-device"); s = 0; break;
+		default:   sprintf(buf, "reserved"); break;
+		}
+	}
+
+	if (s)
+		sprintf(buf + strlen(buf), "-shareable");
+
+out:
+	// use user permissions here
+	if (control & (1 << 29)) // AFE
+		sprintf(rw, "%c%c", (ap & 2) ? 'r' : '-',
+			((ap & 2) && !(ap & 4)) ? 'w' : '-');
+	else
+		sprintf(rw, "%c%c", (ap & 2) ? 'r' : '-',
+			(ap == 3) ? 'w' : '-');
+
+	seq_printf(m, "%08lx-%08lx %s%c %-28s %n",
+			start, end, rw,
+			xn ? '-' : 'x', 
+			buf, &len);
+
+	return len;
+}
+#endif
+
+static void show_map_vma(struct seq_file *m, struct vm_area_struct *vma,
+	int cache_attrs)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	struct file *file = vma->vm_file;
@@ -235,7 +363,12 @@ static void show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	if (stack_guard_page_end(vma, end))
 		end -= PAGE_SIZE;
 
-	seq_printf(m, "%08lx-%08lx %c%c%c%c %08llx %02x:%02x %lu %n",
+#ifdef __arm__
+	if (cache_attrs)
+		len = show_arm_cache_attrs(m, mm->pgd, start, end, flags);
+	else
+#endif
+		seq_printf(m, "%08lx-%08lx %c%c%c%c %08llx %02x:%02x %lu %n",
 			start,
 			end,
 			flags & VM_READ ? 'r' : '-',
@@ -281,7 +414,7 @@ static int show_map(struct seq_file *m, void *v)
 	struct proc_maps_private *priv = m->private;
 	struct task_struct *task = priv->task;
 
-	show_map_vma(m, vma);
+	show_map_vma(m, vma, 0);
 
 	if (m->count < m->size)  /* vma is copied successfully */
 		m->version = (vma != get_gate_vma(task->mm))
@@ -303,6 +436,39 @@ static int maps_open(struct inode *inode, struct file *file)
 
 const struct file_operations proc_maps_operations = {
 	.open		= maps_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release_private,
+};
+
+static int show_armv7_map(struct seq_file *m, void *v)
+{
+	struct vm_area_struct *vma = v;
+	struct proc_maps_private *priv = m->private;
+	struct task_struct *task = priv->task;
+
+	show_map_vma(m, vma, 1);
+
+	if (m->count < m->size)  /* vma is copied successfully */
+		m->version = (vma != get_gate_vma(task->mm))
+			? vma->vm_start : 0;
+	return 0;
+}
+
+static const struct seq_operations proc_pid_armv7_maps_op = {
+	.start	= m_start,
+	.next	= m_next,
+	.stop	= m_stop,
+	.show	= show_armv7_map
+};
+
+static int armv7_maps_open(struct inode *inode, struct file *file)
+{
+	return do_maps_open(inode, file, &proc_pid_armv7_maps_op);
+}
+
+const struct file_operations proc_armv7_maps_operations = {
+	.open		= armv7_maps_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= seq_release_private,
@@ -443,7 +609,7 @@ static int show_smap(struct seq_file *m, void *v)
 	if (vma->vm_mm && !is_vm_hugetlb_page(vma))
 		walk_page_range(vma->vm_start, vma->vm_end, &smaps_walk);
 
-	show_map_vma(m, vma);
+	show_map_vma(m, vma, 0);
 
 	seq_printf(m,
 		   "Size:           %8lu kB\n"

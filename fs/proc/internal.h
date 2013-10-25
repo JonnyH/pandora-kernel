@@ -54,6 +54,7 @@ extern int proc_pid_statm(struct seq_file *m, struct pid_namespace *ns,
 extern loff_t mem_lseek(struct file *file, loff_t offset, int orig);
 
 extern const struct file_operations proc_maps_operations;
+extern const struct file_operations proc_armv7_maps_operations;
 extern const struct file_operations proc_numa_maps_operations;
 extern const struct file_operations proc_smaps_operations;
 extern const struct file_operations proc_clear_refs_operations;
