@@ -564,6 +564,12 @@ static void __init build_mem_type_table(void)
 
 	arm_hugepmdprotval = mem_types[MT_MEMORY].prot_sect | PMD_SECT_AP_READ
 				| PMD_SECT_nG;
+
+	/* HACK: make huge pages WT
+	 * XXX: mm will not know nothing about this..
+	 * FIXME: should only do it on Cortex-A8 or below */
+	arm_hugepmdprotval &= ~(PMD_SECT_WB | PMD_SECT_TEX(1));
+	arm_hugepmdprotval |= PMD_SECT_WT;
 #endif
 
 }
