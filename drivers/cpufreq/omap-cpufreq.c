@@ -57,6 +57,7 @@ static struct clk *mpu_clk;
 static char *mpu_clk_name;
 static struct device *mpu_dev;
 static struct regulator *mpu_reg;
+static unsigned long freq_max, volt_max;
 
 static int omap_verify_speed(struct cpufreq_policy *policy)
 {
@@ -84,7 +85,7 @@ static int omap_target(struct cpufreq_policy *policy,
 	int r, ret = 0;
 	struct cpufreq_freqs freqs;
 	struct opp *opp;
-	unsigned long freq, volt = 0, volt_old = 0, tol = 0;
+	unsigned long freq, volt = 0, volt_old = 0;
 
 	if (!freq_table) {
 		dev_err(mpu_dev, "%s: cpu%d: no freq table!\n", __func__,
@@ -128,7 +129,6 @@ static int omap_target(struct cpufreq_policy *policy,
 			return -EINVAL;
 		}
 		volt = opp_get_voltage(opp);
-		tol = volt * OPP_TOLERANCE / 100;
 		volt_old = regulator_get_voltage(mpu_reg);
 	}
 
@@ -138,7 +138,7 @@ static int omap_target(struct cpufreq_policy *policy,
 
 	/* scaling up?  scale voltage before frequency */
 	if (mpu_reg && (freqs.new > freqs.old)) {
-		r = regulator_set_voltage(mpu_reg, volt - tol, volt + tol);
+		r = regulator_set_voltage(mpu_reg, volt, volt_max);
 		if (r < 0) {
 			dev_warn(mpu_dev, "%s: unable to scale voltage up.\n",
 				 __func__);
@@ -151,7 +151,7 @@ static int omap_target(struct cpufreq_policy *policy,
 
 	/* scaling down?  scale voltage after frequency */
 	if (mpu_reg && (freqs.new < freqs.old)) {
-		r = regulator_set_voltage(mpu_reg, volt - tol, volt + tol);
+		r = regulator_set_voltage(mpu_reg, volt, volt_max);
 		if (r < 0) {
 			dev_warn(mpu_dev, "%s: unable to scale voltage down.\n",
 				 __func__);
@@ -208,6 +208,32 @@ static inline void freq_table_free(void)
 static struct notifier_block omap_freq_nb;
 static struct cpufreq_policy *omap_freq_policy;
 
+static void check_max_freq(unsigned long freq)
+{
+	unsigned long volt;
+	struct opp *opp;
+
+	freq *= 1000;
+
+	if (freq <= freq_max)
+		return;
+
+	opp = opp_find_freq_ceil(mpu_dev, &freq);
+	if (IS_ERR(opp)) {
+		dev_err(mpu_dev, "%s: unable to find MPU OPP for %ld\n",
+				__func__, freq);
+		return;
+	}
+
+	volt = opp_get_voltage(opp);
+	volt += volt * OPP_TOLERANCE / 100;
+
+	if (volt > volt_max) {
+		volt_max = volt;
+		freq_max = freq;
+	}
+}
+
 static int freq_notifier_call(struct notifier_block *nb, unsigned long type,
 			      void *devp)
 {
@@ -244,6 +270,8 @@ static int freq_notifier_call(struct notifier_block *nb, unsigned long type,
 			__func__, ret);
 	omap_freq_policy->user_policy.min = omap_freq_policy->cpuinfo.min_freq;
 	omap_freq_policy->user_policy.max = omap_freq_policy->cpuinfo.max_freq;
+
+	check_max_freq(omap_freq_policy->cpuinfo.max_freq);
 
 	return ret;
 }
@@ -310,6 +338,8 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 	policy->min = policy->cpuinfo.min_freq;
 	policy->max = policy->cpuinfo.max_freq;
 	policy->cur = omap_getspeed(policy->cpu);
+
+	check_max_freq(policy->cpuinfo.max_freq);
 
 	/*
 	 * On OMAP SMP configuartion, both processors share the voltage
