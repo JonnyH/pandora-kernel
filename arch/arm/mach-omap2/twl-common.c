@@ -141,6 +141,7 @@ static struct regulator_init_data omap3_vpll2_idata = {
 
 static struct regulator_consumer_supply omap3_vdd1_supply[] = {
 	REGULATOR_SUPPLY("vcc", "mpu.0"),
+	REGULATOR_SUPPLY("vcc", "iva.0"),
 };
 
 static struct regulator_consumer_supply omap3_vdd2_supply[] = {
