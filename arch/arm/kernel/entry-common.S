@@ -405,7 +405,7 @@ ENTRY(vector_swi)
 
 #endif
 
-#ifdef CONFIG_ALIGNMENT_TRAP
+#if defined(CONFIG_ALIGNMENT_TRAP) && __LINUX_ARM_ARCH__ < 7
 	ldr	ip, __cr_alignment
 	ldr	ip, [ip]
 	mcr	p15, 0, ip, c1, c0		@ update control register
@@ -485,7 +485,7 @@ __sys_trace_return:
 	b	ret_slow_syscall
 
 	.align	5
-#ifdef CONFIG_ALIGNMENT_TRAP
+#if defined(CONFIG_ALIGNMENT_TRAP) && __LINUX_ARM_ARCH__ < 7
 	.type	__cr_alignment, #object
 __cr_alignment:
 	.word	cr_alignment
