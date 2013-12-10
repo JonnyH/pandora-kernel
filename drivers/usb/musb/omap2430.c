@@ -513,7 +513,8 @@ static int omap2430_runtime_resume(struct device *dev)
 	struct musb			*musb = glue_to_musb(glue);
 
 	omap2430_low_level_init(musb);
-	musb_writel(musb->mregs, OTG_INTERFSEL,
+	if (musb->context.otg_interfsel != 0)
+		musb_writel(musb->mregs, OTG_INTERFSEL,
 					musb->context.otg_interfsel);
 
 	otg_set_suspend(musb->xceiv, 0);
