@@ -43,6 +43,8 @@ ENTRY(__const_udelay)				@ 0 <= r0 <= 0x7fffff06
  * Oh, if only we had a cycle counter...
  */
 
+.align 3
+
 @ Delay routine
 ENTRY(__delay)
 		subs	r0, r0, #1
