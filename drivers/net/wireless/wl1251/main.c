@@ -675,6 +675,11 @@ out:
 	mutex_unlock(&wl->mutex);
 }
 
+static bool wl1251_can_do_pm(struct ieee80211_conf *conf, struct wl1251 *wl)
+{
+	return (conf->flags & IEEE80211_CONF_PS) && !wl->monitor_present;
+}
+
 static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 {
 	struct wl1251 *wl = hw->priv;
@@ -721,7 +726,7 @@ static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 			goto out_sleep;
 	}
 
-	if (conf->flags & IEEE80211_CONF_PS && !wl->psm_requested) {
+	if (wl1251_can_do_pm(conf, wl) && !wl->psm_requested) {
 		wl1251_debug(DEBUG_PSM, "psm enabled");
 
 		wl->psm_requested = true;
@@ -729,8 +734,7 @@ static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 		wl->dtim_period = conf->ps_dtim_period;
 
 		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
-	} else if (!(conf->flags & IEEE80211_CONF_PS) &&
-		   wl->psm_requested) {
+	} else if (!wl1251_can_do_pm(conf, wl) && wl->psm_requested) {
 		wl1251_debug(DEBUG_PSM, "psm disabled");
 
 		wl->psm_requested = false;
