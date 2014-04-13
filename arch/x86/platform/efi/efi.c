@@ -424,7 +424,7 @@ void __init efi_reserve_boot_services(void)
 		 * - Not within any part of the kernel
 		 * - Not the bios reserved area
 		*/
-		if ((start+size >= virt_to_phys(_text)
+		if ((start + size > virt_to_phys(_text)
 				&& start <= virt_to_phys(_end)) ||
 			!e820_all_mapped(start, start+size, E820_RAM) ||
 			memblock_x86_check_reserved_size(&start, &size,
@@ -613,11 +613,6 @@ void __init efi_init(void)
 		do_add_efi_memmap();
 
 	set_bit(EFI_MEMMAP, &x86_efi_facility);
-
-#ifdef CONFIG_X86_32
-	x86_platform.get_wallclock = efi_get_time;
-	x86_platform.set_wallclock = efi_set_rtc_mmss;
-#endif
 
 #if EFI_DEBUG
 	print_efi_memmap();
