@@ -29,6 +29,7 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
+#include <sound/pcm_params.h>
 
 #include <asm/mach-types.h>
 #include <plat/mcbsp.h>
@@ -49,6 +50,7 @@ static int omap3pandora_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	int divider;
 	int ret;
 
 	/* Set the codec system clock for DAC and ADC */
@@ -68,9 +70,13 @@ static int omap3pandora_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	ret = snd_soc_dai_set_clkdiv(cpu_dai, OMAP_MCBSP_CLKGDV, 8);
+	divider = 8;
+	if (snd_pcm_format_physical_width(params_format(params)) > 16)
+		divider = 4;
+
+	ret = snd_soc_dai_set_clkdiv(cpu_dai, OMAP_MCBSP_CLKGDV, divider);
 	if (ret < 0) {
-		pr_err(PREFIX "can't set SRG clock divider\n");
+		pr_err(PREFIX "can't set SRG clock divider to %d\n", divider);
 		return ret;
 	}
 
