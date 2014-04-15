@@ -590,15 +590,6 @@ static struct twl4030_platform_data omap3pandora_twldata = {
 	.power		= &pandora_power_data,
 };
 
-static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
-	{
-		I2C_BOARD_INFO("tps65950", 0x48),
-		.flags = I2C_CLIENT_WAKE,
-		.irq = INT_34XX_SYS_NIRQ,
-		.platform_data = &omap3pandora_twldata,
-	},
-};
-
 static struct vsense_platform_data omap3pandora_nub1_data = {
 	.gpio_irq	= 161,
 	.gpio_reset	= 156,
