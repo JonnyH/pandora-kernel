@@ -958,6 +958,7 @@ static void _enable_sysc(struct omap_hwmod *oh)
 	if (!oh->class->sysc)
 		return;
 
+#if 0 /* causes data abort on venc on 3.2 */
 	/*
 	 * Wait until reset has completed, this is needed as the IP
 	 * block is reset automatically by hardware in some cases
@@ -969,6 +970,7 @@ static void _enable_sysc(struct omap_hwmod *oh)
 	_wait_softreset_complete(oh);
 	if (oh->flags & HWMOD_CONTROL_OPT_CLKS_IN_RESET)
 		_disable_optional_clocks(oh);
+#endif
 
 	v = oh->_sysc_cache;
 	sf = oh->class->sysc->sysc_flags;
