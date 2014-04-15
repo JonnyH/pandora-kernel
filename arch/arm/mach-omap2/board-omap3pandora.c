@@ -573,7 +573,48 @@ static struct twl4030_bci_platform_data pandora_bci_data = {
 	.num_supplicants	= ARRAY_SIZE(pandora_power_supplied_to),
 };
 
+static struct twl4030_ins sleep_on_seq[] = {
+	{ MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, 1, 0, RES_STATE_SLEEP), 2 },
+};
+
+static struct twl4030_script sleep_on_script = {
+	.script = sleep_on_seq,
+	.size   = ARRAY_SIZE(sleep_on_seq),
+	.flags  = TWL4030_SLEEP_SCRIPT,
+};
+
+static struct twl4030_ins wakeup_p3_seq[] = {
+	{ MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, 1, 0, RES_STATE_ACTIVE), 2 },
+};
+
+static struct twl4030_script wakeup_p3_script = {
+	.script	= wakeup_p3_seq,
+	.size	= ARRAY_SIZE(wakeup_p3_seq),
+	.flags	= TWL4030_WAKEUP3_SCRIPT,
+};
+
+static struct twl4030_script *twl4030_scripts[] = {
+	/* wakeup script should be loaded before sleep script, otherwise a
+	   board might hit retention before loading of wakeup script is
+	   completed. This can cause boot failures depending on timing issues.
+	*/
+	&wakeup_p3_script,
+	&sleep_on_script,
+};
+
+static struct twl4030_resconfig twl4030_rconfig[] = {
+	{
+		.resource = RES_HFCLKOUT, .devgroup = DEV_GRP_P3,
+		.type = 1, .type2 = -1, .remap_off = -1, .remap_sleep = -1
+	},
+	{ 0, 0},
+};
+
 static struct twl4030_power_data pandora_power_data = {
+	.scripts	= twl4030_scripts,
+	.num		= ARRAY_SIZE(twl4030_scripts),
+	.resource_config = twl4030_rconfig,
+
 	.use_poweroff	= 1,
 };
 
