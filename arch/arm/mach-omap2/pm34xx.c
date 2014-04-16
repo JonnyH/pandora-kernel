@@ -732,6 +732,11 @@ static void __init prcm_setup_regs(void)
 
 	omap3_iva_idle();
 	omap3_d2d_idle();
+
+	/* enable sys_clkreq signalling */
+	omap2_prm_rmw_mod_reg_bits((OMAP3430_AUTO_OFF_MASK | OMAP3430_AUTO_RET_MASK
+		| OMAP3430_AUTO_SLEEP_MASK), OMAP3430_AUTO_RET_MASK,
+		OMAP3430_GR_MOD, OMAP3_PRM_VOLTCTRL_OFFSET);
 }
 
 void omap3_pm_off_mode_enable(int enable)
