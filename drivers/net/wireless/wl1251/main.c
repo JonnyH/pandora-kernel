@@ -1194,6 +1194,7 @@ static void wl1251_op_bss_info_changed(struct ieee80211_hw *hw,
 {
 	struct wl1251 *wl = hw->priv;
 	struct sk_buff *beacon, *skb;
+	bool do_join = false;
 	bool enable;
 	int ret;
 
@@ -1228,10 +1229,7 @@ static void wl1251_op_bss_info_changed(struct ieee80211_hw *hw,
 			if (ret < 0)
 				goto out_sleep;
 
-			ret = wl1251_join(wl, wl->bss_type, wl->channel,
-					  wl->beacon_int, wl->dtim_period);
-			if (ret < 0)
-				goto out_sleep;
+			do_join = true;
 		}
 	}
 
@@ -1323,9 +1321,12 @@ static void wl1251_op_bss_info_changed(struct ieee80211_hw *hw,
 		if (ret < 0)
 			goto out_sleep;
 
+		do_join = true;
+	}
+
+	if (do_join) {
 		ret = wl1251_join(wl, wl->bss_type, wl->channel,
 				  wl->beacon_int, wl->dtim_period);
-
 		if (ret < 0)
 			goto out_sleep;
 	}
