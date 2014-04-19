@@ -758,8 +758,13 @@ static int wl1251_op_config(struct ieee80211_hw *hw, u32 changed)
 		 * This leaves the tx path disabled in firmware, whereas
 		 * the usual JOIN command seems to transmit some frames
 		 * at firmware level.
+		 *
+		 * Note that bss_type must be BSS_TYPE_STA_BSS, also at least
+		 * one join has to be performed before CMD_ENABLE_RX can
+		 * properly switch channels (join will be done by CONF_IDLE).
 		 */
 		if (wl->vif == NULL) {
+			wl->bss_type = BSS_TYPE_STA_BSS;
 			wl->joined = false;
 			ret = wl1251_cmd_data_path_rx(wl, wl->channel, 1);
 		} else {
