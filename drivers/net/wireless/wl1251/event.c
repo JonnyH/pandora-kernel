@@ -109,12 +109,17 @@ static int wl1251_event_process(struct wl1251 *wl, struct event_mailbox *mbox)
 			if (ret < 0)
 				wl1251_error("beacon filter enable failed");
 
-		} else if (mbox->ps_status == ENTER_POWER_SAVE_FAIL)
-			wl->station_mode = STATION_ACTIVE_MODE;
-		else if (mbox->ps_status == EXIT_POWER_SAVE_FAIL)
-			wl->station_mode = STATION_POWER_SAVE_MODE;
+		} else if (wl->ps_transitioning) {
+			if (mbox->ps_status == ENTER_POWER_SAVE_FAIL)
+				wl->station_mode = STATION_ACTIVE_MODE;
+			/* always happens on exit from idle - ignore for now
+			else if (mbox->ps_status == EXIT_POWER_SAVE_FAIL)
+				wl->station_mode = STATION_POWER_SAVE_MODE;
+			*/
+		}
 
-		//wl1251_error("ps_status %d", mbox->ps_status);
+		//wl1251_error("ps_status %d, mode %d",
+		//	mbox->ps_status, wl->station_mode);
 		wl->ps_transitioning = false;
 	}
 
