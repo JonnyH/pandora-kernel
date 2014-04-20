@@ -136,6 +136,8 @@ struct twl4030_priv {
 	/* reference counts of AIF/APLL users */
 	unsigned int apll_enabled;
 
+	unsigned int using_256fs;
+
 	struct snd_pcm_substream *master_substream;
 	struct snd_pcm_substream *slave_substream;
 
@@ -1699,6 +1701,7 @@ static int twl4030_startup(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_codec *codec = rtd->codec;
 	struct twl4030_priv *twl4030 = snd_soc_codec_get_drvdata(codec);
+	u8 format;
 
 	snd_pcm_hw_constraint_msbits(substream->runtime, 0, 32, 24);
 	if (twl4030->master_substream) {
@@ -1721,6 +1724,12 @@ static int twl4030_startup(struct snd_pcm_substream *substream,
 		twl4030->master_substream = substream;
 	}
 
+	format = twl4030_read_reg_cache(codec, TWL4030_REG_AUDIO_IF);
+	if (twl4030->using_256fs && !(format & TWL4030_CLK256FS_EN)) {
+		format |= TWL4030_CLK256FS_EN;
+		twl4030_write(codec, TWL4030_REG_AUDIO_IF, format);
+	}
+
 	return 0;
 }
 
@@ -1730,6 +1739,7 @@ static void twl4030_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_codec *codec = rtd->codec;
 	struct twl4030_priv *twl4030 = snd_soc_codec_get_drvdata(codec);
+	u8 format;
 
 	if (twl4030->master_substream == substream)
 		twl4030->master_substream = twl4030->slave_substream;
@@ -1746,6 +1756,13 @@ static void twl4030_shutdown(struct snd_pcm_substream *substream,
 	 /* If the closing substream had 4 channel, do the necessary cleanup */
 	if (substream->runtime->channels == 4)
 		twl4030_tdm_enable(codec, substream->stream, 0);
+
+	/* Disable 256fs clock to avoid noisy output in power save modes */
+	format = twl4030_read_reg_cache(codec, TWL4030_REG_AUDIO_IF);
+	if (format & TWL4030_CLK256FS_EN) {
+		format &= ~TWL4030_CLK256FS_EN;
+		twl4030_write(codec, TWL4030_REG_AUDIO_IF, format);
+	}
 }
 
 static int twl4030_hw_params(struct snd_pcm_substream *substream,
@@ -1911,10 +1928,12 @@ static int twl4030_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	case SND_SOC_DAIFMT_CBM_CFM:
 		format &= ~(TWL4030_AIF_SLAVE_EN);
 		format &= ~(TWL4030_CLK256FS_EN);
+		twl4030->using_256fs = 0;
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
 		format |= TWL4030_AIF_SLAVE_EN;
 		format |= TWL4030_CLK256FS_EN;
+		twl4030->using_256fs = 1;
 		break;
 	default:
 		return -EINVAL;
