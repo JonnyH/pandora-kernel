@@ -235,6 +235,67 @@ static long madvise_remove(struct vm_area_struct *vma,
 	return error;
 }
 
+#ifdef __arm__
+static long madvise_force_cache(struct vm_area_struct *vma,
+				struct vm_area_struct **prev,
+				unsigned long start, unsigned long end,
+				int tex_cb)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long addr, next_pgd, next_pmd;
+	spinlock_t *ptl;
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+	u32 val;
+
+	*prev = vma;
+
+	if (mm == NULL)
+		return -EINVAL;
+
+	tex_cb &= 7;
+	vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot,
+		L_PTE_MT_MASK, (tex_cb << 2));
+
+	addr = start;
+	pgd = pgd_offset(mm, addr);
+	flush_cache_range(vma, addr, end);
+	do {
+		next_pgd = pgd_addr_end(addr, end);
+		if (pgd_none_or_clear_bad(pgd))
+			continue;
+		pud = pud_offset(pgd, addr);
+		pmd = pmd_offset(pud, addr);
+		next_pmd = pmd_addr_end(addr, end);
+		if (pmd_trans_huge(*pmd)) {
+			val = pmd_val(*pmd);
+			val &= ~0x100c;
+			val |= (tex_cb << 10) & 0x1000;
+			val |= (tex_cb << 2)  & 0x000c;
+			set_pmd_at(mm, addr, pmd, __pmd(val));
+		}
+		else if (pmd_none_or_clear_bad(pmd))
+			continue;
+
+		pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
+		do {
+			if (!pte_present(*pte))
+				continue;
+			val = pte_val(*pte);
+			val = (val & ~L_PTE_MT_MASK) | (tex_cb << 2);
+			set_pte_at(mm, addr, pte, __pte(val));
+		} while (pte++, addr += PAGE_SIZE, addr < next_pmd);
+		pte_unmap_unlock(pte - 1, ptl);
+
+	} while (pgd++, addr = next_pgd, addr < end);
+	flush_tlb_range(vma, start, end);
+
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_MEMORY_FAILURE
 /*
  * Error injection support for memory error handling.
@@ -278,6 +339,11 @@ madvise_vma(struct vm_area_struct *vma, struct vm_area_struct **prev,
 		return madvise_willneed(vma, prev, start, end);
 	case MADV_DONTNEED:
 		return madvise_dontneed(vma, prev, start, end);
+#ifdef __arm__
+	case 0x2000 ... 0x2007:
+		return madvise_force_cache(vma, prev, start, end,
+			behavior & 7);
+#endif
 	default:
 		return madvise_behavior(vma, prev, start, end, behavior);
 	}
@@ -302,6 +368,9 @@ madvise_behavior_valid(int behavior)
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	case MADV_HUGEPAGE:
 	case MADV_NOHUGEPAGE:
+#endif
+#ifdef __arm__
+	case 0x2000 ... 0x2007:
 #endif
 		return 1;
 
