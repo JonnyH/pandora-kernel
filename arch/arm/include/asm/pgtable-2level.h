@@ -231,9 +231,6 @@ static inline void set_pmd_at(struct mm_struct *mm, unsigned long addr,
 	flush_pmd_entry(pmdp);
 }
 
-extern pmdval_t arm_hugepmdprotval;
-extern pteval_t arm_hugepteprotval;
-
 #define pmd_mkhuge(pmd)		(__pmd((pmd_val(pmd) & ~PMD_TYPE_MASK) | PMD_TYPE_SECT))
 
 PMD_BIT_FUNC(mkold, &= ~PMD_DSECT_AF);
@@ -255,10 +252,10 @@ PMD_BIT_FUNC(mknexec,	|= PMD_SECT_XN);
 
 #define pmd_modify(pmd, prot)							\
 ({										\
-	pmd_t pmdret = __pmd((pmd_val(pmd) & (PMD_MASK | PMD_DOMAIN_MASK)) 	\
-		| arm_hugepmdprotval);						\
+	pmd_t pmdret = __pmd(pmd_val(pmd) & (PMD_MASK | PMD_DOMAIN_MASK)); 	\
 	pgprot_t inprot = prot;							\
-	pte_t newprot = __pte(pgprot_val(inprot));				\
+	u32 inprotval = pgprot_val(inprot);					\
+	pte_t newprot = __pte(inprotval);					\
 										\
 	if (pte_dirty(newprot))							\
 		pmdret = pmd_mkdirty(pmdret);					\
@@ -279,6 +276,10 @@ PMD_BIT_FUNC(mknexec,	|= PMD_SECT_XN);
 		pmdret = pmd_mkyoung(pmdret);					\
 	else									\
 		pmdret = pmd_mkold(pmdret);					\
+	pmdret = __pmd(pmd_val(pmdret) | (inprotval & 0x0c)			\
+			| ((inprotval << 8) & 0x1000) 				\
+			| PMD_TYPE_SECT | PMD_SECT_AP_WRITE			\
+			| PMD_SECT_AP_READ | PMD_SECT_nG); 			\
 										\
 	pmdret;									\
 })

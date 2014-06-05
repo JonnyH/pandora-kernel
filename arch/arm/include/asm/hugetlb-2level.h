@@ -26,13 +26,15 @@
 static inline pte_t huge_ptep_get(pte_t *ptep)
 {
 	pmd_t pmd =  *((pmd_t *)ptep);
+	u32 pmdval = pmd_val(pmd);
 	pte_t retval;
 
 	if (!pmd_val(pmd))
 		return __pte(0);
 
 	retval = __pte((pteval_t) (pmd_val(pmd) & HPAGE_MASK)
-			| arm_hugepteprotval);
+			| (pmdval & 0x0c) | ((pmdval >> 8) & 0x10)
+			| L_PTE_PRESENT | L_PTE_USER | L_PTE_VALID);
 
 	if (pmd_exec(pmd))
 		retval = pte_mkexec(retval);
