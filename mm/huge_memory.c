@@ -65,6 +65,17 @@ static void khugepaged_slab_free(void);
 static struct hlist_head *mm_slots_hash __read_mostly;
 static struct kmem_cache *mm_slot_cache __read_mostly;
 
+#ifdef CONFIG_FB
+extern const struct file_operations fb_fops;
+
+#define is_fb_vma(vma) \
+	(vma->vm_file && vma->vm_file->f_op == &fb_fops)
+#else
+#define is_fb_vma(vma) 0
+#endif
+
+static void split_fb_pmd(struct vm_area_struct *vma, pmd_t *pmd);
+
 /**
  * struct mm_slot - hash lookup from mm to mm_slot
  * @hash: hash collision list
@@ -1029,6 +1040,11 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 
 	spin_lock(&tlb->mm->page_table_lock);
 	if (likely(pmd_trans_huge(*pmd))) {
+		if (is_fb_vma(vma)) {
+			split_fb_pmd(vma, pmd);
+			return 0;
+		}
+
 		if (unlikely(pmd_trans_splitting(*pmd))) {
 			spin_unlock(&tlb->mm->page_table_lock);
 			wait_split_huge_page(vma->anon_vma,
@@ -1495,6 +1511,157 @@ out:
 	return ret;
 }
 
+/* callers must hold mmap_sem (madvise() does) */
+static int collapse_fb_pmd(struct mm_struct *mm, pmd_t *pmd,
+	unsigned long addr, struct vm_area_struct *vma)
+{
+	unsigned long _addr;
+	struct page *page;
+	pgtable_t pgtable;
+	pte_t *pte, *_pte;
+	pmd_t _pmd;
+	u32 pa;
+
+	pte = pte_offset_map(pmd, addr);
+	page = pte_page(*pte);
+	pa = __pfn_to_phys(page_to_pfn(page));
+	_pmd = pmdp_clear_flush_notify(vma, addr, pmd);
+
+	if ((addr | pa) & ~HPAGE_PMD_MASK) {
+		printk(KERN_ERR "collapse_fb: bad alignment: %08lx->%08x\n",
+			addr, pa);
+		pte_unmap(pte);
+		return -EINVAL;
+	}
+
+	for (_pte = pte, _addr = addr; _pte < pte + HPAGE_PMD_NR; _pte++) {
+		pte_t pteval = *_pte;
+		struct page *src_page;
+
+		if (!pte_none(pteval)) {
+			src_page = pte_page(pteval);
+
+			pte_clear(vma->vm_mm, _addr, _pte);
+			if (pte_present(pteval))
+				page_remove_rmap(src_page);
+		}
+
+		_addr += PAGE_SIZE;
+	}
+
+	pte_unmap(pte);
+	pgtable = pmd_pgtable(_pmd);
+	VM_BUG_ON(page_count(pgtable) != 1);
+	VM_BUG_ON(page_mapcount(pgtable) != 0);
+
+	_pmd = mk_pmd(page, vma->vm_page_prot);
+	_pmd = maybe_pmd_mkwrite(pmd_mkdirty(_pmd), vma);
+	_pmd = pmd_mkhuge(_pmd);
+
+	smp_wmb();
+
+	spin_lock(&mm->page_table_lock);
+	BUG_ON(!pmd_none(*pmd));
+	set_pmd_at(mm, addr, pmd, _pmd);
+	update_mmu_cache(vma, addr, pmd);
+	prepare_pmd_huge_pte(pgtable, mm);
+	spin_unlock(&mm->page_table_lock);
+
+	return 0;
+}
+
+static int try_collapse_fb(struct vm_area_struct *vma)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long hstart, hend, addr;
+	int ret = 0;
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	hstart = (vma->vm_start + ~HPAGE_PMD_MASK) & HPAGE_PMD_MASK;
+	hend = vma->vm_end & HPAGE_PMD_MASK;
+	if (hstart >= hend)
+		return -EINVAL;
+
+	for (addr = hstart; addr < hend; addr += HPAGE_PMD_SIZE) {
+		pgd = pgd_offset(mm, addr);
+		if (!pgd_present(*pgd))
+			return -EINVAL;
+
+		pud = pud_offset(pgd, addr);
+		if (!pud_present(*pud))
+			return -EINVAL;
+
+		pmd = pmd_offset(pud, addr);
+		if (!pmd_present(*pmd))
+			return -EINVAL;
+		if (pmd_trans_huge(*pmd))
+			continue;
+
+		ret = collapse_fb_pmd(mm, pmd, addr, vma);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
+/* undo collapse_fb_pmd(), restore pages so that mm subsys can release them
+ * page_table_lock() should be held */
+static void split_fb_pmd(struct vm_area_struct *vma, pmd_t *pmd)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long addr, haddr, pfn;
+	struct page *page;
+	pgtable_t pgtable;
+	pmd_t _pmd;
+	int i;
+
+	page = pmd_page(*pmd);
+	pgtable = get_pmd_huge_pte(mm);
+	pfn = page_to_pfn(page);
+	addr = pfn << PAGE_SHIFT;
+
+	pmd_populate(mm, &_pmd, pgtable);
+
+	for (i = 0, haddr = addr; i < HPAGE_PMD_NR; i++, haddr += PAGE_SIZE) {
+		pte_t *pte, entry;
+		BUG_ON(PageCompound(page + i));
+		entry = mk_pte(page + i, vma->vm_page_prot);
+		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
+		if (!pmd_young(*pmd))
+			entry = pte_mkold(entry);
+		atomic_set(&page[i]._mapcount, 0); // hack?
+		pte = pte_offset_map(&_pmd, haddr);
+		BUG_ON(!pte_none(*pte));
+		set_pte_at(mm, haddr, pte, entry);
+		pte_unmap(pte);
+	}
+
+	set_pmd_at(mm, addr, pmd, pmd_mknotpresent(*pmd));
+	flush_tlb_range(vma, addr, addr + HPAGE_PMD_SIZE);
+	pmd_populate(mm, pmd, pgtable);
+}
+
+#ifndef __arm__
+#error arm only..
+#endif
+static u32 pmd_to_va(struct mm_struct *mm, pmd_t *pmd)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd0;
+	u32 ret;
+
+	pgd = pgd_offset(mm, 0);
+	pud = pud_offset(pgd, 0);
+	pmd0 = pmd_offset(pud, 0);
+
+	ret = (pmd - pmd0) << SECTION_SHIFT;
+	return ret;
+}
+
 #define VM_NO_THP (VM_SPECIAL|VM_INSERTPAGE|VM_MIXEDMAP|VM_SAO| \
 		   VM_HUGETLB|VM_SHARED|VM_MAYSHARE)
 
@@ -1503,6 +1670,9 @@ int hugepage_madvise(struct vm_area_struct *vma,
 {
 	switch (advice) {
 	case MADV_HUGEPAGE:
+		if (is_fb_vma(vma))
+			return try_collapse_fb(vma);
+
 		/*
 		 * Be somewhat over-protective like KSM for now!
 		 */
@@ -2389,10 +2559,17 @@ static int khugepaged(void *none)
 
 void __split_huge_page_pmd(struct mm_struct *mm, pmd_t *pmd)
 {
+	struct vm_area_struct *vma;
 	struct page *page;
 
 	spin_lock(&mm->page_table_lock);
 	if (unlikely(!pmd_trans_huge(*pmd))) {
+		spin_unlock(&mm->page_table_lock);
+		return;
+	}
+	vma = find_vma(mm, pmd_to_va(mm, pmd));
+	if (vma && is_fb_vma(vma)) {
+		split_fb_pmd(vma, pmd);
 		spin_unlock(&mm->page_table_lock);
 		return;
 	}
