@@ -2967,6 +2967,44 @@ static struct omap_hwmod omap34xx_mcspi4 = {
 	.dev_attr       = &omap_mcspi4_dev_attr,
 };
 
+/* temp. sensor */
+struct omap_hwmod_class omap34xx_bandgap_ts_class = {
+	.name   = "bandgap_ts",
+};
+
+static struct omap_hwmod_addr_space omap3xxx_bandgap_ts_addrs[] = {
+	{
+		.name		= "mpu",
+		.pa_start	= 0x48002524,
+		.pa_end		= 0x48002524 + 4,
+		.flags		= ADDR_TYPE_RT
+	},
+	{ }
+};
+
+static struct omap_hwmod omap34xx_bandgap_ts;
+
+/* l4_core -> bandgap */
+static struct omap_hwmod_ocp_if omap3xxx_l4_core__bandgap_ts = {
+	.master		= &omap3xxx_l4_core_hwmod,
+	.slave		= &omap34xx_bandgap_ts,
+	.addr		= omap3xxx_bandgap_ts_addrs,
+	.user		= OCP_USER_MPU,
+};
+
+static struct omap_hwmod_ocp_if *omap3xxx_bandgap_ts_slaves[] = {
+	&omap3xxx_l4_core__bandgap_ts,
+};
+
+static struct omap_hwmod omap34xx_bandgap_ts = {
+	.name		= "bandgap_ts",
+	.main_clk	= "ts_fck",
+	.slaves		= omap3xxx_bandgap_ts_slaves,
+	.slaves_cnt	= ARRAY_SIZE(omap3xxx_bandgap_ts_slaves),
+	.class		= &omap34xx_bandgap_ts_class,
+	.flags		= HWMOD_NO_IDLEST,
+};
+
 /*
  * usbhsotg
  */
@@ -3314,6 +3352,8 @@ static __initdata struct omap_hwmod *omap3xxx_hwmods[] = {
 	&omap34xx_mcspi2,
 	&omap34xx_mcspi3,
 	&omap34xx_mcspi4,
+
+	&omap34xx_bandgap_ts,
 
 	NULL,
 };

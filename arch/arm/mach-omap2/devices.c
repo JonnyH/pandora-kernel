@@ -673,6 +673,29 @@ static inline void omap_init_vout(void) {}
 
 /*-------------------------------------------------------------------------*/
 
+#if defined(CONFIG_ARCH_OMAP3) && \
+	(defined(CONFIG_OMAP3_THERMAL) || defined(CONFIG_OMAP3_THERMAL_MODULE))
+static void omap_init_temp_sensor(void)
+{
+	struct omap_hwmod *oh;
+	struct platform_device *pdev;
+
+	oh = omap_hwmod_lookup("bandgap_ts");
+	if (!oh) {
+		pr_err("%s: unable to find hwmod\n", __func__);
+		return;
+	}
+
+	pdev = omap_device_build("omap3-thermal", -1, oh, NULL, 0, NULL, 0, 0);
+	WARN(IS_ERR(pdev), "%s: could not build device, err %ld\n",
+			   __func__, PTR_ERR(pdev));
+}
+#else
+static inline void omap_init_temp_sensor(void) {}
+#endif
+
+/*-------------------------------------------------------------------------*/
+
 static int __init omap2_init_devices(void)
 {
 	/*
@@ -690,6 +713,7 @@ static int __init omap2_init_devices(void)
 	omap_init_sham();
 	omap_init_aes();
 	omap_init_vout();
+	omap_init_temp_sensor();
 
 	return 0;
 }
