@@ -18,3 +18,11 @@ config THERMAL_HWMON
 	depends on THERMAL
 	depends on HWMON=y || HWMON=THERMAL
 	default y
+
+config OMAP3_THERMAL
+	bool "OMAP3/DM3730 band gap thermal sensor driver"
+	depends on THERMAL
+	depends on ARCH_OMAP
+	help
+	  Enable this to plug the OMAP3/DM3730 band gap thermal sensor driver
+	  into the Linux thermal framework
