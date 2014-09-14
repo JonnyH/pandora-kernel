@@ -59,6 +59,8 @@ struct omap_mcbsp_data {
 	unsigned int			in_freq;
 	int				clk_div;
 	int				wlen;
+	/* pandora hack */
+	struct snd_pcm_substream	*substream;
 };
 
 static struct omap_mcbsp_data mcbsp_data[NUM_LINKS];
@@ -110,6 +112,7 @@ static int omap_mcbsp_hwrule_min_buffersize(struct snd_pcm_hw_params *params,
 	struct snd_interval *channels = hw_param_interval(params,
 					SNDRV_PCM_HW_PARAM_CHANNELS);
 	struct omap_mcbsp_data *mcbsp_data = rule->private;
+	struct snd_pcm_substream *substream = mcbsp_data->substream;
 	struct snd_interval frames;
 	int size;
 
@@ -118,6 +121,15 @@ static int omap_mcbsp_hwrule_min_buffersize(struct snd_pcm_hw_params *params,
 
 	frames.min = size / channels->min;
 	frames.integer = 1;
+
+	if (substream && substream->pnd_hack_params.frames_min > 0
+	    && substream->pnd_hack_params.frames_max
+	       >= substream->pnd_hack_params.frames_min)
+	{
+		frames.min = substream->pnd_hack_params.frames_min;
+		frames.max = substream->pnd_hack_params.frames_max;
+	}
+
 	return snd_interval_refine(buffer_size, &frames);
 }
 
@@ -128,8 +140,10 @@ static int omap_mcbsp_dai_startup(struct snd_pcm_substream *substream,
 	int bus_id = mcbsp_data->bus_id;
 	int err = 0;
 
-	if (!cpu_dai->active)
+	if (!cpu_dai->active) {
 		err = omap_mcbsp_request(bus_id);
+		mcbsp_data->substream = substream;
+	}
 
 	/*
 	 * OMAP3 McBSP FIFO is word structured.
@@ -173,6 +187,11 @@ static void omap_mcbsp_dai_shutdown(struct snd_pcm_substream *substream,
 	if (!cpu_dai->active) {
 		omap_mcbsp_free(mcbsp_data->bus_id);
 		mcbsp_data->configured = 0;
+
+		/* undo pandora hack */
+		mcbsp_data->substream = NULL;
+		substream->pnd_hack_params.frames_min = 0;
+		substream->pnd_hack_params.frames_max = 0;
 	}
 }
 

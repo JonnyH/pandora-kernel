@@ -2585,6 +2585,15 @@ static int snd_pcm_common_ioctl1(struct file *file,
 		snd_pcm_stream_unlock_irq(substream);
 		return res;
 	}
+	case _IOW('A', 0xfe, struct snd_pnd_hack_params):
+	{
+		/* pandora HACK */
+		if (copy_from_user(&substream->pnd_hack_params, arg,
+		    sizeof(substream->pnd_hack_params)))
+			return -EFAULT;
+		printk(KERN_INFO "%s hack set\n", __func__);
+		return 0;
+	}
 	}
 	snd_printd("unknown ioctl = 0x%x\n", cmd);
 	return -ENOTTY;

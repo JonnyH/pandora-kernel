@@ -366,6 +366,12 @@ struct snd_pcm_group {		/* keep linked substreams */
 
 struct pid;
 
+struct snd_pnd_hack_params {
+	unsigned int frames_min;
+	unsigned int frames_max;
+	unsigned int reserved[14];
+};
+
 struct snd_pcm_substream {
 	struct snd_pcm *pcm;
 	struct snd_pcm_str *pstr;
@@ -413,6 +419,8 @@ struct snd_pcm_substream {
 #endif
 	/* misc flags */
 	unsigned int hw_opened: 1;
+	/* pandora hack */
+	struct snd_pnd_hack_params pnd_hack_params;
 };
 
 #define SUBSTREAM_BUSY(substream) ((substream)->ref_count > 0)
