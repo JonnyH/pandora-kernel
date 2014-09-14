@@ -904,10 +904,7 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 		dev_vdbg(&ts->spi->dev, "UP\n");
 	}
 
-	mutex_lock(&ts->lock);
-	if (!ts->stopped)
-		enable_irq(ts->spi->irq);
-	mutex_unlock(&ts->lock);
+	enable_irq(ts->spi->irq);
 
 	return IRQ_HANDLED;
 }
