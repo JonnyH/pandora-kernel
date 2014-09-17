@@ -79,7 +79,7 @@ enum {
 	FW_STATUS_ABORT,
 };
 
-static int loading_timeout = 60;	/* In seconds */
+static int loading_timeout = 10;	/* In seconds */
 
 /* fw_lock could be moved to 'struct firmware_priv' but since it is just
  * guarding for corner cases a global lock should be OK */
@@ -541,7 +541,7 @@ static int _request_firmware(const struct firmware **firmware_p,
 	}
 
 	if (uevent)
-		dev_dbg(device, "firmware: requesting %s\n", name);
+		dev_info(device, "firmware: requesting %s\n", name);
 
 	fw_priv = fw_create_instance(firmware, name, device, uevent, nowait);
 	if (IS_ERR(fw_priv)) {
@@ -573,6 +573,7 @@ static int _request_firmware(const struct firmware **firmware_p,
 
 out:
 	if (retval) {
+		dev_warn(device, "firmware: failed to get '%s'\n", name);
 		release_firmware(firmware);
 		*firmware_p = NULL;
 	}
