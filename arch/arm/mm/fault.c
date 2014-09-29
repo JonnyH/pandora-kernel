@@ -152,6 +152,39 @@ __do_kernel_fault(struct mm_struct *mm, unsigned long addr, unsigned int fsr,
 	do_exit(SIGKILL);
 }
 
+#ifdef CONFIG_DEBUG_USER
+static void
+print_user_faulter_location(const char *name, struct pt_regs *regs)
+{
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma;
+	char *p, *t, buf[128];
+
+	printk(KERN_DEBUG "%s: pc=%08lx",
+	       name, regs->ARM_pc);
+
+	do {
+		if (!mm)
+			break;
+		vma = find_vma(mm, regs->ARM_pc);
+		if (!vma || !vma->vm_file)
+			break;
+
+		p = d_path(&vma->vm_file->f_path, buf, sizeof(buf));
+		if (IS_ERR(p))
+			break;
+
+		t = strrchr(p, '/');
+		if (t)
+			p = t + 1;
+
+		printk(KERN_CONT " (%s+%lx)", p, regs->ARM_pc - vma->vm_start);
+	} while (0);
+
+	printk(KERN_CONT ", lr=%08lx\n", regs->ARM_lr);
+}
+#endif
+
 /*
  * Something tried to access memory that isn't in our memory map..
  * User mode accesses just cause a SIGSEGV
@@ -164,9 +197,13 @@ __do_user_fault(struct task_struct *tsk, unsigned long addr,
 	struct siginfo si;
 
 #ifdef CONFIG_DEBUG_USER
+	if (user_debug & (UDBG_SEGV | UDBG_SEGV_SHORT)) {
+		printk(KERN_DEBUG "%s: unhandled page fault (%d) at 0x%08lx, code 0x%03x (%s)\n",
+		       tsk->comm, sig, addr, fsr,
+		       (fsr & FSR_WRITE) ? "write" : "read");
+		print_user_faulter_location(tsk->comm, regs);
+	}
 	if (user_debug & UDBG_SEGV) {
-		printk(KERN_DEBUG "%s: unhandled page fault (%d) at 0x%08lx, code 0x%03x\n",
-		       tsk->comm, sig, addr, fsr);
 		show_pte(tsk->mm, addr);
 		show_regs(regs);
 	}

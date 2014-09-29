@@ -117,6 +117,7 @@ extern void (*arm_pm_restart)(char str, const char *cmd);
 #define UDBG_BADABORT	(1 << 2)
 #define UDBG_SEGV	(1 << 3)
 #define UDBG_BUS	(1 << 4)
+#define UDBG_SEGV_SHORT	(1 << 8)
 
 extern unsigned int user_debug;
 
