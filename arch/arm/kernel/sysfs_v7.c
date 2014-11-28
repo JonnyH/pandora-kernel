@@ -13,6 +13,8 @@
 #include <linux/sysdev.h>
 #include <linux/fs.h>
 
+asm(".arch_extension sec\n");
+
 #define SETBITS(val, bits, new)			\
 	do {					\
 		val &= ~bits;			\
