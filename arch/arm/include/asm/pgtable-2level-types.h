@@ -64,4 +64,6 @@ typedef pteval_t pgprot_t;
 
 #endif /* STRICT_MM_TYPECHECKS */
 
+#define pte_pgprot(pte)	__pgprot(pte_val(pte))
+
 #endif	/* _ASM_PGTABLE_2LEVEL_TYPES_H */

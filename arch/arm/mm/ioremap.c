@@ -335,6 +335,43 @@ __arm_ioremap_exec(unsigned long phys_addr, size_t size, bool cached)
 			__builtin_return_address(0));
 }
 
+void __iomem *ioremap_prot(resource_size_t phys_addr, unsigned long size,
+				unsigned long prot_val)
+{
+	const struct mem_type *type;
+	unsigned long addr;
+	struct vm_struct * area;
+	pteval_t prot_pte;
+	int err;
+
+	size = PAGE_ALIGN(size);
+
+	type = get_mem_type(MT_DEVICE);
+	if (!type)
+		return NULL;
+
+	prot_pte = type->prot_pte & ~L_PTE_MT_MASK;
+	prot_pte |= prot_val & L_PTE_MT_MASK;
+
+	area = get_vm_area_caller(size, VM_IOREMAP,
+				  __builtin_return_address(0));
+	if (!area)
+		return NULL;
+	addr = (unsigned long)area->addr;
+
+	err = ioremap_page_range(addr, addr + size, phys_addr,
+				 __pgprot(prot_pte));
+	if (err) {
+		vunmap((void *)addr);
+		return NULL;
+	}
+
+	flush_cache_vmap(addr, addr + size);
+	return (void __iomem *)addr;
+}
+
+EXPORT_SYMBOL(ioremap_prot);
+
 void __iounmap(volatile void __iomem *io_addr)
 {
 	void *addr = (void *)(PAGE_MASK & (unsigned long)io_addr);

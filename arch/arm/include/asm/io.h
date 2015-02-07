@@ -83,6 +83,9 @@ extern void __iomem *__arm_ioremap(unsigned long, size_t, unsigned int);
 extern void __iomem *__arm_ioremap_exec(unsigned long, size_t, bool cached);
 extern void __iounmap(volatile void __iomem *addr);
 
+extern void __iomem *ioremap_prot(resource_size_t, unsigned long size,
+	unsigned long prot_val);
+
 /*
  * Bad read/write accesses...
  */
