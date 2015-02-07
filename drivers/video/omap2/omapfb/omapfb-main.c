@@ -1126,12 +1126,15 @@ static int omapfb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	vma->vm_ops = &mmap_user_ops;
 	vma->vm_private_data = rg;
-	if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
-			       vma->vm_end - vma->vm_start,
-			       vma->vm_page_prot)) {
+	if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
+			    vma->vm_end - vma->vm_start,
+			    vma->vm_page_prot)) {
 		r = -EAGAIN;
 		goto error;
 	}
+
+	/* not IO memory */
+	vma->vm_flags &= ~VM_IO;
 
 	/* vm_ops.open won't be called for mmap itself. */
 	atomic_inc(&rg->map_count);
