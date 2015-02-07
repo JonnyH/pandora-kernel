@@ -3875,7 +3875,11 @@ static int __access_remote_vm(struct task_struct *tsk, struct mm_struct *mm,
 			vma = find_vma(mm, addr);
 			if (!vma || vma->vm_start > addr)
 				break;
-			if (vma->vm_ops && vma->vm_ops->access)
+			if ((vma->vm_flags & VM_PFNMAP) &&
+			    !(vma->vm_flags & VM_IO))
+				ret = generic_access_phys(vma, addr, buf,
+							  len, write);
+			if (ret <= 0 && vma->vm_ops && vma->vm_ops->access)
 				ret = vma->vm_ops->access(vma, addr, buf,
 							  len, write);
 			if (ret <= 0)
