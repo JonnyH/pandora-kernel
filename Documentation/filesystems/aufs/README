@@ -103,7 +103,7 @@ or aufs3-standalone.
 The aufs3-linux tree includes the whole linux mainline GIT tree,
 git://git.kernel.org/.../torvalds/linux.git.
 And you cannot select CONFIG_AUFS_FS=m for this version, eg. you cannot
-build aufs3 as an externel kernel module.
+build aufs3 as an external kernel module.
 
 On the other hand, the aufs3-standalone tree has only aufs source files
 and necessary patches, and you can select CONFIG_AUFS_FS=m.
@@ -115,20 +115,20 @@ represents the linux kernel version, "linux-3.x". For instance,
 
 o aufs3-linux tree
 $ git clone --reference /your/linux/git/tree \
-	git://aufs.git.sourceforge.net/gitroot/aufs/aufs3-linux.git \
+	git://git.code.sf.net/p/aufs/aufs3-linux aufs-aufs3-linux \
 	aufs3-linux.git
 - if you don't have linux GIT tree, then remove "--reference ..."
 $ cd aufs3-linux.git
 $ git checkout origin/aufs3.0
 
 o aufs3-standalone tree
-$ git clone git://aufs.git.sourceforge.net/gitroot/aufs/aufs3-standalone.git \
+$ git clone git://git.code.sf.net/p/aufs/aufs3-standalone \
 	aufs3-standalone.git
 $ cd aufs3-standalone.git
 $ git checkout origin/aufs3.0
 
 o aufs-util tree
-$ git clone git://aufs.git.sourceforge.net/gitroot/aufs/aufs-util.git \
+$ git clone git://git.code.sf.net/p/aufs/aufs-util \
 	aufs-util.git
 $ cd aufs-util.git
 $ git checkout origin/aufs3.0
@@ -147,7 +147,7 @@ nearest lower number.
 
 For (an unreleased) example:
 If you are using "linux-3.10" and the "aufs3.10" branch
-does not exit in aufs-util repository, then "aufs3.9", "aufs3.8"
+does not exist in aufs-util repository, then "aufs3.9", "aufs3.8"
 or something numerically smaller is the branch for your kernel.
 
 Also you can view all branches by
@@ -168,44 +168,44 @@ There are several ways to build.
 1.
 - apply ./aufs3-kbuild.patch to your kernel source files.
 - apply ./aufs3-base.patch too.
-- apply ./aufs3-proc_map.patch too, if you want to make /proc/PID/maps (and
-  others including lsof(1)) show the file path on aufs instead of the
-  path on the branch fs.
+- apply ./aufs3-mmap.patch too.
 - apply ./aufs3-standalone.patch too, if you have a plan to set
   CONFIG_AUFS_FS=m. otherwise you don't need ./aufs3-standalone.patch.
 - copy ./{Documentation,fs,include/linux/aufs_type.h} files to your
-  kernel source tree. Never copy ./include/linux/Kbuild.
+  kernel source tree. Never copy $PWD/include/linux/Kbuild.
 - enable CONFIG_EXPERIMENTAL and CONFIG_AUFS_FS, you can select either
   =m or =y.
 - and build your kernel as usual.
 - install the built kernel.
-- install the header files too by "make headers_install".
+- install the header files too by "make headers_install" to the
+  directory where you specify. By default, it is $PWD/usr.
+  "make help" shows a brief note for headers_install.
 - and reboot your system.
 
 2.
 - module only (CONFIG_AUFS_FS=m).
 - apply ./aufs3-base.patch to your kernel source files.
-- apply ./aufs3-proc_map.patch too to your kernel source files,
-  if you want to make /proc/PID/maps (and others including lsof(1)) show
-  the file path on aufs instead of the path on the branch fs.
+- apply ./aufs3-mmap.patch too.
 - apply ./aufs3-standalone.patch too.
 - build your kernel, don't forget "make headers_install", and reboot.
 - edit ./config.mk and set other aufs configurations if necessary.
-  Note: You should read ./fs/aufs/Kconfig carefully which describes
+  Note: You should read $PWD/fs/aufs/Kconfig carefully which describes
   every aufs configurations.
 - build the module by simple "make".
 - you can specify ${KDIR} make variable which points to your kernel
   source tree.
 - install the files
   + run "make install" to install the aufs module, or copy the built
-    ./aufs.ko to /lib/modules/... and run depmod -a (or reboot simply).
-  + run "make headers_install" to install the aufs header file (you can
-    specify DESTDIR), or copty ./usr/include/linux/aufs_type.h to
-    /usr/include/linux or wherever you like.
+    $PWD/aufs.ko to /lib/modules/... and run depmod -a (or reboot simply).
+  + run "make install_headers" (instead of headers_install) to install
+    the modified aufs header file (you can specify DESTDIR which is
+    available in aufs standalone version's Makefile only), or copy
+    $PWD/usr/include/linux/aufs_type.h to /usr/include/linux or wherever
+    you like manually. By default, the target directory is $PWD/usr.
 - no need to apply aufs3-kbuild.patch, nor copying source files to your
   kernel source tree.
 
-Note: The haeder file aufs_type.h is necessary to build aufs-util
+Note: The header file aufs_type.h is necessary to build aufs-util
       as well as "make headers_install" in the kernel source tree.
       headers_install is subject to be forgotten, but it is essentially
       necessary, not only for building aufs-util.
@@ -289,7 +289,7 @@ Tomas Matejicek(slax.org) made a donation (much more than once).
 	Since Apr 2010, Tomas M (the author of Slax and Linux Live
 	scripts) is making "doubling" donations.
 	Unfortunately I cannot list all of the donators, but I really
-	appriciate.
+	appreciate.
 	It ends Aug 2010, but the ordinary donation URL is still available.
 	<http://sourceforge.net/donate/index.php?group_id=167503>
 Dai Itasaka made a donation (2007/8).
@@ -307,8 +307,18 @@ New Dream Network, LLC (www.dreamhost.com) made a donation (2009/11).
 Pavel Pronskiy made a donation (2011/2).
 Iridium and Inmarsat satellite phone retailer (www.mailasail.com), Nippy
 	Networks (Ed Wildgoose) made a donation for hardware (2011/3).
-Max Lekomcev (DOM-TV project) made a donation (2011/7 and 12).
+Max Lekomcev (DOM-TV project) made a donation (2011/7, 12, 2012/3, 6 and
+11).
 Sam Liddicott made a donation (2011/9).
+Era Scarecrow made a donation (2013/4).
+Bor Ratajc made a donation (2013/4).
+Alessandro Gorreta made a donation (2013/4).
+POIRETTE Marc made a donation (2013/4).
+Alessandro Gorreta made a donation (2013/4).
+lauri kasvandik made a donation (2013/5).
+"pemasu from Finland" made a donation (2013/7).
+The Parted Magic Project made a donation (2013/9).
+Pavel Barta made a donation (2013/10).
 
 Thank you very much.
 Donations are always, including future donations, very important and

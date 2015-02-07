@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2012 Junjiro R. Okajima
+ * Copyright (C) 2005-2013 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -227,7 +227,7 @@ static inline void au_set_mmapped(struct file *f)
 {
 	if (atomic_inc_return(&au_fi(f)->fi_mmapped))
 		return;
-	pr_warning("fi_mmapped wrapped around\n");
+	pr_warn("fi_mmapped wrapped around\n");
 	while (!atomic_inc_return(&au_fi(f)->fi_mmapped))
 		;
 }

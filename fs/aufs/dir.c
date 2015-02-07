@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2012 Junjiro R. Okajima
+ * Copyright (C) 2005-2013 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@ void au_add_nlink(struct inode *dir, struct inode *h_dir)
 	nlink += h_dir->i_nlink - 2;
 	if (h_dir->i_nlink < 2)
 		nlink += 2;
+	smp_mb();
 	set_nlink(dir, nlink);
 }
 
@@ -46,6 +47,7 @@ void au_sub_nlink(struct inode *dir, struct inode *h_dir)
 	nlink -= h_dir->i_nlink - 2;
 	if (h_dir->i_nlink < 2)
 		nlink -= 2;
+	smp_mb();
 	set_nlink(dir, nlink);
 }
 
