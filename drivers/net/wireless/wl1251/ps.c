@@ -140,7 +140,7 @@ int wl1251_ps_set_mode(struct wl1251 *wl, enum wl1251_station_mode mode)
 		if (ret < 0)
 			return ret;
 
-		ret = wl1251_cmd_template_set(wl, CMD_DISCONNECT, NULL, 0);
+		ret = wl1251_cmd_disconnect(wl);
 		if (ret < 0)
 			return ret;
 		break;

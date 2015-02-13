@@ -326,6 +326,28 @@ out:
 	return ret;
 }
 
+int wl1251_cmd_disconnect(struct wl1251 *wl)
+{
+	struct wl1251_cmd_disconnect *cmd;
+	int ret;
+
+	wl1251_debug(DEBUG_CMD, "cmd disconnect");
+
+	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	cmd->rx_config_options = wl->rx_config;
+	cmd->rx_filter_options = 0;
+
+	ret = wl1251_cmd_send(wl, CMD_DISCONNECT, cmd, sizeof(*cmd));
+	if (ret < 0)
+		wl1251_error("cmd disconnect failed: %d", ret);
+
+	kfree(cmd);
+	return ret;
+}
+
 int wl1251_cmd_ps_mode(struct wl1251 *wl, u8 ps_mode)
 {
 	struct wl1251_cmd_ps_params *ps_params = NULL;

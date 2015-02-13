@@ -39,6 +39,7 @@ int wl1251_cmd_data_path_rx(struct wl1251 *wl, u8 channel, bool enable);
 int wl1251_cmd_data_path_tx(struct wl1251 *wl, u8 channel, bool enable);
 int wl1251_cmd_join(struct wl1251 *wl, u8 bss_type, u8 channel,
 		    u16 beacon_interval, u8 dtim_interval);
+int wl1251_cmd_disconnect(struct wl1251 *wl);
 int wl1251_cmd_ps_mode(struct wl1251 *wl, u8 ps_mode);
 int wl1251_cmd_read_memory(struct wl1251 *wl, u32 addr, void *answer,
 			   size_t len);
@@ -280,6 +281,13 @@ struct cmd_join {
 	u8 tx_mgt_frame_rate; /* OBSOLETE */
 	u8 tx_mgt_frame_mod;  /* OBSOLETE */
 	u8 reserved;
+} __packed;
+
+struct wl1251_cmd_disconnect {
+	struct wl1251_cmd_header header;
+
+	u32 rx_config_options;
+	u32 rx_filter_options;
 } __packed;
 
 struct cmd_enabledisable_path {
