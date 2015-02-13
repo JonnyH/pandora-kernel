@@ -105,9 +105,16 @@ int wl1251_boot_init_seq(struct wl1251 *wl)
 	wl1251_reg_write32(wl, PLL_CAL_TIME, 0x9);
 
 	/*
-	 * PG 1.2: set the clock buffer time to be 210 usec (CLK_BUF_TIME)
+	 * set the clock buffer time (CLK_BUF_TIME) to
+	 * PG 1.1 & 1.0: 760usec
+	 * PG 1.2: 210usec
 	 */
-	wl1251_reg_write32(wl, CLK_BUF_TIME, 0x6);
+	if (wl->chip_id == CHIP_ID_1251_PG10 ||
+	    wl->chip_id == CHIP_ID_1251_PG11)
+		tmp = 0x19;
+	else
+		tmp = 0x6;
+	wl1251_reg_write32(wl, CLK_BUF_TIME, tmp);
 
 	/*
 	 * set the clock detect feature to work in the restart wu procedure
@@ -118,25 +125,37 @@ int wl1251_boot_init_seq(struct wl1251 *wl)
 	wl1251_reg_write32(wl, ELP_CFG_MODE, tmp);
 
 	/* PG 1.2: enable the BB PLL fix. Enable the PLL_LIMP_CLK_EN_CMD */
-	elp_cmd |= 0x00000040;
-	wl1251_reg_write32(wl, ELP_CMD, elp_cmd);
+	if (wl->chip_id != CHIP_ID_1251_PG10 &&
+	    wl->chip_id != CHIP_ID_1251_PG11) {
+		elp_cmd |= 0x00000040;
+		wl1251_reg_write32(wl, ELP_CMD, elp_cmd);
+	}
 
-	/* PG 1.2: Set the BB PLL stable time to be 1000usec
-	 * (PLL_STABLE_TIME) */
-	wl1251_reg_write32(wl, CFG_PLL_SYNC_CNT, 0x20);
-
-	/* PG 1.2: read clock request time */
-	init_data = wl1251_reg_read32(wl, CLK_REQ_TIME);
-
-	/*
-	 * PG 1.2: set the clock request time to be ref_clk_settling_time -
-	 * 1ms = 4ms
-	 */
-	if (init_data > 0x21)
-		tmp = init_data - 0x21;
+	/* Set the BB PLL stable time (PLL_STABLE_TIME) to
+	 * PG 1.1 & 1.0: 30usec
+	 * PG 1.2: 1000usec */
+	if (wl->chip_id == CHIP_ID_1251_PG10 ||
+	    wl->chip_id == CHIP_ID_1251_PG11)
+		tmp = 0x00;
 	else
-		tmp = 0;
-	wl1251_reg_write32(wl, CLK_REQ_TIME, tmp);
+		tmp = 0x20;
+	wl1251_reg_write32(wl, CFG_PLL_SYNC_CNT, tmp);
+
+	if (wl->chip_id != CHIP_ID_1251_PG10 &&
+	    wl->chip_id != CHIP_ID_1251_PG11) {
+		/* PG 1.2: read clock request time */
+		init_data = wl1251_reg_read32(wl, CLK_REQ_TIME);
+
+		/*
+		 * PG 1.2: set the clock request time to be
+		 * ref_clk_settling_time - 1ms = 4ms
+		 */
+		if (init_data > 0x21)
+			tmp = init_data - 0x21;
+		else
+			tmp = 0;
+		wl1251_reg_write32(wl, CLK_REQ_TIME, tmp);
+	}
 
 	/* set BB PLL configurations in RF AFE */
 	wl1251_reg_write32(wl, 0x003058cc, 0x4B5);
