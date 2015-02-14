@@ -256,6 +256,7 @@ static int wl1251_tx_send_packet(struct wl1251 *wl, struct sk_buff *skb,
 
 	wl1251_mem_write(wl, addr, skb->data, len);
 
+	wl1251_update_rate(wl, len);
 	wl1251_debug(DEBUG_TX, "tx id %u skb 0x%p payload %u rate 0x%x "
 		     "queue %d", tx_hdr->id, skb, tx_hdr->length,
 		     tx_hdr->rate, tx_hdr->xmit_queue);
@@ -556,7 +557,6 @@ void wl1251_tx_complete(struct wl1251 *wl)
 	}
 
 	wl->next_tx_complete = result_index;
-	wl->last_io_jiffies = jiffies;
 }
 
 /* caller must hold wl->mutex */

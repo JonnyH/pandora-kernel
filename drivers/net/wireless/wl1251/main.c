@@ -654,8 +654,9 @@ static void wl1251_ps_work(struct work_struct *work)
 		}
 	}
 
-	need_ps = wl->psm_requested && !wl->bss_lost;
 	have_ps = wl->station_mode == STATION_POWER_SAVE_MODE;
+	need_ps = wl->psm_requested && !wl->bss_lost
+		&& wl->rate < wl->ps_rate_threshold;
 
 	if (need_ps == have_ps) {
 		//wl1251_info("ps: already in mode %d", have_ps);
@@ -673,13 +674,6 @@ static void wl1251_ps_work(struct work_struct *work)
 		diff = jiffies - wl->last_no_ps_jiffies[0];
 		if (diff < msecs_to_jiffies(3000))
 			wait += msecs_to_jiffies(1000);
-
-		diff = jiffies - wl->last_io_jiffies;
-		if (diff < msecs_to_jiffies(150)) {
-			//wl1251_info("ps: postponed psm, j %ld", diff);
-			if (wait < msecs_to_jiffies(150) - diff + 1)
-				wait = msecs_to_jiffies(150) - diff + 1;
-		}
 
 		for (i = 0; i < ARRAY_SIZE(wl->tx_frames); i++) {
 			if (wl->tx_frames[i] != NULL) {
@@ -709,8 +703,7 @@ static void wl1251_ps_work(struct work_struct *work)
 	if (ret < 0)
 		goto out_sleep;
 
-	//wl1251_info("psm %d, j %ld, d %ld", need_ps,
-	//	jiffies - wl->last_io_jiffies);
+	// wl1251_info("psm %d, r %u", need_ps, wl->rate);
 
 out_sleep:
 	wl1251_ps_elp_sleep(wl);
@@ -1689,6 +1682,7 @@ struct ieee80211_hw *wl1251_alloc_hw(void)
 	wl->beacon_int = WL1251_DEFAULT_BEACON_INT;
 	wl->dtim_period = WL1251_DEFAULT_DTIM_PERIOD;
 	wl->vif = NULL;
+	wl->ps_rate_threshold = 100000;
 
 	for (i = 0; i < FW_TX_CMPLT_BLOCK_SIZE; i++)
 		wl->tx_frames[i] = NULL;

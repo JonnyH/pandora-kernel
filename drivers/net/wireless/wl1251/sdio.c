@@ -239,13 +239,42 @@ wl1251_set_long_doze(struct device *dev, struct device_attribute *attr,
 	wl->long_doze_mode = !!val;
 	return count;
 }
-static DEVICE_ATTR(long_doze_mode, S_IRUGO | S_IWUSR,
-	wl1251_show_long_doze, wl1251_set_long_doze);
+
+static ssize_t
+wl1251_show_ps_rate_thr(struct device *dev, struct device_attribute *attr,
+	char *buf)
+{
+	struct wl1251 *wl = dev_get_drvdata(dev);
+	return sprintf(buf, "%u\n", wl->ps_rate_threshold);
+}
+
+static ssize_t
+wl1251_set_ps_rate_thr(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct wl1251 *wl = dev_get_drvdata(dev);
+	unsigned int val;
+	int ret;
+
+	ret = kstrtouint(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	wl->ps_rate_threshold = val;
+	return count;
+}
+
+static struct device_attribute wl1251_attrs[] = {
+	__ATTR(long_doze_mode, S_IRUGO | S_IWUGO,
+		wl1251_show_long_doze, wl1251_set_long_doze),
+	__ATTR(ps_rate_threshold, S_IRUGO | S_IWUGO,
+		wl1251_show_ps_rate_thr, wl1251_set_ps_rate_thr),
+};
 
 static int wl1251_sdio_probe(struct sdio_func *func,
 			     const struct sdio_device_id *id)
 {
-	int ret;
+	int ret, t;
 	struct wl1251 *wl;
 	struct ieee80211_hw *hw;
 	struct wl1251_sdio *wl_sdio;
@@ -316,9 +345,15 @@ static int wl1251_sdio_probe(struct sdio_func *func,
 
 	sdio_set_drvdata(func, wl);
 
-	ret = device_create_file(&func->dev, &dev_attr_long_doze_mode);
-	if (ret)
-		goto out_free_irq;
+	for (t = 0; t < ARRAY_SIZE(wl1251_attrs); t++) {
+		ret = device_create_file(&func->dev, &wl1251_attrs[t]);
+		if (ret) {
+			while (--t >= 0)
+				device_remove_file(&func->dev,
+						   &wl1251_attrs[t]);
+			goto out_free_irq;
+		}
+	}
 
 	/* Tell PM core that we don't need the card to be powered now */
 	pm_runtime_put_noidle(&func->dev);
@@ -343,11 +378,13 @@ static void __devexit wl1251_sdio_remove(struct sdio_func *func)
 {
 	struct wl1251 *wl = sdio_get_drvdata(func);
 	struct wl1251_sdio *wl_sdio = wl->if_priv;
+	int t;
 
 	/* Undo decrement done above in wl1251_probe */
 	pm_runtime_get_noresume(&func->dev);
 
-	device_remove_file(&func->dev, &dev_attr_long_doze_mode);
+	for (t = 0; t < ARRAY_SIZE(wl1251_attrs); t++)
+		device_remove_file(&func->dev, &wl1251_attrs[t]);
 
 	if (wl->irq)
 		free_irq(wl->irq, wl);

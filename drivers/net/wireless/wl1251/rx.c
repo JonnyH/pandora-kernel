@@ -186,8 +186,6 @@ static void wl1251_rx_body(struct wl1251 *wl,
 
 	if ((*fc & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_BEACON)
 		beacon = 1;
-	else
-		wl->last_io_jiffies = jiffies;
 
 	wl1251_rx_status(wl, desc, &status, beacon);
 
@@ -196,6 +194,8 @@ static void wl1251_rx_body(struct wl1251 *wl,
 
 	memcpy(IEEE80211_SKB_RXCB(skb), &status, sizeof(status));
 	ieee80211_rx_ni(wl->hw, skb);
+
+	wl1251_update_rate(wl, length);
 }
 
 static void wl1251_rx_ack(struct wl1251 *wl)

@@ -406,12 +406,17 @@ struct wl1251 {
 
 	/* PS hacks.. */
 	unsigned long ps_change_jiffies;
-	unsigned long last_io_jiffies;
 	/* when we had PS "unfriendly" event like sync loss */
 	unsigned long last_no_ps_jiffies[2];
 	struct delayed_work ps_work;
 	bool bss_lost;
 	bool ps_transitioning;
+
+	/* rate accounting */
+	u32 ps_rate_threshold;
+	unsigned long rate_jiffies;
+	u32 rate_counter;
+	u32 rate;
 };
 
 int wl1251_plt_start(struct wl1251 *wl);
@@ -428,6 +433,29 @@ static inline void wl1251_no_ps_event(struct wl1251 *wl)
 {
 	wl->last_no_ps_jiffies[0] = wl->last_no_ps_jiffies[1];
 	wl->last_no_ps_jiffies[1] = jiffies;
+}
+
+static inline void wl1251_update_rate(struct wl1251 *wl, u32 length)
+{
+	bool in_psm, rate_above_eq;
+	unsigned long diff;
+
+	diff = jiffies - wl->rate_jiffies;
+	if (diff >= msecs_to_jiffies(2000)) {
+		wl->rate_jiffies = jiffies;
+		wl->rate = wl->rate_counter = 0;
+	}
+	else if (diff >= msecs_to_jiffies(1000)) {
+		wl->rate_jiffies += msecs_to_jiffies(1000);
+		wl->rate = wl->rate_counter;
+		wl->rate_counter = 0;
+	}
+	wl->rate_counter += length;
+
+	in_psm = wl->station_mode == STATION_POWER_SAVE_MODE;
+	rate_above_eq = wl->rate >= wl->ps_rate_threshold;
+	if (in_psm == rate_above_eq)
+		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
 }
 
 #define DEFAULT_HW_GEN_MODULATION_TYPE    CCK_LONG /* Long Preamble */
