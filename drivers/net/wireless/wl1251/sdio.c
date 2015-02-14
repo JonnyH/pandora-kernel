@@ -217,6 +217,31 @@ static struct wl1251_if_operations wl1251_sdio_ops = {
 	.power = wl1251_sdio_set_power,
 };
 
+static ssize_t
+wl1251_show_long_doze(struct device *dev, struct device_attribute *attr,
+	char *buf)
+{
+	struct wl1251 *wl = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", wl->long_doze_mode);
+}
+
+static ssize_t
+wl1251_set_long_doze(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct wl1251 *wl = dev_get_drvdata(dev);
+	int val, ret;
+
+	ret = kstrtoint(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	wl->long_doze_mode = !!val;
+	return count;
+}
+static DEVICE_ATTR(long_doze_mode, S_IRUGO | S_IWUSR,
+	wl1251_show_long_doze, wl1251_set_long_doze);
+
 static int wl1251_sdio_probe(struct sdio_func *func,
 			     const struct sdio_device_id *id)
 {
@@ -291,6 +316,10 @@ static int wl1251_sdio_probe(struct sdio_func *func,
 
 	sdio_set_drvdata(func, wl);
 
+	ret = device_create_file(&func->dev, &dev_attr_long_doze_mode);
+	if (ret)
+		goto out_free_irq;
+
 	/* Tell PM core that we don't need the card to be powered now */
 	pm_runtime_put_noidle(&func->dev);
 
@@ -317,6 +346,8 @@ static void __devexit wl1251_sdio_remove(struct sdio_func *func)
 
 	/* Undo decrement done above in wl1251_probe */
 	pm_runtime_get_noresume(&func->dev);
+
+	device_remove_file(&func->dev, &dev_attr_long_doze_mode);
 
 	if (wl->irq)
 		free_irq(wl->irq, wl);

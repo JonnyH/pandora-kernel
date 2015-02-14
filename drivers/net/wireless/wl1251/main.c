@@ -510,6 +510,7 @@ static void wl1251_op_stop(struct ieee80211_hw *hw)
 	wl->channel = WL1251_DEFAULT_CHANNEL;
 	wl->monitor_present = false;
 	wl->joined = false;
+	wl->long_doze_mode_set = false;
 
 	wl1251_debugfs_reset(wl);
 

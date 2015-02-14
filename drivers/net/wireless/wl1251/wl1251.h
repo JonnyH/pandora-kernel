@@ -284,6 +284,8 @@ struct wl1251 {
 	int irq;
 	bool use_eeprom;
 	bool dump_eeprom;
+	bool long_doze_mode;
+	bool long_doze_mode_set;
 
 	spinlock_t wl_lock;
 

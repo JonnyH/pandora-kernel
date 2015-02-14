@@ -112,11 +112,13 @@ int wl1251_ps_set_mode(struct wl1251 *wl, enum wl1251_station_mode mode)
 	case STATION_POWER_SAVE_MODE:
 		wl1251_debug(DEBUG_PSM, "entering psm");
 
-		ret = wl1251_acx_wake_up_conditions(wl,
-						    WAKE_UP_EVENT_DTIM_BITMAP,
-						    wl->listen_int);
-		if (ret < 0)
-			return ret;
+		if (wl->long_doze_mode != wl->long_doze_mode_set) {
+			wl1251_acx_wake_up_conditions(wl, wl->long_doze_mode
+				? WAKE_UP_EVENT_DTIM_BITMAP
+				: WAKE_UP_EVENT_BEACON_BITMAP,
+				wl->listen_int);
+			wl->long_doze_mode_set = wl->long_doze_mode;
+		}
 
 #if 0 /* problems seen on one router */
 		ret = wl1251_acx_bet_enable(wl, WL1251_ACX_BET_ENABLE,
@@ -162,12 +164,6 @@ int wl1251_ps_set_mode(struct wl1251 *wl, enum wl1251_station_mode mode)
 
 		/* disable beacon filtering */
 		ret = wl1251_acx_beacon_filter_opt(wl, false);
-		if (ret < 0)
-			return ret;
-
-		ret = wl1251_acx_wake_up_conditions(wl,
-						    WAKE_UP_EVENT_DTIM_BITMAP,
-						    wl->listen_int);
 		if (ret < 0)
 			return ret;
 
