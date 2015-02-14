@@ -365,7 +365,8 @@ int wl1251_cmd_ps_mode(struct wl1251 *wl, u8 ps_mode)
 	ps_params->send_null_data = 1;
 	ps_params->retries = 5;
 	ps_params->hang_over_period = 128;
-	ps_params->null_data_rate = 1; /* 1 Mbps */
+	ps_params->null_data_rate = RATE_MASK_1MBPS | RATE_MASK_2MBPS |
+		RATE_MASK_5_5MBPS | RATE_MASK_11MBPS;
 
 	ret = wl1251_cmd_send(wl, CMD_SET_PS_MODE, ps_params,
 			      sizeof(*ps_params));
