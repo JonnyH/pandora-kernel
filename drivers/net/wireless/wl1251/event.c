@@ -67,12 +67,14 @@ static int wl1251_event_process(struct wl1251 *wl, struct event_mailbox *mbox)
 
 	if (vector & BSS_LOSE_EVENT_ID) {
 		wl1251_debug(DEBUG_EVENT, "BSS_LOSE_EVENT");
+		wl1251_no_ps_event(wl);
 		wl->bss_lost = 1;
 		ieee80211_queue_delayed_work(wl->hw, &wl->ps_work, 0);
 	}
 
 	if (vector & SYNCHRONIZATION_TIMEOUT_EVENT_ID) {
 		wl1251_debug(DEBUG_EVENT, "SYNCHRONIZATION_TIMEOUT_EVENT");
+		wl1251_no_ps_event(wl);
 
 		/* indicate to the stack, that beacons have been lost */
 		if (wl->vif && wl->vif->type == NL80211_IFTYPE_STATION)

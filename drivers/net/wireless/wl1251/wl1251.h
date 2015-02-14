@@ -407,6 +407,8 @@ struct wl1251 {
 	/* PS hacks.. */
 	unsigned long ps_change_jiffies;
 	unsigned long last_io_jiffies;
+	/* when we had PS "unfriendly" event like sync loss */
+	unsigned long last_no_ps_jiffies[2];
 	struct delayed_work ps_work;
 	bool bss_lost;
 	bool ps_transitioning;
@@ -421,6 +423,12 @@ int wl1251_init_ieee80211(struct wl1251 *wl);
 void wl1251_enable_interrupts(struct wl1251 *wl);
 void wl1251_disable_interrupts(struct wl1251 *wl);
 irqreturn_t wl1251_irq(int irq, void *cookie);
+
+static inline void wl1251_no_ps_event(struct wl1251 *wl)
+{
+	wl->last_no_ps_jiffies[0] = wl->last_no_ps_jiffies[1];
+	wl->last_no_ps_jiffies[1] = jiffies;
+}
 
 #define DEFAULT_HW_GEN_MODULATION_TYPE    CCK_LONG /* Long Preamble */
 #define DEFAULT_HW_GEN_TX_RATE          RATE_2MBPS

@@ -376,6 +376,8 @@ static int wl1251_join(struct wl1251 *wl, u8 bss_type, u8 channel,
 	if (ret < 0)
 		wl1251_warning("join timeout");
 
+	wl1251_no_ps_event(wl);
+
 out:
 	return ret;
 }
@@ -664,10 +666,19 @@ static void wl1251_ps_work(struct work_struct *work)
 	if (need_ps) {
 		wait = 0;
 
+		diff = jiffies - wl->last_no_ps_jiffies[1];
+		if (diff < msecs_to_jiffies(1000))
+			wait = msecs_to_jiffies(1000) - diff + 1;
+
+		diff = jiffies - wl->last_no_ps_jiffies[0];
+		if (diff < msecs_to_jiffies(3000))
+			wait += msecs_to_jiffies(1000);
+
 		diff = jiffies - wl->last_io_jiffies;
 		if (diff < msecs_to_jiffies(150)) {
 			//wl1251_info("ps: postponed psm, j %ld", diff);
-			wait = msecs_to_jiffies(150) - diff + 1;
+			if (wait < msecs_to_jiffies(150) - diff + 1)
+				wait = msecs_to_jiffies(150) - diff + 1;
 		}
 
 		for (i = 0; i < ARRAY_SIZE(wl->tx_frames); i++) {
@@ -1601,6 +1612,7 @@ int wl1251_init_ieee80211(struct wl1251 *wl)
 
 	wl->hw->flags = IEEE80211_HW_SIGNAL_DBM |
 		IEEE80211_HW_SUPPORTS_PS |
+		IEEE80211_HW_SUPPORTS_DYNAMIC_PS |
 		IEEE80211_HW_BEACON_FILTER |
 		IEEE80211_HW_SUPPORTS_UAPSD |
 		IEEE80211_HW_SUPPORTS_CQM_RSSI;
