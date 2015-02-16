@@ -40,7 +40,6 @@
 static int pandora_backlight_update_status(struct backlight_device *bl)
 {
 	int brightness = bl->props.brightness;
-	u8 r;
 
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
@@ -57,12 +56,10 @@ static int pandora_backlight_update_status(struct backlight_device *bl)
 			goto done;
 
 		/* first disable PWM0 output, then clock */
-		twl_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_GPBR1);
-		r &= ~PWM0_ENABLE;
-		twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
-		r &= ~PWM0_CLK_ENABLE;
-		twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
-
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR, PWM0_ENABLE, 0,
+			TWL_INTBR_GPBR1);
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR, PWM0_CLK_ENABLE, 0,
+			TWL_INTBR_GPBR1);
 		goto done;
 	}
 
@@ -75,12 +72,10 @@ static int pandora_backlight_update_status(struct backlight_device *bl)
 					TWL_PWM0_OFF);
 
 		/* first enable clock, then PWM0 out */
-		twl_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_GPBR1);
-		r &= ~PWM0_ENABLE;
-		r |= PWM0_CLK_ENABLE;
-		twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
-		r |= PWM0_ENABLE;
-		twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+			PWM0_ENABLE, PWM0_CLK_ENABLE, TWL_INTBR_GPBR1);
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+			0, PWM0_ENABLE, TWL_INTBR_GPBR1);
 
 		/*
 		 * TI made it very easy to enable digital control, so easy that
@@ -117,7 +112,6 @@ static int pandora_backlight_probe(struct platform_device *pdev)
 {
 	struct backlight_properties props;
 	struct backlight_device *bl;
-	u8 r;
 
 	memset(&props, 0, sizeof(props));
 	props.max_brightness = MAX_USER_VALUE;
@@ -139,10 +133,8 @@ static int pandora_backlight_probe(struct platform_device *pdev)
 	backlight_update_status(bl);
 
 	/* enable PWM function in pin mux */
-	twl_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_PMBR1);
-	r &= ~TWL_PMBR1_PWM0_MUXMASK;
-	r |= TWL_PMBR1_PWM0;
-	twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_PMBR1);
+	twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+		TWL_PMBR1_PWM0_MUXMASK, TWL_PMBR1_PWM0, TWL_INTBR_PMBR1);
 
 	return 0;
 }

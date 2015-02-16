@@ -55,21 +55,6 @@ struct twl4030_pwmled {
 	struct work_struct work;
 };
 
-static int twl4030_clear_set(u8 mod_no, u8 clear, u8 set, u8 reg)
-{
-	u8 val = 0;
-	int ret;
-
-	ret = twl_i2c_read_u8(mod_no, &val, reg);
-	if (ret)
-		return ret;
-
-	val &= ~clear;
-	val |= set;
-
-	return twl_i2c_write_u8(mod_no, val, reg);
-}
-
 static void twl4030_enable_ledab(enum twl4030_led led, bool enable)
 {
 	u8 bits;
@@ -80,14 +65,14 @@ static void twl4030_enable_ledab(enum twl4030_led led, bool enable)
 		bits = LEDEN_LEDBON | LEDEN_LEDBPWM;
 
 	if (enable)
-		twl4030_clear_set(TWL4030_MODULE_LED, 0, bits, TWL4030_LED_LEDEN);
+		twl_i2c_rmw_u8(TWL4030_MODULE_LED, 0, bits, TWL4030_LED_LEDEN);
 	else
-		twl4030_clear_set(TWL4030_MODULE_LED, bits, 0, TWL4030_LED_LEDEN);
+		twl_i2c_rmw_u8(TWL4030_MODULE_LED, bits, 0, TWL4030_LED_LEDEN);
 }
 
 static void twl4030_enable_pwm01(enum twl4030_led led, bool enable)
 {
-	u8 r, enbit, clkbit;
+	u8 enbit, clkbit;
 
 	if (led == TWL4030_PWM0) {
 		enbit = GPBR1_PWM0_ENABLE;
@@ -97,22 +82,19 @@ static void twl4030_enable_pwm01(enum twl4030_led led, bool enable)
 		clkbit = GPBR1_PWM1_CLK_ENABLE;
 	}
 
-	twl_i2c_read_u8(TWL4030_MODULE_INTBR, &r, TWL_INTBR_GPBR1);
-
 	if (enable) {
 		/* first enable clock, then PWM out */
-		r &= ~enbit;
-		r |= clkbit;
-		twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
-		r |= enbit;
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+			enbit, clkbit, TWL_INTBR_GPBR1);
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+			0, enbit, TWL_INTBR_GPBR1);
 	} else {
 		/* first disable PWM output, then clock */
-		r &= ~enbit;
-		twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
-		r &= ~clkbit;
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+			enbit, 0, TWL_INTBR_GPBR1);
+		twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
+			clkbit, 0, TWL_INTBR_GPBR1);
 	}
-
-	twl_i2c_write_u8(TWL4030_MODULE_INTBR, r, TWL_INTBR_GPBR1);
 }
 
 static void twl4030_pwmled_work(struct work_struct *work)
@@ -189,18 +171,18 @@ static int __devinit twl4030_pwmled_probe(struct platform_device *pdev)
 			led->module = TWL4030_MODULE_PWM0;
 			led->enable = twl4030_enable_pwm01;
 			/* enable PWM0 in pin mux */
-			twl4030_clear_set(TWL4030_MODULE_INTBR,
+			twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
 				0x0c, 0x04, TWL_INTBR_PMBR1);
 			/* enable PWM clock for initial write */
-			twl4030_clear_set(TWL4030_MODULE_INTBR,
+			twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
 				0, GPBR1_PWM0_CLK_ENABLE, TWL_INTBR_GPBR1);
 			break;
 		case TWL4030_PWM1:
 			led->module = TWL4030_MODULE_PWM1;
 			led->enable = twl4030_enable_pwm01;
-			twl4030_clear_set(TWL4030_MODULE_INTBR,
+			twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
 				0, 0x30, TWL_INTBR_PMBR1);
-			twl4030_clear_set(TWL4030_MODULE_INTBR,
+			twl_i2c_rmw_u8(TWL4030_MODULE_INTBR,
 				0, GPBR1_PWM1_CLK_ENABLE, TWL_INTBR_GPBR1);
 			break;
 		default:
