@@ -54,7 +54,7 @@
 #define RFC1001_PORT 139
 
 /* SMB echo "timeout" -- FIXME: tunable? */
-#define SMB_ECHO_INTERVAL (60 * HZ)
+#define SMB_ECHO_INTERVAL (6 * HZ)
 
 extern mempool_t *cifs_req_poolp;
 
