@@ -178,6 +178,7 @@ TWL_CLASS_IS(6030, TWL6030_CLASS_ID)
  */
 int twl_i2c_write_u8(u8 mod_no, u8 val, u8 reg);
 int twl_i2c_read_u8(u8 mod_no, u8 *val, u8 reg);
+int twl_i2c_rmw_u8(u8 mod_no, u8 bits_to_clear, u8 bits_to_set, u8 reg);
 
 /*
  * Read and write several 8-bit registers at once.

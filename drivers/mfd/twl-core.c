@@ -459,6 +459,88 @@ int twl_i2c_read(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes)
 EXPORT_SYMBOL(twl_i2c_read);
 
 /**
+ * twl_i2c_rmw_u8 - Reads a 8 bit register, modifies it and writes back
+ * @mod_no: module number
+ * @bits_to_clear
+ * @bits_to_set
+ * @reg: register address (just offset will do)
+ *
+ * Returns result of operation - 0 is success else failure.
+ */
+int twl_i2c_rmw_u8(u8 mod_no, u8 bits_to_clear, u8 bits_to_set, u8 reg)
+{
+	u8 value_w[2] = { 0 };
+	u8 value = 0;
+	int ret;
+	u8 val;
+	int sid;
+	struct twl_client *twl;
+	struct i2c_msg *msg;
+
+	if (unlikely(mod_no > TWL_MODULE_LAST)) {
+		pr_err("%s: invalid module number %d\n", DRIVER_NAME, mod_no);
+		return -EPERM;
+	}
+	if (unlikely(!inuse)) {
+		pr_err("%s: not initialized\n", DRIVER_NAME);
+		return -EPERM;
+	}
+	sid = twl_map[mod_no].sid;
+	twl = &twl_modules[sid];
+
+	mutex_lock(&twl->xfer_lock);
+	/* [MSG1] fill the register address data */
+	msg = &twl->xfer_msg[0];
+	msg->addr = twl->address;
+	msg->len = 1;
+	msg->flags = 0;	/* Read the register value */
+	val = twl_map[mod_no].base + reg;
+	msg->buf = &val;
+	/* [MSG2] fill the data rx buffer */
+	msg = &twl->xfer_msg[1];
+	msg->addr = twl->address;
+	msg->flags = I2C_M_RD;	/* Read the register value */
+	msg->len = 1;
+	msg->buf = &value;
+	ret = i2c_transfer(twl->client->adapter, twl->xfer_msg, 2);
+	/* i2c_transfer returns number of messages transferred */
+	if (ret != 2) {
+		pr_err("%s: i2c_read failed to transfer all messages\n",
+			DRIVER_NAME);
+		if (ret >= 0)
+			ret = -EIO;
+		goto out;
+	}
+
+	value &= ~bits_to_clear;
+	value |= bits_to_set;
+
+	value_w[0] = twl_map[mod_no].base + reg;
+	value_w[1] = value;
+
+	msg = &twl->xfer_msg[0];
+	msg->addr = twl->address;
+	msg->len = 2;
+	msg->flags = 0;
+	msg->buf = value_w;
+	ret = i2c_transfer(twl->client->adapter, twl->xfer_msg, 1);
+	/* i2c_transfer returns number of messages transferred */
+	if (ret != 1) {
+		pr_err("%s: i2c_write failed to transfer all messages\n",
+			DRIVER_NAME);
+		if (ret >= 0)
+			ret = -EIO;
+		goto out;
+	}
+
+	ret = 0;
+out:
+	mutex_unlock(&twl->xfer_lock);
+	return ret;
+}
+EXPORT_SYMBOL(twl_i2c_rmw_u8);
+
+/**
  * twl_i2c_write_u8 - Writes a 8 bit register in TWL4030/TWL5030/TWL60X0
  * @mod_no: module number
  * @value: the value to be written 8 bit
