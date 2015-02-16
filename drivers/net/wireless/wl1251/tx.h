@@ -224,6 +224,7 @@ static inline int wl1251_tx_get_queue(int queue)
 	}
 }
 
+void wl1251_tx_work_unlocked(struct wl1251 *wl, bool need_pm);
 void wl1251_tx_work(struct work_struct *work);
 void wl1251_tx_complete(struct wl1251 *wl);
 void wl1251_tx_flush(struct wl1251 *wl);

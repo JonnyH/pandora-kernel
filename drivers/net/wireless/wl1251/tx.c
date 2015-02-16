@@ -345,20 +345,17 @@ int wl1251_tx_frame(struct wl1251 *wl, struct sk_buff *skb)
 	return ret;
 }
 
-void wl1251_tx_work(struct work_struct *work)
+void wl1251_tx_work_unlocked(struct wl1251 *wl, bool need_pm)
 {
-	struct wl1251 *wl = container_of(work, struct wl1251, tx_work);
 	struct sk_buff *skb;
 	bool woken_up = false;
 	int ret;
-
-	mutex_lock(&wl->mutex);
 
 	if (unlikely(wl->state == WL1251_STATE_OFF))
 		goto out;
 
 	while ((skb = skb_dequeue(&wl->tx_queue))) {
-		if (!woken_up) {
+		if (need_pm && !woken_up) {
 			ret = wl1251_ps_elp_wakeup(wl);
 			if (ret < 0)
 				goto out;
@@ -378,7 +375,14 @@ void wl1251_tx_work(struct work_struct *work)
 out:
 	if (woken_up)
 		wl1251_ps_elp_sleep(wl);
+}
 
+void wl1251_tx_work(struct work_struct *work)
+{
+	struct wl1251 *wl = container_of(work, struct wl1251, tx_work);
+
+	mutex_lock(&wl->mutex);
+	wl1251_tx_work_unlocked(wl, true);
 	mutex_unlock(&wl->mutex);
 }
 
@@ -491,24 +495,6 @@ void wl1251_tx_complete(struct wl1251 *wl)
 		}
 	}
 
-	queue_len = skb_queue_len(&wl->tx_queue);
-
-	if ((num_complete > 0) && (queue_len > 0)) {
-		/* firmware buffer has space, reschedule tx_work */
-		wl1251_debug(DEBUG_TX, "tx_complete: reschedule tx_work");
-		ieee80211_queue_work(wl->hw, &wl->tx_work);
-	}
-
-	if (wl->tx_queue_stopped &&
-	    queue_len <= WL1251_TX_QUEUE_LOW_WATERMARK) {
-		/* tx_queue has space, restart queues */
-		wl1251_debug(DEBUG_TX, "tx_complete: waking queues");
-		spin_lock_irqsave(&wl->wl_lock, flags);
-		ieee80211_wake_queues(wl->hw);
-		wl->tx_queue_stopped = false;
-		spin_unlock_irqrestore(&wl->wl_lock, flags);
-	}
-
 	/* Every completed frame needs to be acknowledged */
 	if (num_complete) {
 		/*
@@ -557,6 +543,29 @@ void wl1251_tx_complete(struct wl1251 *wl)
 	}
 
 	wl->next_tx_complete = result_index;
+
+	queue_len = skb_queue_len(&wl->tx_queue);
+	if (queue_len > 0) {
+		/* avoid stalling tx */
+		wl1251_tx_work_unlocked(wl, false);
+		queue_len = skb_queue_len(&wl->tx_queue);
+	}
+
+	if (queue_len > 0) {
+		/* still something to send? Schedule for later */
+		wl1251_debug(DEBUG_TX, "tx_complete: reschedule tx_work");
+		ieee80211_queue_work(wl->hw, &wl->tx_work);
+	}
+
+	if (wl->tx_queue_stopped &&
+	    queue_len <= WL1251_TX_QUEUE_LOW_WATERMARK) {
+		/* tx_queue has space, restart queues */
+		wl1251_debug(DEBUG_TX, "tx_complete: waking queues");
+		spin_lock_irqsave(&wl->wl_lock, flags);
+		ieee80211_wake_queues(wl->hw);
+		wl->tx_queue_stopped = false;
+		spin_unlock_irqrestore(&wl->wl_lock, flags);
+	}
 }
 
 /* caller must hold wl->mutex */

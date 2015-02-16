@@ -279,19 +279,23 @@ irqreturn_t wl1251_irq(int irq, void *cookie)
 			goto out_sleep;
 		}
 
+		if (intr & WL1251_ACX_INTR_TX_RESULT) {
+			wl1251_debug(DEBUG_IRQ, "WL1251_ACX_INTR_TX_RESULT");
+			wl1251_tx_complete(wl);
+		}
+
 		if (intr & WL1251_ACX_INTR_RX0_DATA) {
 			wl1251_debug(DEBUG_IRQ, "WL1251_ACX_INTR_RX0_DATA");
 			wl1251_rx(wl);
+
+			if ((intr & WL1251_ACX_INTR_RX1_DATA)
+			    && skb_queue_len(&wl->tx_queue) > 0)
+				wl1251_tx_work_unlocked(wl, false);
 		}
 
 		if (intr & WL1251_ACX_INTR_RX1_DATA) {
 			wl1251_debug(DEBUG_IRQ, "WL1251_ACX_INTR_RX1_DATA");
 			wl1251_rx(wl);
-		}
-
-		if (intr & WL1251_ACX_INTR_TX_RESULT) {
-			wl1251_debug(DEBUG_IRQ, "WL1251_ACX_INTR_TX_RESULT");
-			wl1251_tx_complete(wl);
 		}
 
 		if (intr & WL1251_ACX_INTR_EVENT_A) {
@@ -308,21 +312,8 @@ irqreturn_t wl1251_irq(int irq, void *cookie)
 			wl1251_debug(DEBUG_IRQ,
 				     "WL1251_ACX_INTR_INIT_COMPLETE");
 
-		while (skb_queue_len(&wl->tx_queue) > 0
-		       && wl1251_tx_path_status(wl) == 0) {
-
-			struct sk_buff *skb = skb_dequeue(&wl->tx_queue);
-			if (skb == NULL)
-				goto out_sleep;
-
-			ret = wl1251_tx_frame(wl, skb);
-			if (ret == -EBUSY) {
-				skb_queue_head(&wl->tx_queue, skb);
-				break;
-			} else if (ret < 0) {
-				dev_kfree_skb(skb);
-			}
-		}
+		if (skb_queue_len(&wl->tx_queue) > 0)
+			wl1251_tx_work_unlocked(wl, false);
 
 		if (--ctr == 0)
 			break;
