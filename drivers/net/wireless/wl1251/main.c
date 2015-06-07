@@ -43,6 +43,13 @@
 #include "debugfs.h"
 #include "boot.h"
 
+static bool use_fw_ps = true;
+module_param(use_fw_ps, bool, 0644);
+MODULE_PARM_DESC(use_fw_ps, "Enable powersave once and leave it for chip's "
+			    "firmware to manage. When disabled, mac80211 "
+			    "will toggle powersave on tx activity instead. "
+			    "Default: y/Y/1");
+
 void wl1251_enable_interrupts(struct wl1251 *wl)
 {
 	wl->if_ops->enable_irq(wl);
@@ -1596,10 +1603,12 @@ int wl1251_init_ieee80211(struct wl1251 *wl)
 
 	wl->hw->flags = IEEE80211_HW_SIGNAL_DBM |
 		IEEE80211_HW_SUPPORTS_PS |
-		IEEE80211_HW_SUPPORTS_DYNAMIC_PS |
 		IEEE80211_HW_BEACON_FILTER |
 		IEEE80211_HW_SUPPORTS_UAPSD |
 		IEEE80211_HW_SUPPORTS_CQM_RSSI;
+
+	if (use_fw_ps)
+		wl->hw->flags |= IEEE80211_HW_SUPPORTS_DYNAMIC_PS;
 
 	wl->hw->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) |
 					 BIT(NL80211_IFTYPE_ADHOC);
