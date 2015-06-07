@@ -1140,19 +1140,15 @@ static void omap_hsmmc_do_irq(struct omap_hsmmc_host *host, int status)
 	struct mmc_data *data;
 	int end_cmd = 0, end_trans = 0;
 
-	if (!host->req_in_progress) {
-		do {
-			OMAP_HSMMC_WRITE(host->base, STAT, status);
-			/* Flush posted write */
-			status = OMAP_HSMMC_READ(host->base, STAT);
-		} while (status & INT_EN_MASK);
+	if (unlikely(!host->req_in_progress)) {
+		OMAP_HSMMC_WRITE(host->base, STAT, status);
 		return;
 	}
 
 	data = host->data;
 	dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
 
-	if (status & ERR) {
+	if (unlikely(status & ERR)) {
 		omap_hsmmc_dbg_report_irq(host, status);
 		if ((status & CMD_TIMEOUT) ||
 			(status & CMD_CRC)) {
@@ -1453,8 +1449,8 @@ static int omap_hsmmc_pre_dma_transfer(struct omap_hsmmc_host *host,
 {
 	int dma_len;
 
-	if (!next && data->host_cookie &&
-	    data->host_cookie != host->next_data.cookie) {
+	if (unlikely(!next && data->host_cookie &&
+	    data->host_cookie != host->next_data.cookie)) {
 		pr_warning("[%s] invalid cookie: data->host_cookie %d"
 		       " host->next_data.cookie %d\n",
 		       __func__, data->host_cookie, host->next_data.cookie);
@@ -1474,7 +1470,7 @@ static int omap_hsmmc_pre_dma_transfer(struct omap_hsmmc_host *host,
 	}
 
 
-	if (dma_len == 0)
+	if (unlikely(dma_len == 0))
 		return -EINVAL;
 
 	if (next) {
@@ -1500,10 +1496,10 @@ static int omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host,
 		struct scatterlist *sgl;
 
 		sgl = data->sg + i;
-		if (sgl->length % data->blksz)
+		if (unlikely(sgl->length % data->blksz))
 			return -EINVAL;
 	}
-	if ((data->blksz % 4) != 0)
+	if (unlikely((data->blksz % 4) != 0))
 		/* REVISIT: The MMC buffer increments only when MSB is written.
 		 * Return error for blksz which is non multiple of four.
 		 */
@@ -1513,14 +1509,14 @@ static int omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host,
 
 	ret = omap_request_dma(omap_hsmmc_get_dma_sync_dev(host, data),
 			       "MMC/SD", omap_hsmmc_dma_cb, host, &dma_ch);
-	if (ret != 0) {
+	if (unlikely(ret != 0)) {
 		dev_err(mmc_dev(host->mmc),
 			"%s: omap_request_dma() failed with %d\n",
 			mmc_hostname(host->mmc), ret);
 		return ret;
 	}
 	ret = omap_hsmmc_pre_dma_transfer(host, data, NULL);
-	if (ret)
+	if (unlikely(ret))
 		return ret;
 
 	host->dma_ch = dma_ch;
@@ -1616,7 +1612,7 @@ static void omap_hsmmc_pre_req(struct mmc_host *mmc, struct mmc_request *mrq,
 #define BWR (1 << 4)
 #define BRR (1 << 5)
 
-static void omap_hsmmc_request_do_pio(struct mmc_host *mmc,
+static noinline void omap_hsmmc_request_do_pio(struct mmc_host *mmc,
 	struct mmc_request *req)
 {
 	struct omap_hsmmc_host *host = mmc_priv(mmc);
@@ -1679,7 +1675,7 @@ static void omap_hsmmc_request(struct mmc_host *mmc, struct mmc_request *req)
 
 	BUG_ON(host->req_in_progress);
 	BUG_ON(host->dma_ch != -1);
-	if (host->protect_card) {
+	if (unlikely(host->protect_card)) {
 		if (host->reqs_blocked < 3) {
 			/*
 			 * Ensure the controller is left in a consistent
@@ -1710,7 +1706,7 @@ static void omap_hsmmc_request(struct mmc_host *mmc, struct mmc_request *req)
 	WARN_ON(host->mrq != NULL);
 	host->mrq = req;
 	err = omap_hsmmc_prepare_data(host, req);
-	if (err) {
+	if (unlikely(err)) {
 		req->cmd->error = err;
 		if (req->data)
 			req->data->error = err;
