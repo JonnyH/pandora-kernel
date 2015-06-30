@@ -1527,23 +1527,6 @@ static int omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host,
 	return 0;
 }
 
-static void set_data_timeout(struct omap_hsmmc_host *host)
-{
-	uint32_t reg, clkd, dto = 0;
-
-	reg = OMAP_HSMMC_READ(host->base, SYSCTL);
-	clkd = (reg & CLKD_MASK) >> CLKD_SHIFT;
-	if (clkd == 0)
-		clkd = 1;
-
-    /* Use the maximum timeout value allowed in the standard of 14 or 0xE */
-	dto = 14;
-
-	reg &= ~DTO_MASK;
-	reg |= dto << DTO_SHIFT;
-	OMAP_HSMMC_WRITE(host->base, SYSCTL, reg);
-}
-
 /* pandora wifi small transfer hack */
 static int check_mmc3_dma_hack(struct omap_hsmmc_host *host,
 			       struct mmc_request *req)
@@ -1566,18 +1549,11 @@ omap_hsmmc_prepare_data(struct omap_hsmmc_host *host, struct mmc_request *req)
 
 	if (req->data == NULL) {
 		OMAP_HSMMC_WRITE(host->base, BLK, 0);
-		/*
-		 * Set an arbitrary 100ms data timeout for commands with
-		 * busy signal.
-		 */
-		if (req->cmd->flags & MMC_RSP_BUSY)
-			set_data_timeout(host);
 		return 0;
 	}
 
 	OMAP_HSMMC_WRITE(host->base, BLK, (req->data->blksz)
 					| (req->data->blocks << 16));
-	set_data_timeout(host);
 
 	if (host->use_dma) {
 		ret = omap_hsmmc_start_dma_transfer(host, req);
