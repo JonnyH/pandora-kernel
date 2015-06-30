@@ -1544,6 +1544,17 @@ static void set_data_timeout(struct omap_hsmmc_host *host)
 	OMAP_HSMMC_WRITE(host->base, SYSCTL, reg);
 }
 
+/* pandora wifi small transfer hack */
+static int check_mmc3_dma_hack(struct omap_hsmmc_host *host,
+			       struct mmc_request *req)
+{
+	if (req->data != NULL && req->data->sg_len == 1
+	    && req->data->sg->length <= 16)
+		return 0;
+	else
+		return 1;
+}
+
 /*
  * Configure block length for MMC/SD cards and initiate the transfer.
  */
@@ -1597,13 +1608,16 @@ static void omap_hsmmc_pre_req(struct mmc_host *mmc, struct mmc_request *mrq,
 			       bool is_first_req)
 {
 	struct omap_hsmmc_host *host = mmc_priv(mmc);
+	int use_dma = host->use_dma;
 
 	if (mrq->data->host_cookie) {
 		mrq->data->host_cookie = 0;
 		return ;
 	}
 
-	if (host->use_dma)
+	if (host->id == OMAP_MMC3_DEVID)
+		use_dma = check_mmc3_dma_hack(host, mrq);
+	if (use_dma)
 		if (omap_hsmmc_pre_dma_transfer(host, mrq->data,
 						&host->next_data))
 			mrq->data->host_cookie = 0;
@@ -1695,13 +1709,9 @@ static void omap_hsmmc_request(struct mmc_host *mmc, struct mmc_request *req)
 	} else if (host->reqs_blocked)
 		host->reqs_blocked = 0;
 
-	/* pandora wifi hack.. */
-	if (host->id == OMAP_MMC3_DEVID && req->data != NULL
-	    && req->data->sg_len == 1 && req->data->sg->length <= 16) {
-		host->use_dma = 0;
-	} else {
-		host->use_dma = 1;
-	}
+	/* pandora wifi hack... */
+	if (host->id == OMAP_MMC3_DEVID)
+		host->use_dma = check_mmc3_dma_hack(host, req);
 
 	WARN_ON(host->mrq != NULL);
 	host->mrq = req;
