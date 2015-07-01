@@ -1362,23 +1362,39 @@ static int omap_hsmmc_get_dma_sync_dev(struct omap_hsmmc_host *host,
 	return sync_dev;
 }
 
+static void omap_hsmmc_config_dma_params_once(struct omap_hsmmc_host *host,
+					      struct mmc_data *data,
+					      int dma_ch)
+{
+	if (data->flags & MMC_DATA_WRITE) {
+		omap_set_dma_dest_params(dma_ch, 0, OMAP_DMA_AMODE_CONSTANT,
+			(host->mapbase + OMAP_HSMMC_DATA), 0, 0);
+		omap_set_dma_src_burst_mode(dma_ch, OMAP_DMA_DATA_BURST_16);
+		omap_set_dma_src_data_pack(dma_ch, 1);
+	} else {
+		omap_set_dma_src_params(dma_ch, 0, OMAP_DMA_AMODE_CONSTANT,
+			(host->mapbase + OMAP_HSMMC_DATA), 0, 0);
+		omap_set_dma_dest_burst_mode(dma_ch, OMAP_DMA_DATA_BURST_16);
+		omap_set_dma_dest_data_pack(dma_ch, 1);
+		omap_set_dma_write_mode(dma_ch, OMAP_DMA_WRITE_LAST_NON_POSTED);
+	}
+}
+
 static void omap_hsmmc_config_dma_params(struct omap_hsmmc_host *host,
 				       struct mmc_data *data,
 				       struct scatterlist *sgl)
 {
-	int blksz, nblk, dma_ch;
+	int blksz, nblk, dma_ch, sync;
 
 	dma_ch = host->dma_ch;
 	if (data->flags & MMC_DATA_WRITE) {
-		omap_set_dma_dest_params(dma_ch, 0, OMAP_DMA_AMODE_CONSTANT,
-			(host->mapbase + OMAP_HSMMC_DATA), 0, 0);
 		omap_set_dma_src_params(dma_ch, 0, OMAP_DMA_AMODE_POST_INC,
 			sg_dma_address(sgl), 0, 0);
+		sync = OMAP_DMA_DST_SYNC_PREFETCH;
 	} else {
-		omap_set_dma_src_params(dma_ch, 0, OMAP_DMA_AMODE_CONSTANT,
-			(host->mapbase + OMAP_HSMMC_DATA), 0, 0);
 		omap_set_dma_dest_params(dma_ch, 0, OMAP_DMA_AMODE_POST_INC,
 			sg_dma_address(sgl), 0, 0);
+		sync = OMAP_DMA_SRC_SYNC;
 	}
 
 	blksz = host->data->blksz;
@@ -1386,8 +1402,7 @@ static void omap_hsmmc_config_dma_params(struct omap_hsmmc_host *host,
 
 	omap_set_dma_transfer_params(dma_ch, OMAP_DMA_DATA_TYPE_S32,
 			blksz / 4, nblk, OMAP_DMA_SYNC_FRAME,
-			omap_hsmmc_get_dma_sync_dev(host, data),
-			!(data->flags & MMC_DATA_WRITE));
+			omap_hsmmc_get_dma_sync_dev(host, data), sync);
 
 	omap_start_dma(dma_ch);
 }
@@ -1522,6 +1537,7 @@ static int omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host,
 	host->dma_ch = dma_ch;
 	host->dma_sg_idx = 0;
 
+	omap_hsmmc_config_dma_params_once(host, data, dma_ch);
 	omap_hsmmc_config_dma_params(host, data, data->sg);
 
 	return 0;
