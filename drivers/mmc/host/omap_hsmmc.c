@@ -175,6 +175,7 @@ struct omap_hsmmc_host {
 	int			suspended;
 	int			irq;
 	int			use_dma, dma_ch;
+	int			dma_ch_tx, dma_ch_rx;
 	int			dma_line_tx, dma_line_rx;
 	int			slot_id;
 	int			got_dbclk;
@@ -1056,7 +1057,6 @@ static void omap_hsmmc_dma_cleanup(struct omap_hsmmc_host *host, int errno)
 		dma_unmap_sg(mmc_dev(host->mmc), host->data->sg,
 			host->data->sg_len,
 			omap_hsmmc_get_dma_dir(host, host->data));
-		omap_free_dma(dma_ch);
 		host->data->host_cookie = 0;
 	}
 	host->data = NULL;
@@ -1414,7 +1414,7 @@ static void omap_hsmmc_dma_cb(int lch, u16 ch_status, void *cb_data)
 {
 	struct omap_hsmmc_host *host = cb_data;
 	struct mmc_data *data;
-	int dma_ch, req_in_progress;
+	int req_in_progress;
 
 	if (!(ch_status & OMAP_DMA_BLOCK_IRQ)) {
 		dev_warn(mmc_dev(host->mmc), "unexpected dma status %x\n",
@@ -1443,11 +1443,8 @@ static void omap_hsmmc_dma_cb(int lch, u16 ch_status, void *cb_data)
 			     omap_hsmmc_get_dma_dir(host, data));
 
 	req_in_progress = host->req_in_progress;
-	dma_ch = host->dma_ch;
 	host->dma_ch = -1;
 	spin_unlock(&host->irq_lock);
-
-	omap_free_dma(dma_ch);
 
 	/* If DMA has finished after TC, complete the request */
 	if (!req_in_progress) {
@@ -1522,14 +1519,29 @@ static int omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host,
 
 	BUG_ON(host->dma_ch != -1);
 
-	ret = omap_request_dma(omap_hsmmc_get_dma_sync_dev(host, data),
-			       "MMC/SD", omap_hsmmc_dma_cb, host, &dma_ch);
-	if (unlikely(ret != 0)) {
-		dev_err(mmc_dev(host->mmc),
-			"%s: omap_request_dma() failed with %d\n",
-			mmc_hostname(host->mmc), ret);
-		return ret;
+	if (data->flags & MMC_DATA_WRITE)
+		dma_ch = host->dma_ch_tx;
+	else
+		dma_ch = host->dma_ch_rx;
+
+	if (dma_ch == -1) {
+		ret = omap_request_dma(omap_hsmmc_get_dma_sync_dev(host, data),
+				       "MMC/SD", omap_hsmmc_dma_cb, host, &dma_ch);
+		if (unlikely(ret != 0)) {
+			dev_err(mmc_dev(host->mmc),
+				"%s: omap_request_dma() failed with %d\n",
+				mmc_hostname(host->mmc), ret);
+			return ret;
+		}
+
+		omap_hsmmc_config_dma_params_once(host, data, dma_ch);
+
+		if (data->flags & MMC_DATA_WRITE)
+			host->dma_ch_tx = dma_ch;
+		else
+			host->dma_ch_rx = dma_ch;
 	}
+
 	ret = omap_hsmmc_pre_dma_transfer(host, data, NULL);
 	if (unlikely(ret))
 		return ret;
@@ -1537,7 +1549,6 @@ static int omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host,
 	host->dma_ch = dma_ch;
 	host->dma_sg_idx = 0;
 
-	omap_hsmmc_config_dma_params_once(host, data, dma_ch);
 	omap_hsmmc_config_dma_params(host, data, data->sg);
 
 	return 0;
@@ -1989,6 +2000,8 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 	host->use_dma	= 1;
 	host->dev->dma_mask = &pdata->dma_mask;
 	host->dma_ch	= -1;
+	host->dma_ch_tx	= -1;
+	host->dma_ch_rx	= -1;
 	host->irq	= irq;
 	host->id	= pdev->id;
 	host->slot_id	= 0;
@@ -2333,9 +2346,19 @@ static int omap_hsmmc_resume(struct device *dev)
 static int omap_hsmmc_runtime_suspend(struct device *dev)
 {
 	struct omap_hsmmc_host *host;
+	int dma_ch;
 
 	host = platform_get_drvdata(to_platform_device(dev));
 	omap_hsmmc_context_save(host);
+
+	dma_ch = xchg(&host->dma_ch_tx, -1);
+	if (dma_ch != -1)
+		omap_free_dma(dma_ch);
+
+	dma_ch = xchg(&host->dma_ch_rx, -1);
+	if (dma_ch != -1)
+		omap_free_dma(dma_ch);
+
 	dev_dbg(mmc_dev(host->mmc), "disabled\n");
 
 	return 0;
