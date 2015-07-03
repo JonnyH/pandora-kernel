@@ -388,7 +388,8 @@ static inline int omap_nand_dma_transfer(struct mtd_info *mtd, void *addr,
 							dma_addr, 0, 0);
 	    omap_set_dma_transfer_params(info->dma_ch, OMAP_DMA_DATA_TYPE_S32,
 					0x10, buf_len, OMAP_DMA_SYNC_FRAME,
-					OMAP24XX_DMA_GPMC, OMAP_DMA_DST_SYNC);
+					OMAP24XX_DMA_GPMC,
+					OMAP_DMA_DST_SYNC_PREFETCH);
 	} else {
 	    omap_set_dma_src_params(info->dma_ch, 0, OMAP_DMA_AMODE_CONSTANT,
 						info->phys_base, 0, 0);
@@ -971,8 +972,10 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		} else {
 			omap_set_dma_dest_burst_mode(info->dma_ch,
 					OMAP_DMA_DATA_BURST_16);
+			omap_set_dma_dest_data_pack(info->dma_ch, 1);
 			omap_set_dma_src_burst_mode(info->dma_ch,
 					OMAP_DMA_DATA_BURST_16);
+			omap_set_dma_src_data_pack(info->dma_ch, 1);
 
 			info->nand.read_buf   = omap_read_buf_dma_pref;
 			info->nand.write_buf  = omap_write_buf_dma_pref;
