@@ -456,8 +456,8 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 
 				if (power & MUSB_POWER_SUSPENDM) {
 					/* spurious */
-					musb->int_usb &= ~MUSB_INTR_SUSPEND;
-					dev_dbg(musb->controller, "Spurious SUSPENDM\n");
+					int_usb &= ~MUSB_INTR_SUSPEND;
+					dev_err(musb->controller, "Spurious SUSPENDM\n");
 					break;
 				}
 
@@ -500,14 +500,20 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 				if ((devctl & MUSB_DEVCTL_VBUS)
 						!= (3 << MUSB_DEVCTL_VBUS_SHIFT)
 						) {
-					musb->int_usb |= MUSB_INTR_DISCONNECT;
-					musb->int_usb &= ~MUSB_INTR_SUSPEND;
+					if (!(int_usb & MUSB_INTR_DISCONNECT))
+						dev_err(musb->controller,
+						  "disconnect while suspended?\n");
+					int_usb |= MUSB_INTR_DISCONNECT;
+					int_usb &= ~MUSB_INTR_SUSPEND;
 					break;
 				}
 				musb_g_resume(musb);
 				break;
 			case OTG_STATE_B_IDLE:
-				musb->int_usb &= ~MUSB_INTR_SUSPEND;
+				if (int_usb & MUSB_INTR_SUSPEND)
+					dev_err(musb->controller,
+						"bogus suspend+resume?\n");
+				int_usb &= ~MUSB_INTR_SUSPEND;
 				break;
 			default:
 				WARNING("bogus %s RESUME (%s)\n",
@@ -715,7 +721,7 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 		switch (musb->xceiv->state) {
 		case OTG_STATE_B_PERIPHERAL:
 			if (int_usb & MUSB_INTR_SUSPEND) {
-				dev_dbg(musb->controller, "HNP: SUSPEND+CONNECT, now b_host\n");
+				dev_err(musb->controller, "HNP: SUSPEND+CONNECT, now b_host\n");
 				int_usb &= ~MUSB_INTR_SUSPEND;
 				goto b_host;
 			} else
