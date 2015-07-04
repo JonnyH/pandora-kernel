@@ -125,6 +125,7 @@ ENTRY(csum_partial)
 		adcs	sum, sum, td1
 		adcs	sum, sum, td2
 		adcs	sum, sum, td3
+	PLD(	pld	[buf, #128]		)
 		sub	ip, ip, #32
 		teq	ip, #0
 		bne	2b
