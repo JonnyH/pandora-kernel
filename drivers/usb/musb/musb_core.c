@@ -1518,17 +1518,22 @@ static irqreturn_t generic_interrupt(int irq, void *__hci)
 	unsigned long	flags;
 	irqreturn_t	retval = IRQ_NONE;
 	struct musb	*musb = __hci;
+	int		i;
 
 	spin_lock_irqsave(&musb->lock, flags);
 
-	musb->int_usb = musb_readb(musb->mregs, MUSB_INTRUSB);
-	/* SOF is not enabled, but status is still often set */
-	musb->int_usb &= ~MUSB_INTR_SOF;
-	musb->int_tx = musb_readw(musb->mregs, MUSB_INTRTX);
-	musb->int_rx = musb_readw(musb->mregs, MUSB_INTRRX);
+	for (i = 0; i < 8; i++) {
+		musb->int_usb = musb_readb(musb->mregs, MUSB_INTRUSB);
+		/* SOF is not enabled, but status is still often set */
+		musb->int_usb &= ~MUSB_INTR_SOF;
+		musb->int_tx = musb_readw(musb->mregs, MUSB_INTRTX);
+		musb->int_rx = musb_readw(musb->mregs, MUSB_INTRRX);
 
-	if (musb->int_usb || musb->int_tx || musb->int_rx)
-		retval = musb_interrupt(musb);
+		if (musb->int_usb || musb->int_tx || musb->int_rx)
+			retval = musb_interrupt(musb);
+		else
+			break;
+	}
 
 	spin_unlock_irqrestore(&musb->lock, flags);
 
