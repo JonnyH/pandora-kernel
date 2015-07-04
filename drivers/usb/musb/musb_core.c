@@ -1522,6 +1522,8 @@ static irqreturn_t generic_interrupt(int irq, void *__hci)
 	spin_lock_irqsave(&musb->lock, flags);
 
 	musb->int_usb = musb_readb(musb->mregs, MUSB_INTRUSB);
+	/* SOF is not enabled, but status is still often set */
+	musb->int_usb &= ~MUSB_INTR_SOF;
 	musb->int_tx = musb_readw(musb->mregs, MUSB_INTRTX);
 	musb->int_rx = musb_readw(musb->mregs, MUSB_INTRRX);
 
